@@ -1,0 +1,6 @@
+{
+  "name": "Bilbo Outdoors",
+  "description": "Camping Equipment Rental business based in Surabaya, Indonesia. Features catalog browsing, date-range availability check, checkout, and admin dashboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

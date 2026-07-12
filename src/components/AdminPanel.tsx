@@ -16,6 +16,7 @@ import AdminLoginScreen from './admin/AdminLoginScreen';
 import OverviewTab from './admin/OverviewTab';
 import OrdersTab from './admin/OrdersTab';
 import InventoryTab from './admin/InventoryTab';
+import bilboIcon from '../assets/bilbo-icon.png';
 
 interface AdminPanelProps {
   themeId: string;
@@ -66,9 +67,7 @@ export default function AdminPanel({ themeId, setThemeId }: AdminPanelProps) {
       {/* Admin Navbar */}
       <header className="bg-black text-white px-6 py-4 border-b-4 border-black flex justify-between items-center shrink-0">
         <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 bg-brand text-black border-2 border-black flex items-center justify-center font-display font-black text-sm rounded-none shadow-[2px_2px_0px_rgba(0,0,0,1)]">
-            BO
-          </div>
+          <img src={bilboIcon} alt="" className="w-10 h-10" />
           <div>
             <h1 className="font-display font-black tracking-tighter text-lg uppercase text-white">Bilbo Outdoors Admin</h1>
             <p className="text-[9px] text-brand font-mono tracking-widest uppercase font-bold">Surabaya Basecamp</p>

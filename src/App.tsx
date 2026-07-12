@@ -5,6 +5,8 @@ import ClientPortal from './components/ClientPortal';
 import AdminPanel from './components/AdminPanel';
 import { THEMES } from './themes';
 import { Theme } from './types';
+import bilboLogoWide from './assets/bilbo-logo-wide.png';
+import bilboIcon from './assets/bilbo-icon.png';
 
 export default function App() {
   const { pathname } = useLocation();
@@ -34,15 +36,8 @@ export default function App() {
             
             {/* Logo */}
             <div className="flex items-center space-x-3">
-              <div className="bg-brand text-black flex items-center justify-center font-display font-black text-sm px-3 py-1 border-2 border-black uppercase shadow-[2px_2px_0px_rgba(0,0,0,1)]">
-                BO
-              </div>
-              <div>
-                <span className="font-display font-black tracking-tighter text-black text-xl sm:text-2xl uppercase">
-                  BILBO OUTDOORS
-                </span>
-                <p className="text-[9px] text-zinc-500 font-mono tracking-widest font-black -mt-1 uppercase">CAMPING EQUIPMENT RENTAL • SURABAYA, IDN</p>
-              </div>
+              <img src={bilboLogoWide} alt="Bilbo Outdoors" className="h-9 sm:h-11 w-auto" />
+              <p className="text-[9px] text-zinc-500 font-mono tracking-widest font-black uppercase border-l-2 border-black pl-3">CAMPING EQUIPMENT<br/>RENTAL • SURABAYA, IDN</p>
             </div>
 
             {/* Navigation / Actions */}
@@ -109,9 +104,7 @@ export default function App() {
             {/* Branding & Contact */}
             <div className="space-y-4">
               <div className="flex items-center space-x-3">
-                <div className="bg-brand text-black px-3.5 py-1.5 font-display font-black text-lg border-2 border-black uppercase shadow-[2px_2px_0px_rgba(255,255,255,1)]">
-                  BO
-                </div>
+                <img src={bilboIcon} alt="" className="h-9 w-9" />
                 <h3 className="font-display font-black tracking-tighter text-xl uppercase text-brand">BILBO OUTDOORS</h3>
               </div>
               <p className="text-xs text-zinc-400 leading-relaxed max-w-sm">

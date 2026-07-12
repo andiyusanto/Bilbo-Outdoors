@@ -1,6 +1,7 @@
 import { FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { Lock, ArrowLeft, AlertTriangle } from 'lucide-react';
+import bilboIcon from '../../assets/bilbo-icon.png';
 
 interface AdminLoginScreenProps {
   usernameInput: string;
@@ -33,9 +34,7 @@ export default function AdminLoginScreen({
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
-          <div className="w-14 h-14 bg-brand text-black border-2 border-black flex items-center justify-center font-display font-black text-xl rounded-none shadow-[3px_3px_0px_rgba(0,0,0,1)]">
-            BO
-          </div>
+          <img src={bilboIcon} alt="Bilbo Outdoors" className="w-14 h-14" />
         </div>
         <h2 className="mt-6 text-center text-3xl font-display font-black tracking-tighter text-black uppercase">
           Staff Admin Login

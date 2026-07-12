@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Routes, Route, Navigate, NavLink, Link } from 'react-router-dom';
 import {
   Palette,
   RefreshCw,
@@ -18,12 +18,11 @@ import OrdersTab from './admin/OrdersTab';
 import InventoryTab from './admin/InventoryTab';
 
 interface AdminPanelProps {
-  onClose: () => void;
   themeId: string;
   setThemeId: (id: string) => void;
 }
 
-export default function AdminPanel({ onClose, themeId, setThemeId }: AdminPanelProps) {
+export default function AdminPanel({ themeId, setThemeId }: AdminPanelProps) {
   const auth = useAdminAuth();
 
   const handleLogout = () => {
@@ -49,13 +48,9 @@ export default function AdminPanel({ onClose, themeId, setThemeId }: AdminPanelP
     setProducts: data.setProducts,
   });
 
-  // UI Control State
-  const [activeTab, setActiveTab] = useState<'overview' | 'orders' | 'inventory'>('overview');
-
   if (!auth.isLoggedIn) {
     return (
       <AdminLoginScreen
-        onClose={onClose}
         usernameInput={auth.usernameInput}
         setUsernameInput={auth.setUsernameInput}
         passwordInput={auth.passwordInput}
@@ -119,12 +114,12 @@ export default function AdminPanel({ onClose, themeId, setThemeId }: AdminPanelP
             Logout
           </button>
 
-          <button
-            onClick={onClose}
+          <Link
+            to="/"
             className="text-xs font-black uppercase tracking-widest bg-brand hover:bg-white text-black px-4 py-2.5 border-2 border-black shadow-[2px_2px_0px_rgba(0,0,0,1)] transition-all cursor-pointer rounded-none"
           >
             Portal Client
-          </button>
+          </Link>
         </div>
       </header>
 
@@ -132,25 +127,29 @@ export default function AdminPanel({ onClose, themeId, setThemeId }: AdminPanelP
       <div className="flex flex-1 flex-col md:flex-row overflow-hidden">
         {/* Sidebar */}
         <aside className="w-full md:w-64 bg-zinc-50 border-r-2 border-black flex flex-row md:flex-col p-4 space-y-0 md:space-y-3 space-x-3 md:space-x-0 overflow-x-auto md:overflow-x-visible shrink-0">
-          <button
-            onClick={() => setActiveTab('overview')}
-            className={`flex items-center justify-center md:justify-start space-x-2.5 px-4 py-3 border-2 transition-all cursor-pointer rounded-none grow md:grow-0 uppercase tracking-wider text-xs font-black ${
-              activeTab === 'overview'
-                ? 'bg-brand text-black border-black shadow-[3px_3px_0px_rgba(0,0,0,1)]'
-                : 'bg-white text-zinc-500 hover:text-black border-zinc-200 hover:bg-zinc-50'
-            }`}
+          <NavLink
+            to="/admin/overview"
+            className={({ isActive }) =>
+              `flex items-center justify-center md:justify-start space-x-2.5 px-4 py-3 border-2 transition-all cursor-pointer rounded-none grow md:grow-0 uppercase tracking-wider text-xs font-black ${
+                isActive
+                  ? 'bg-brand text-black border-black shadow-[3px_3px_0px_rgba(0,0,0,1)]'
+                  : 'bg-white text-zinc-500 hover:text-black border-zinc-200 hover:bg-zinc-50'
+              }`
+            }
           >
             <Package className="w-4 h-4 text-black stroke-[2.5]" />
             <span>Overview</span>
-          </button>
+          </NavLink>
 
-          <button
-            onClick={() => setActiveTab('orders')}
-            className={`flex items-center justify-center md:justify-start space-x-2.5 px-4 py-3 border-2 transition-all cursor-pointer rounded-none grow md:grow-0 uppercase tracking-wider text-xs font-black ${
-              activeTab === 'orders'
-                ? 'bg-brand text-black border-black shadow-[3px_3px_0px_rgba(0,0,0,1)]'
-                : 'bg-white text-zinc-500 hover:text-black border-zinc-200 hover:bg-zinc-50'
-            }`}
+          <NavLink
+            to="/admin/orders"
+            className={({ isActive }) =>
+              `flex items-center justify-center md:justify-start space-x-2.5 px-4 py-3 border-2 transition-all cursor-pointer rounded-none grow md:grow-0 uppercase tracking-wider text-xs font-black ${
+                isActive
+                  ? 'bg-brand text-black border-black shadow-[3px_3px_0px_rgba(0,0,0,1)]'
+                  : 'bg-white text-zinc-500 hover:text-black border-zinc-200 hover:bg-zinc-50'
+              }`
+            }
           >
             <FileText className="w-4 h-4 text-black stroke-[2.5]" />
             <span>Manajemen Order</span>
@@ -159,34 +158,41 @@ export default function AdminPanel({ onClose, themeId, setThemeId }: AdminPanelP
                 {data.orders.filter(o => o.status === 'Pending').length}
               </span>
             )}
-          </button>
+          </NavLink>
 
-          <button
-            onClick={() => setActiveTab('inventory')}
-            className={`flex items-center justify-center md:justify-start space-x-2.5 px-4 py-3 border-2 transition-all cursor-pointer rounded-none grow md:grow-0 uppercase tracking-wider text-xs font-black ${
-              activeTab === 'inventory'
-                ? 'bg-brand text-black border-black shadow-[3px_3px_0px_rgba(0,0,0,1)]'
-                : 'bg-white text-zinc-500 hover:text-black border-zinc-200 hover:bg-zinc-50'
-            }`}
+          <NavLink
+            to="/admin/inventory"
+            className={({ isActive }) =>
+              `flex items-center justify-center md:justify-start space-x-2.5 px-4 py-3 border-2 transition-all cursor-pointer rounded-none grow md:grow-0 uppercase tracking-wider text-xs font-black ${
+                isActive
+                  ? 'bg-brand text-black border-black shadow-[3px_3px_0px_rgba(0,0,0,1)]'
+                  : 'bg-white text-zinc-500 hover:text-black border-zinc-200 hover:bg-zinc-50'
+              }`
+            }
           >
             <ShoppingBag className="w-4 h-4 text-black stroke-[2.5]" />
             <span>Manajemen Stok</span>
-          </button>
+          </NavLink>
         </aside>
 
         {/* Workspace */}
         <main className="flex-1 p-6 overflow-y-auto">
-          {activeTab === 'overview' && (
-            <OverviewTab stats={data.stats} orders={data.orders} products={data.products} />
-          )}
-
-          {activeTab === 'orders' && (
-            <OrdersTab orders={data.orders} orderActions={orderActions} />
-          )}
-
-          {activeTab === 'inventory' && (
-            <InventoryTab products={data.products} productActions={productActions} />
-          )}
+          <Routes>
+            <Route index element={<Navigate to="/admin/overview" replace />} />
+            <Route
+              path="overview"
+              element={<OverviewTab stats={data.stats} orders={data.orders} products={data.products} />}
+            />
+            <Route
+              path="orders"
+              element={<OrdersTab orders={data.orders} orderActions={orderActions} />}
+            />
+            <Route
+              path="inventory"
+              element={<InventoryTab products={data.products} productActions={productActions} />}
+            />
+            <Route path="*" element={<Navigate to="/admin/overview" replace />} />
+          </Routes>
         </main>
       </div>
     </div>

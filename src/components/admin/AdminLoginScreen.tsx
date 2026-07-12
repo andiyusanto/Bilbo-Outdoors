@@ -1,8 +1,8 @@
 import { FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { Lock, ArrowLeft, AlertTriangle } from 'lucide-react';
 
 interface AdminLoginScreenProps {
-  onClose: () => void;
   usernameInput: string;
   setUsernameInput: (value: string) => void;
   passwordInput: string;
@@ -12,7 +12,6 @@ interface AdminLoginScreenProps {
 }
 
 export default function AdminLoginScreen({
-  onClose,
   usernameInput,
   setUsernameInput,
   passwordInput,
@@ -23,13 +22,13 @@ export default function AdminLoginScreen({
   return (
     <div className="min-h-screen bg-white flex flex-col justify-center py-12 px-6 lg:px-8">
       <div className="absolute top-6 left-6">
-        <button
-          onClick={onClose}
+        <Link
+          to="/"
           className="flex items-center text-xs font-black text-black uppercase tracking-widest hover:bg-black hover:text-brand border-2 border-black px-4 py-2 bg-white shadow-[2px_2px_0px_rgba(0,0,0,1)] transition-all rounded-none cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4 mr-1.5 stroke-[2.5]" />
           Kembali ke Portal Rental
-        </button>
+        </Link>
       </div>
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md">

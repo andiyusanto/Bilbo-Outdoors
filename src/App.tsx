@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import { Shield, Compass, Instagram, MapPin, Palette } from 'lucide-react';
 import ClientPortal from './components/ClientPortal';
 import AdminPanel from './components/AdminPanel';
@@ -6,7 +7,8 @@ import { THEMES } from './themes';
 import { Theme } from './types';
 
 export default function App() {
-  const [isAdminView, setIsAdminView] = useState<boolean>(false);
+  const { pathname } = useLocation();
+  const isAdminRoute = pathname.startsWith('/admin');
   const [themeId, setThemeId] = useState<string>(() => {
     return localStorage.getItem('bilbo-outdoor-theme') || 'sunset-ochre';
   });
@@ -26,7 +28,7 @@ export default function App() {
     <div className="min-h-screen bg-white flex flex-col font-sans selection:bg-brand selection:text-black">
       
       {/* Global Header */}
-      {!isAdminView && (
+      {!isAdminRoute && (
         <header className="bg-white border-b-2 border-black sticky top-0 z-40">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex justify-between items-center">
             
@@ -67,13 +69,13 @@ export default function App() {
 
               <div className="h-6 w-0.5 bg-black hidden md:block"></div>
 
-              <button
-                onClick={() => setIsAdminView(true)}
+              <Link
+                to="/admin/overview"
                 className="flex items-center text-xs font-black uppercase tracking-widest text-white bg-black hover:bg-brand hover:text-black px-4 py-2.5 border-2 border-black transition-colors duration-200 cursor-pointer shadow-[3px_3px_0px_var(--brand-color)]"
               >
                 <Shield className="w-3.5 h-3.5 mr-1.5 text-brand" />
                 Staff Admin
-              </button>
+              </Link>
             </div>
           </div>
         </header>
@@ -81,23 +83,26 @@ export default function App() {
 
       {/* Main Content Area */}
       <div className="flex-1">
-        {isAdminView ? (
-          <AdminPanel 
-            onClose={() => setIsAdminView(false)} 
-            themeId={themeId} 
-            setThemeId={setThemeId} 
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <ClientPortal
+                onAdminToggle={() => {}}
+                themeId={themeId}
+                setThemeId={setThemeId}
+              />
+            }
           />
-        ) : (
-          <ClientPortal 
-            onAdminToggle={() => setIsAdminView(true)} 
-            themeId={themeId} 
-            setThemeId={setThemeId} 
+          <Route
+            path="/admin/*"
+            element={<AdminPanel themeId={themeId} setThemeId={setThemeId} />}
           />
-        )}
+        </Routes>
       </div>
 
       {/* Global Footer */}
-      {!isAdminView && (
+      {!isAdminRoute && (
         <footer className="bg-black text-white py-16 px-6 border-t-2 border-black shrink-0">
           <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-12 items-start">
             

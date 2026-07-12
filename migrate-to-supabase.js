@@ -1,6 +1,11 @@
 import pg from 'pg';
 import fs from 'fs';
 import path from 'path';
+import dns from 'dns';
+
+// Supabase pooler hosts are dual-stack (A + AAAA). Prefer IPv4 so this doesn't
+// fail with ENETUNREACH on networks without a working IPv6 route.
+dns.setDefaultResultOrder('ipv4first');
 
 // Load connection string from environment variables
 const connectionString = process.env.DATABASE_URL;

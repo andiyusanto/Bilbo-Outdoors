@@ -1,5 +1,5 @@
 import { useState, FormEvent, Dispatch, SetStateAction } from 'react';
-import { Order } from '../types';
+import { useNavigate } from 'react-router-dom';
 import { JSON_HEADERS, parseJsonOrThrow } from '../lib/api';
 
 interface UseOrderSubmissionParams {
@@ -23,9 +23,9 @@ export function useOrderSubmission({
   rentDuration,
   idCardBase64,
 }: UseOrderSubmissionParams) {
+  const navigate = useNavigate();
   const [checkoutError, setCheckoutError] = useState<string>('');
   const [submittingOrder, setSubmittingOrder] = useState<boolean>(false);
-  const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
 
   const handleCheckout = async (e: FormEvent) => {
     e.preventDefault();
@@ -70,8 +70,8 @@ export function useOrderSubmission({
 
       const data = await parseJsonOrThrow(res, 'Gagal mengirim pesanan');
 
-      setCompletedOrder(data);
       setCart({}); // clear cart
+      navigate(`/pesanan/${data.confirmationToken}`);
     } catch (err: any) {
       setCheckoutError(err.message || 'Terjadi kesalahan sistem saat memproses pemesanan.');
     } finally {
@@ -82,8 +82,6 @@ export function useOrderSubmission({
   return {
     checkoutError,
     submittingOrder,
-    completedOrder,
-    setCompletedOrder,
     handleCheckout,
   };
 }

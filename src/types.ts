@@ -23,6 +23,7 @@ export type OrderStatus = 'Pending' | 'Approved/Paid' | 'Item Picked Up' | 'Item
 
 export interface Order {
   id: string;
+  confirmationToken?: string; // random, unguessable, generated once at creation; absent on legacy pre-feature orders
   customerName: string;
   customerWhatsApp: string;
   startDate: string; // YYYY-MM-DD
@@ -36,6 +37,10 @@ export interface Order {
   lateDays?: number;
   lateFee?: number;
 }
+
+// Public-safe projection of Order for the customer-facing confirmation page -
+// Omit-based so any future Order field is included by default unless excluded here.
+export type PublicOrder = Omit<Order, 'idCardBase64'>;
 
 export interface DashboardStats {
   activeRentalsCount: number;

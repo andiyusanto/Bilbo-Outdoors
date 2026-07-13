@@ -1,18 +1,21 @@
 import { Check, Phone } from 'lucide-react';
-import { Order } from '../../types';
+import { PublicOrder } from '../../types';
 import QRISCode from '../QRISCode';
 
 interface OrderSuccessScreenProps {
-  completedOrder: Order;
+  completedOrder: PublicOrder;
   onReset: () => void;
 }
 
 // Generate WhatsApp message and redirect link
-const triggerWhatsAppRedirect = (order: Order) => {
+const triggerWhatsAppRedirect = (order: PublicOrder) => {
   const formattedTotal = order.totalPrice.toLocaleString('id-ID');
   const itemLines = order.items.map(it => {
     return `- ${it.productName} (x${it.quantity})`;
   }).join('\n');
+  const confirmationLine = order.confirmationToken
+    ? `\n*Link Konfirmasi Pesanan:* ${window.location.origin}/pesanan/${order.confirmationToken}\n`
+    : '';
 
   const message = `Halo Bilbo Outdoors, saya ingin mengonfirmasi sewa alat camping berikut:
 
@@ -25,7 +28,7 @@ Periode: ${order.startDate} s/d ${order.endDate} (${order.rentDuration} Hari)
 ${itemLines}
 
 *Total Pembayaran:* Rp ${formattedTotal}
-
+${confirmationLine}
 Saya sudah melakukan pembayaran. Mohon dikonfirmasi pesanannya untuk pengambilan barang. Terima kasih!`;
 
   const encodedMessage = encodeURIComponent(message);

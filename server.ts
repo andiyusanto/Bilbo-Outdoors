@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import { createServer as createViteServer } from 'vite';
 import { Product, Order, OrderStatus, DashboardStats } from './src/types';
 import { defaultProducts } from './db/defaultProducts';
@@ -333,6 +334,7 @@ app.post('/api/orders', asyncHandler(async (req, res) => {
     // 4. Create Order Object
     const newOrder: Order = {
       id: `order-${Date.now()}`,
+      confirmationToken: crypto.randomUUID(),
       customerName,
       customerWhatsApp,
       startDate,
@@ -350,6 +352,20 @@ app.post('/api/orders', asyncHandler(async (req, res) => {
 
     res.status(201).json(newOrder);
   });
+}));
+
+// Get Order Confirmation (Public, by unguessable token - NOT by order.id)
+app.get('/api/orders/confirm/:token', asyncHandler(async (req, res) => {
+  const { token } = req.params;
+  const db = await readDB();
+  const order = db.orders.find((o: Order) => o.confirmationToken && o.confirmationToken === token);
+
+  if (!order) {
+    return res.status(404).json({ error: 'Pesanan tidak ditemukan.' });
+  }
+
+  const { idCardBase64, ...safeOrder } = order;
+  res.json(safeOrder);
 }));
 
 // Admin: Get all orders

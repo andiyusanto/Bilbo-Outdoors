@@ -3,6 +3,7 @@ import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import { Shield, Compass, Instagram, MapPin, Palette } from 'lucide-react';
 import ClientPortal from './components/ClientPortal';
 import AdminPanel from './components/AdminPanel';
+import OrderConfirmationPage from './components/client/OrderConfirmationPage';
 import { THEMES } from './themes';
 import { Theme } from './types';
 import bilboLogoWide from './assets/bilbo-logo-wide.png';
@@ -89,6 +90,7 @@ export default function App() {
               />
             }
           />
+          <Route path="/pesanan/:token" element={<OrderConfirmationPage />} />
           <Route
             path="/admin/*"
             element={<AdminPanel themeId={themeId} setThemeId={setThemeId} />}

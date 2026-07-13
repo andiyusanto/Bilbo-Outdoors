@@ -129,7 +129,8 @@ CREATE TABLE IF NOT EXISTS orders (
   status VARCHAR(255) NOT NULL,
   created_at VARCHAR(255) NOT NULL,
   late_days INT DEFAULT 0,
-  late_fee NUMERIC DEFAULT 0
+  late_fee NUMERIC DEFAULT 0,
+  confirmation_token VARCHAR(255)
 );
 
 -- 3. Membuat Tabel Order Items (Relasi Detail Item dari Order)
@@ -149,6 +150,11 @@ CREATE TABLE IF NOT EXISTS order_items (
 > ```sql
 > ALTER TABLE products    ADD COLUMN IF NOT EXISTS discount_min_days       INT NOT NULL DEFAULT 5;
 > ALTER TABLE order_items ADD COLUMN IF NOT EXISTS discount_threshold_days INT NOT NULL DEFAULT 5;
+> ```
+
+> **Sudah pernah menjalankan Step A sebelum kolom `confirmation_token` ada?** Jalankan ini sekali di SQL Editor yang sama (aman dijalankan berulang). Kolom ini sengaja dibiarkan nullable, tanpa default - setiap order butuh nilai acak yang berbeda, bukan satu nilai default yang sama untuk semua baris. Order lama (sebelum fitur ini ada) akan tetap `NULL` selamanya dan itu memang disengaja: order tersebut sudah selesai diproses secara langsung sebelum fitur "link konfirmasi" ini ada, jadi tidak ada regresi bagi pelanggan yang bersangkutan.
+> ```sql
+> ALTER TABLE orders ADD COLUMN IF NOT EXISTS confirmation_token VARCHAR(255);
 > ```
 
 ### Step B: Dapatkan Connection String Supabase Anda

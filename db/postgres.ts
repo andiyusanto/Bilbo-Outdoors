@@ -94,6 +94,7 @@ function rowToOrderItem(row: any): OrderItem {
 function rowToOrder(row: any, items: OrderItem[]): Order {
   return {
     id: row.id,
+    confirmationToken: row.confirmation_token ?? undefined,
     customerName: row.customer_name,
     customerWhatsApp: row.customer_whatsapp,
     startDate: row.start_date,
@@ -193,12 +194,13 @@ export async function writeDBPostgres(data: { products: Product[]; orders: Order
           o.status,
           o.createdAt,
           Number(o.lateDays || 0),
-          Number(o.lateFee || 0)
+          Number(o.lateFee || 0),
+          o.confirmationToken ?? null
         );
       });
       await client.query(
-        `INSERT INTO orders (id, customer_name, customer_whatsapp, start_date, end_date, rent_duration, total_price, id_card_base64, status, created_at, late_days, late_fee)
-         VALUES ${buildValuesClause(data.orders.length, 12)}
+        `INSERT INTO orders (id, customer_name, customer_whatsapp, start_date, end_date, rent_duration, total_price, id_card_base64, status, created_at, late_days, late_fee, confirmation_token)
+         VALUES ${buildValuesClause(data.orders.length, 13)}
          ON CONFLICT (id) DO UPDATE SET
            customer_name = EXCLUDED.customer_name,
            customer_whatsapp = EXCLUDED.customer_whatsapp,
@@ -210,7 +212,8 @@ export async function writeDBPostgres(data: { products: Product[]; orders: Order
            status = EXCLUDED.status,
            created_at = EXCLUDED.created_at,
            late_days = EXCLUDED.late_days,
-           late_fee = EXCLUDED.late_fee`,
+           late_fee = EXCLUDED.late_fee,
+           confirmation_token = EXCLUDED.confirmation_token`,
         params
       );
     }

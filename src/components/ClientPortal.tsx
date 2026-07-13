@@ -10,7 +10,6 @@ import CategoryFilterTabs from './client/CategoryFilterTabs';
 import EquipmentGrid from './client/EquipmentGrid';
 import CartSummary from './client/CartSummary';
 import CheckoutForm from './client/CheckoutForm';
-import OrderSuccessScreen from './client/OrderSuccessScreen';
 import DiscountCarousel from './client/DiscountCarousel';
 
 interface ClientPortalProps {
@@ -37,8 +36,6 @@ export default function ClientPortal({ onAdminToggle, themeId, setThemeId }: Cli
   const {
     checkoutError,
     submittingOrder,
-    completedOrder,
-    setCompletedOrder,
     handleCheckout,
   } = useOrderSubmission({
     cart,
@@ -172,67 +169,62 @@ export default function ClientPortal({ onAdminToggle, themeId, setThemeId }: Cli
         <DiscountCarousel products={products} categoryOrder={categories.filter(c => c !== 'ALL')} />
       </section>
 
-      {completedOrder ? (
-        /* 4. SUCCESS PAYMENT SCREEN */
-        <OrderSuccessScreen completedOrder={completedOrder} onReset={() => setCompletedOrder(null)} />
-      ) : (
-        /* 2. CATALOG & BOOKING MAIN AREA */
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      {/* 2. CATALOG & BOOKING MAIN AREA */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
 
-          {/* LEFT SIDE: Datepicker, Catalog & Equipment List */}
-          <div className="lg:col-span-8 space-y-8">
+        {/* LEFT SIDE: Datepicker, Catalog & Equipment List */}
+        <div className="lg:col-span-8 space-y-8">
 
-            <DateRangePicker
-              startDate={startDate}
-              setStartDate={setStartDate}
-              endDate={endDate}
-              setEndDate={setEndDate}
-              rentDuration={rentDuration}
-            />
+          <DateRangePicker
+            startDate={startDate}
+            setStartDate={setStartDate}
+            endDate={endDate}
+            setEndDate={setEndDate}
+            rentDuration={rentDuration}
+          />
 
-            <CategoryFilterTabs
-              categories={categories}
-              activeCategory={activeCategory}
-              setActiveCategory={setActiveCategory}
-            />
+          <CategoryFilterTabs
+            categories={categories}
+            activeCategory={activeCategory}
+            setActiveCategory={setActiveCategory}
+          />
 
-            <EquipmentGrid
-              loadingProducts={loadingProducts}
-              filteredProducts={filteredProducts}
-              cart={cart}
-              stockDetails={stockDetails}
-              startDate={startDate}
-              endDate={endDate}
-              onUpdateCart={handleUpdateCart}
-            />
-          </div>
-
-          {/* RIGHT SIDE: Cart Summary & Checkout form */}
-          <div className="lg:col-span-4 space-y-6">
-            <CartSummary
-              cart={cart}
-              products={products}
-              rentDuration={rentDuration}
-              calculateItemCost={calculateItemCost}
-              getCartTotal={getCartTotal}
-            />
-
-            <CheckoutForm
-              customerName={customerName}
-              setCustomerName={setCustomerName}
-              customerWhatsApp={customerWhatsApp}
-              setCustomerWhatsApp={setCustomerWhatsApp}
-              idCardFile={idCardFile}
-              idCardBase64={idCardBase64}
-              onFileChange={handleFileChange}
-              checkoutError={checkoutError}
-              submittingOrder={submittingOrder}
-              cartIsEmpty={Object.keys(cart).length === 0}
-              onSubmit={handleCheckout}
-            />
-          </div>
+          <EquipmentGrid
+            loadingProducts={loadingProducts}
+            filteredProducts={filteredProducts}
+            cart={cart}
+            stockDetails={stockDetails}
+            startDate={startDate}
+            endDate={endDate}
+            onUpdateCart={handleUpdateCart}
+          />
         </div>
-      )}
+
+        {/* RIGHT SIDE: Cart Summary & Checkout form */}
+        <div className="lg:col-span-4 space-y-6">
+          <CartSummary
+            cart={cart}
+            products={products}
+            rentDuration={rentDuration}
+            calculateItemCost={calculateItemCost}
+            getCartTotal={getCartTotal}
+          />
+
+          <CheckoutForm
+            customerName={customerName}
+            setCustomerName={setCustomerName}
+            customerWhatsApp={customerWhatsApp}
+            setCustomerWhatsApp={setCustomerWhatsApp}
+            idCardFile={idCardFile}
+            idCardBase64={idCardBase64}
+            onFileChange={handleFileChange}
+            checkoutError={checkoutError}
+            submittingOrder={submittingOrder}
+            cartIsEmpty={Object.keys(cart).length === 0}
+            onSubmit={handleCheckout}
+          />
+        </div>
+      </div>
 
       {/* Fixed Bottom Decorative Marquee Ticker Bar */}
       <div className="fixed bottom-0 left-0 right-0 h-12 bg-brand border-t-2 border-black flex items-center px-10 overflow-hidden whitespace-nowrap z-30 shadow-[0_-2px_8px_rgba(0,0,0,0.15)]">

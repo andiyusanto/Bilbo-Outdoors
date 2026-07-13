@@ -306,11 +306,11 @@ app.post('/api/orders', asyncHandler(async (req, res) => {
     const orderItems = items.map((it: any) => {
       const prod = db.products.find((p: Product) => p.id === it.productId)!;
 
-      // Formula: First 5 days cost standard price. Days after 5 cost base_price + incrementalPriceAfter5Days.
+      // Formula: First 5 days cost standard price. Days after 5 get a discount (base_price - incrementalPriceAfter5Days).
       let itemTotal = 0;
       for (let day = 1; day <= rentDuration; day++) {
         if (day > 5) {
-          itemTotal += (prod.price + prod.incrementalPriceAfter5Days);
+          itemTotal += (prod.price - prod.incrementalPriceAfter5Days);
         } else {
           itemTotal += prod.price;
         }
@@ -412,14 +412,14 @@ app.post('/api/orders/:id/calculate-late', authenticateAdmin, asyncHandler(async
     const breakdown = order.items.map(item => {
       // For each late day:
       // If the original rentDuration was D, late day i is D + dayIndex.
-      // Tents: incremental pricing of +10k if dayIndex + D > 5.
+      // Tents: discounted rate (-10k) if dayIndex + D > 5.
       let itemLateCost = 0;
       const basePrice = item.pricePerDay;
       const incremental = item.incrementalPrice;
 
       for (let dayIndex = 1; dayIndex <= lateDays; dayIndex++) {
         const daySeqNum = order.rentDuration + dayIndex;
-        const dailyPrice = daySeqNum > 5 ? (basePrice + incremental) : basePrice;
+        const dailyPrice = daySeqNum > 5 ? (basePrice - incremental) : basePrice;
         itemLateCost += dailyPrice;
       }
 
@@ -429,7 +429,7 @@ app.post('/api/orders/:id/calculate-late', authenticateAdmin, asyncHandler(async
       return {
         productName: item.productName,
         quantity: item.quantity,
-        dailyRateBreakdown: item.incrementalPrice > 0 ? `Base: ${basePrice} (+${incremental} after 5d)` : `Rate: ${basePrice}`,
+        dailyRateBreakdown: item.incrementalPrice > 0 ? `Base: ${basePrice} (-${incremental} after 5d)` : `Rate: ${basePrice}`,
         itemTotalLateCost
       };
     });

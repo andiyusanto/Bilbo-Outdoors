@@ -91,7 +91,7 @@ export default function ClientPortal({ onAdminToggle, themeId, setThemeId }: Cli
     let singleItemCost = 0;
     for (let day = 1; day <= rentDuration; day++) {
       if (day > 5) {
-        singleItemCost += (product.price + product.incrementalPriceAfter5Days);
+        singleItemCost += (product.price - product.incrementalPriceAfter5Days);
       } else {
         singleItemCost += product.price;
       }
@@ -171,7 +171,7 @@ export default function ClientPortal({ onAdminToggle, themeId, setThemeId }: Cli
         <div className="bg-brand/10 border-2 border-black p-4 rounded-none relative z-10 flex items-start space-x-3 text-xs text-black max-w-xl shadow-[3px_3px_0px_rgba(0,0,0,1)]">
           <Info className="w-4.5 h-4.5 text-black shrink-0 mt-0.5 stroke-[3]" />
           <p className="leading-normal font-bold uppercase tracking-wide text-[11px]">
-            <strong>SISTEM DISKON OTOMATIS:</strong> KHUSUS KATEGORI TENDA & SHELTER, TEMUKAN POTONGAN HARGA <strong>+10K/HARI</strong> SETELAH PENYEMAAN 5 HARI BERTURUT-TURUT!
+            <strong>SISTEM DISKON OTOMATIS:</strong> SEWA ALAT YANG BERLAKU LEBIH DARI <strong>5 HARI BERTURUT-TURUT</strong> DAN DAPATKAN POTONGAN HARGA HARIAN — CEK LABEL DISKON DI TIAP ALAT!
           </p>
         </div>
       </section>

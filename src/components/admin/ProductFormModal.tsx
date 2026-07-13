@@ -84,7 +84,7 @@ export default function ProductFormModal({
               />
             </div>
             <div>
-              <label className="block text-xs font-black text-black uppercase">Naik Setlah 5 Hari</label>
+              <label className="block text-xs font-black text-black uppercase">Diskon Setelah 5 Hari</label>
               <input
                 type="number"
                 required

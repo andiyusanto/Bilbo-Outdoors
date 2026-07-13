@@ -1,7 +1,10 @@
-import { Plus, Edit3, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import { Plus, Edit3, Trash2, Search, ZoomIn } from 'lucide-react';
 import { Product } from '../../types';
 import { useProductActions } from '../../hooks/useProductActions';
 import ProductFormModal from './ProductFormModal';
+import ImagePreviewModal from '../ImagePreviewModal';
+import bilboIcon from '../../assets/bilbo-icon.png';
 
 interface InventoryTabProps {
   products: Product[];
@@ -22,6 +25,14 @@ export default function InventoryTab({ products, productActions }: InventoryTabP
     openEditProductModal,
   } = productActions;
 
+  const [productSearch, setProductSearch] = useState<string>('');
+  const [previewImage, setPreviewImage] = useState<{ url: string; alt: string } | null>(null);
+
+  const filteredProducts = products.filter(p =>
+    p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
+    p.price.toString().includes(productSearch)
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -30,85 +41,121 @@ export default function InventoryTab({ products, productActions }: InventoryTabP
           <p className="text-xs text-zinc-600 font-semibold uppercase tracking-wider mt-1">Sesuaikan persediaan fisik, harga sewa, dan jenis peralatan outdoor.</p>
         </div>
 
-        <button
-          onClick={openAddProductModal}
-          className="bg-black hover:bg-brand hover:text-black text-brand font-black text-xs px-5 py-3 rounded-none shadow-[4px_4px_0px_var(--brand-color)] hover:shadow-[4px_4px_0px_rgba(0,0,0,1)] border-2 border-black transition-all flex items-center self-start sm:self-auto uppercase tracking-widest cursor-pointer"
-        >
-          <Plus className="w-4 h-4 mr-2 stroke-[3]" />
-          Tambah Alat Camping
-        </button>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="relative">
+            <Search className="w-4 h-4 text-black absolute left-3 top-3.5 stroke-[2.5]" />
+            <input
+              type="text"
+              placeholder="CARI NAMA / HARGA..."
+              value={productSearch}
+              onChange={(e) => setProductSearch(e.target.value)}
+              className="pl-9 pr-4 py-2.5 text-xs bg-white border-2 border-black rounded-none focus:bg-brand/10 focus:outline-none w-full sm:w-48 font-black uppercase tracking-wider"
+            />
+          </div>
+
+          <button
+            onClick={openAddProductModal}
+            className="bg-black hover:bg-brand hover:text-black text-brand font-black text-xs px-5 py-3 rounded-none shadow-[4px_4px_0px_var(--brand-color)] hover:shadow-[4px_4px_0px_rgba(0,0,0,1)] border-2 border-black transition-all flex items-center self-start sm:self-auto uppercase tracking-widest cursor-pointer"
+          >
+            <Plus className="w-4 h-4 mr-2 stroke-[3]" />
+            Tambah Alat Camping
+          </button>
+        </div>
       </div>
 
       {/* Grid of Products */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {products.length === 0 ? (
+        {filteredProducts.length === 0 ? (
           <div className="col-span-full py-16 text-center text-xs text-zinc-400 font-bold uppercase border-2 border-black bg-zinc-50">
-            Stok alat camping kosong.
+            {products.length === 0 ? 'Stok alat camping kosong.' : 'Tidak ada alat camping yang cocok dengan pencarian.'}
           </div>
         ) : (
-          products.map((prod) => (
-            <div key={prod.id} className="bg-white border-2 border-black p-5 rounded-none shadow-[4px_4px_0px_rgba(0,0,0,1)] space-y-4 flex flex-col justify-between">
-              <div>
-                {/* Title and category */}
-                <div className="flex justify-between items-start">
-                  <span className="text-[9px] font-mono font-black bg-brand/20 text-black px-2 py-0.5 border border-black uppercase">
-                    {prod.category}
-                  </span>
-                  <div className="flex space-x-1">
-                    <button
-                      onClick={() => openEditProductModal(prod)}
-                      title="Edit"
-                      className="p-1.5 hover:bg-brand/20 border border-transparent hover:border-black rounded-none text-zinc-500 hover:text-black transition-all cursor-pointer"
-                    >
-                      <Edit3 className="w-3.5 h-3.5 stroke-[2.5]" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteProduct(prod.id)}
-                      title="Hapus"
-                      className="p-1.5 hover:bg-red-500 hover:text-white border border-transparent hover:border-black rounded-none text-zinc-500 transition-all cursor-pointer"
-                    >
-                      <Trash2 className="w-3.5 h-3.5 stroke-[2.5]" />
-                    </button>
+          filteredProducts.map((prod) => (
+            <div key={prod.id} className="bg-white border-2 border-black rounded-none shadow-[4px_4px_0px_rgba(0,0,0,1)] flex flex-col justify-between">
+              {/* Photo strip - full bleed, shows real product photo if set, else a muted brand mark */}
+              <div className="w-full h-36 border-b-2 border-black overflow-hidden shrink-0">
+                {prod.image ? (
+                  <button
+                    type="button"
+                    onClick={() => setPreviewImage({ url: prod.image!, alt: prod.name })}
+                    className="group relative w-full h-full cursor-pointer"
+                    aria-label={`Lihat foto ${prod.name}`}
+                  >
+                    <img src={prod.image} alt={prod.name} className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                      <ZoomIn className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity stroke-[2.5]" />
+                    </div>
+                  </button>
+                ) : (
+                  <div className="w-full h-full bg-brand/5 flex items-center justify-center">
+                    <img src={bilboIcon} alt="" className="w-14 h-14 opacity-25" />
                   </div>
-                </div>
-
-                <h3 className="font-display font-black text-sm text-black uppercase mt-3">{prod.name}</h3>
-                {prod.description && (
-                  <p className="text-[11px] text-zinc-600 font-bold uppercase mt-1.5 line-clamp-2">{prod.description}</p>
                 )}
               </div>
 
-              {/* Financial info & stock controls */}
-              <div className="border-t-2 border-black pt-3.5 space-y-3">
-                <div className="flex justify-between text-xs font-bold text-zinc-500 uppercase">
-                  <span>Sewa Pokok:</span>
-                  <strong className="text-black font-mono font-black">Rp {prod.price.toLocaleString('id-ID')}/hari</strong>
+              <div className="p-5 space-y-4 flex flex-col justify-between flex-1">
+                <div>
+                  {/* Title and category */}
+                  <div className="flex justify-between items-start">
+                    <span className="text-[9px] font-mono font-black bg-brand/20 text-black px-2 py-0.5 border border-black uppercase">
+                      {prod.category}
+                    </span>
+                    <div className="flex space-x-1">
+                      <button
+                        onClick={() => openEditProductModal(prod)}
+                        title="Edit"
+                        className="p-1.5 hover:bg-brand/20 border border-transparent hover:border-black rounded-none text-zinc-500 hover:text-black transition-all cursor-pointer"
+                      >
+                        <Edit3 className="w-3.5 h-3.5 stroke-[2.5]" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteProduct(prod.id)}
+                        title="Hapus"
+                        className="p-1.5 hover:bg-red-500 hover:text-white border border-transparent hover:border-black rounded-none text-zinc-500 transition-all cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 stroke-[2.5]" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <h3 className="font-display font-black text-sm text-black uppercase mt-3">{prod.name}</h3>
+                  {prod.description && (
+                    <p className="text-[11px] text-zinc-600 font-bold uppercase mt-1.5 line-clamp-2">{prod.description}</p>
+                  )}
                 </div>
 
-                {prod.incrementalPriceAfter5Days > 0 ? (
-                  <div className="flex justify-between text-xs font-bold text-emerald-600 uppercase">
-                    <span>Sewa {'>'}{prod.discountMinDays} hari (diskon):</span>
-                    <strong className="font-mono font-black">Rp {(prod.price - prod.incrementalPriceAfter5Days).toLocaleString('id-ID')}/hari</strong>
+                {/* Financial info & stock controls */}
+                <div className="border-t-2 border-black pt-3.5 space-y-3">
+                  <div className="flex justify-between text-xs font-bold text-zinc-500 uppercase">
+                    <span>Sewa Pokok:</span>
+                    <strong className="text-black font-mono font-black">Rp {prod.price.toLocaleString('id-ID')}/hari</strong>
                   </div>
-                ) : null}
 
-                {/* Physical Stock Controls */}
-                <div className="flex justify-between items-center bg-zinc-50 px-3 py-2 border-2 border-black rounded-none shadow-[2px_2px_0px_rgba(0,0,0,1)]">
-                  <span className="text-xs font-black text-black uppercase tracking-wider">Stok Inventaris:</span>
-                  <div className="flex items-center space-x-2.5">
-                    <button
-                      onClick={() => handleAdjustStock(prod, -1)}
-                      className="w-7 h-7 border-2 border-black bg-white hover:bg-brand font-black text-xs flex items-center justify-center transition-all cursor-pointer rounded-none"
-                    >
-                      -
-                    </button>
-                    <span className="text-xs font-mono font-black text-black w-6 text-center">{prod.stock}</span>
-                    <button
-                      onClick={() => handleAdjustStock(prod, 1)}
-                      className="w-7 h-7 border-2 border-black bg-white hover:bg-brand font-black text-xs flex items-center justify-center transition-all cursor-pointer rounded-none"
-                    >
-                      +
-                    </button>
+                  {prod.incrementalPriceAfter5Days > 0 ? (
+                    <div className="flex justify-between text-xs font-bold text-emerald-600 uppercase">
+                      <span>Sewa {'>'}{prod.discountMinDays} hari (diskon):</span>
+                      <strong className="font-mono font-black">Rp {(prod.price - prod.incrementalPriceAfter5Days).toLocaleString('id-ID')}/hari</strong>
+                    </div>
+                  ) : null}
+
+                  {/* Physical Stock Controls */}
+                  <div className="flex justify-between items-center bg-zinc-50 px-3 py-2 border-2 border-black rounded-none shadow-[2px_2px_0px_rgba(0,0,0,1)]">
+                    <span className="text-xs font-black text-black uppercase tracking-wider">Stok Inventaris:</span>
+                    <div className="flex items-center space-x-2.5">
+                      <button
+                        onClick={() => handleAdjustStock(prod, -1)}
+                        className="w-7 h-7 border-2 border-black bg-white hover:bg-brand font-black text-xs flex items-center justify-center transition-all cursor-pointer rounded-none"
+                      >
+                        -
+                      </button>
+                      <span className="text-xs font-mono font-black text-black w-6 text-center">{prod.stock}</span>
+                      <button
+                        onClick={() => handleAdjustStock(prod, 1)}
+                        className="w-7 h-7 border-2 border-black bg-white hover:bg-brand font-black text-xs flex items-center justify-center transition-all cursor-pointer rounded-none"
+                      >
+                        +
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -125,6 +172,14 @@ export default function InventoryTab({ products, productActions }: InventoryTabP
           setProductFormData={setProductFormData}
           onSubmit={handleSaveProduct}
           onClose={() => setShowProductModal(false)}
+        />
+      )}
+
+      {previewImage && (
+        <ImagePreviewModal
+          imageUrl={previewImage.url}
+          alt={previewImage.alt}
+          onClose={() => setPreviewImage(null)}
         />
       )}
     </div>

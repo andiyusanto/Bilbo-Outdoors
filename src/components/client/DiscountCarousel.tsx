@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Info, Percent } from 'lucide-react';
 import { Product } from '../../types';
 import bilboIcon from '../../assets/bilbo-icon.png';
-import ImagePreviewModal from './ImagePreviewModal';
+import ImagePreviewModal from '../ImagePreviewModal';
 
 interface DiscountCarouselProps {
   products: Product[];

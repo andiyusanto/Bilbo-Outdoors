@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ZoomIn } from 'lucide-react';
 import { Product } from '../../types';
 import bilboIcon from '../../assets/bilbo-icon.png';
-import ImagePreviewModal from './ImagePreviewModal';
+import ImagePreviewModal from '../ImagePreviewModal';
 
 interface StockInfo {
   remaining: number;

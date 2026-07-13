@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Info, Percent } from 'lucide-react';
 import { Product } from '../../types';
 import bilboIcon from '../../assets/bilbo-icon.png';
+import ImagePreviewModal from './ImagePreviewModal';
 
 interface DiscountCarouselProps {
   products: Product[];
@@ -49,6 +50,7 @@ function buildSlides(products: Product[], categoryOrder: string[]): Slide[] {
 export default function DiscountCarousel({ products, categoryOrder }: DiscountCarouselProps) {
   const slides = useMemo(() => buildSlides(products, categoryOrder), [products, categoryOrder]);
   const [slideIndex, setSlideIndex] = useState(0);
+  const [previewImage, setPreviewImage] = useState<{ url: string; alt: string } | null>(null);
   const prefersReducedMotion = usePrefersReducedMotion();
 
   // Clamp if the catalog changes underneath an open tab (e.g. admin removes
@@ -95,11 +97,18 @@ export default function DiscountCarousel({ products, categoryOrder }: DiscountCa
                   {currentSlide.items.map(item => (
                     <div key={item.id} className="flex items-center gap-2">
                       {item.image ? (
-                        <img
-                          src={item.image}
-                          alt={item.name}
-                          className="w-6 h-6 object-cover border border-black shrink-0"
-                        />
+                        <button
+                          type="button"
+                          onClick={() => setPreviewImage({ url: item.image!, alt: item.name })}
+                          aria-label={`Lihat foto ${item.name}`}
+                          className="shrink-0 cursor-pointer hover:ring-2 hover:ring-black transition-all"
+                        >
+                          <img
+                            src={item.image}
+                            alt={item.name}
+                            className="w-6 h-6 object-cover border border-black"
+                          />
+                        </button>
                       ) : (
                         <div className="w-6 h-6 border border-black/40 bg-white shrink-0 flex items-center justify-center">
                           <img src={bilboIcon} alt="" className="w-4 h-4 opacity-40" />
@@ -135,6 +144,14 @@ export default function DiscountCarousel({ products, categoryOrder }: DiscountCa
             />
           ))}
         </div>
+      )}
+
+      {previewImage && (
+        <ImagePreviewModal
+          imageUrl={previewImage.url}
+          alt={previewImage.alt}
+          onClose={() => setPreviewImage(null)}
+        />
       )}
     </div>
   );

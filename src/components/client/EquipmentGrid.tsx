@@ -1,5 +1,8 @@
+import { useState } from 'react';
+import { ZoomIn } from 'lucide-react';
 import { Product } from '../../types';
 import bilboIcon from '../../assets/bilbo-icon.png';
+import ImagePreviewModal from './ImagePreviewModal';
 
 interface StockInfo {
   remaining: number;
@@ -25,6 +28,8 @@ export default function EquipmentGrid({
   endDate,
   onUpdateCart,
 }: EquipmentGridProps) {
+  const [previewImage, setPreviewImage] = useState<{ url: string; alt: string } | null>(null);
+
   if (loadingProducts) {
     return (
       <div className="py-20 text-center text-xs font-bold uppercase tracking-wider text-zinc-400 italic">
@@ -59,7 +64,17 @@ export default function EquipmentGrid({
             {/* Photo strip - full bleed, shows real product photo if set, else a muted brand mark */}
             <div className="w-full h-36 border-b-2 border-black overflow-hidden shrink-0">
               {prod.image ? (
-                <img src={prod.image} alt={prod.name} className="w-full h-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => setPreviewImage({ url: prod.image!, alt: prod.name })}
+                  className="group relative w-full h-full cursor-pointer"
+                  aria-label={`Lihat foto ${prod.name}`}
+                >
+                  <img src={prod.image} alt={prod.name} className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                    <ZoomIn className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity stroke-[2.5]" />
+                  </div>
+                </button>
               ) : (
                 <div className="w-full h-full bg-brand/5 flex items-center justify-center">
                   <img src={bilboIcon} alt="" className="w-14 h-14 opacity-25" />
@@ -149,6 +164,14 @@ export default function EquipmentGrid({
           </div>
         );
       })}
+
+      {previewImage && (
+        <ImagePreviewModal
+          imageUrl={previewImage.url}
+          alt={previewImage.alt}
+          onClose={() => setPreviewImage(null)}
+        />
+      )}
     </div>
   );
 }

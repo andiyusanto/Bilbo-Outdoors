@@ -108,10 +108,12 @@ export default function ClientPortal({ onAdminToggle, themeId, setThemeId }: Cli
     return total;
   };
 
-  // Filter products by active category selection
-  const filteredProducts = products.filter(p => {
-    return activeCategory === 'ALL' || p.category === activeCategory;
-  });
+  // Filter products by active category selection, then surface discounted
+  // items first (highest discount first) - items with no discount all tie at
+  // 0 and keep their existing relative order via the stable sort.
+  const filteredProducts = products
+    .filter(p => activeCategory === 'ALL' || p.category === activeCategory)
+    .sort((a, b) => b.incrementalPriceAfter5Days - a.incrementalPriceAfter5Days);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-12 pb-24">

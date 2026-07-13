@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Info, Percent } from 'lucide-react';
 import { Product } from '../../types';
+import bilboIcon from '../../assets/bilbo-icon.png';
 
 interface DiscountCarouselProps {
   products: Product[];
@@ -100,7 +101,9 @@ export default function DiscountCarousel({ products, categoryOrder }: DiscountCa
                           className="w-6 h-6 object-cover border border-black shrink-0"
                         />
                       ) : (
-                        <div className="w-6 h-6 border border-dashed border-black/40 shrink-0" />
+                        <div className="w-6 h-6 border border-black/40 bg-white shrink-0 flex items-center justify-center">
+                          <img src={bilboIcon} alt="" className="w-4 h-4 opacity-40" />
+                        </div>
                       )}
                       <span className="flex-1 min-w-0 text-[11px] font-bold uppercase truncate">
                         {item.name}

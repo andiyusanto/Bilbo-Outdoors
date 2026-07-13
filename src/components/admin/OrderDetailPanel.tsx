@@ -98,7 +98,7 @@ export default function OrderDetailPanel({
                     <p className="text-xs font-black text-black uppercase">{item.productName}</p>
                     <p className="text-[10px] text-zinc-600 font-bold uppercase mt-1">
                       Rp {item.pricePerDay.toLocaleString('id-ID')}/hari
-                      {item.incrementalPrice > 0 ? ` (-Rp ${item.incrementalPrice.toLocaleString('id-ID')}/hari diskon setelah 5 hari)` : ''}
+                      {item.incrementalPrice > 0 ? ` (-Rp ${item.incrementalPrice.toLocaleString('id-ID')}/hari diskon setelah ${item.discountThresholdDays} hari)` : ''}
                     </p>
                   </div>
                   <span className="text-xs font-black bg-brand/10 border-2 border-black px-2.5 py-1 rounded-none font-mono text-black">

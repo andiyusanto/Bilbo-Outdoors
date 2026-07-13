@@ -118,7 +118,7 @@ app.get('/api/products', asyncHandler(async (req, res) => {
 // Admin CRUD: Create Product
 app.post('/api/products', authenticateAdmin, asyncHandler(async (req, res) => {
   await withDbLock(async () => {
-    const { name, category, price, incrementalPriceAfter5Days, stock, description, image } = req.body;
+    const { name, category, price, incrementalPriceAfter5Days, discountMinDays, stock, description, image } = req.body;
     if (!name || !category || price === undefined || stock === undefined) {
       return res.status(400).json({ error: 'Missing required product fields.' });
     }
@@ -130,6 +130,7 @@ app.post('/api/products', authenticateAdmin, asyncHandler(async (req, res) => {
       category,
       price: Number(price),
       incrementalPriceAfter5Days: Number(incrementalPriceAfter5Days || 0),
+      discountMinDays: discountMinDays !== undefined ? Number(discountMinDays) : 5,
       stock: Number(stock),
       description: description || '',
       image: image || ''
@@ -145,7 +146,7 @@ app.post('/api/products', authenticateAdmin, asyncHandler(async (req, res) => {
 app.put('/api/products/:id', authenticateAdmin, asyncHandler(async (req, res) => {
   await withDbLock(async () => {
     const { id } = req.params;
-    const { name, category, price, incrementalPriceAfter5Days, stock, description, image } = req.body;
+    const { name, category, price, incrementalPriceAfter5Days, discountMinDays, stock, description, image } = req.body;
 
     const db = await readDB();
     const productIndex = db.products.findIndex((p: Product) => p.id === id);
@@ -159,6 +160,7 @@ app.put('/api/products/:id', authenticateAdmin, asyncHandler(async (req, res) =>
       category: category !== undefined ? category : db.products[productIndex].category,
       price: price !== undefined ? Number(price) : db.products[productIndex].price,
       incrementalPriceAfter5Days: incrementalPriceAfter5Days !== undefined ? Number(incrementalPriceAfter5Days) : db.products[productIndex].incrementalPriceAfter5Days,
+      discountMinDays: discountMinDays !== undefined ? Number(discountMinDays) : db.products[productIndex].discountMinDays,
       stock: stock !== undefined ? Number(stock) : db.products[productIndex].stock,
       description: description !== undefined ? description : db.products[productIndex].description,
       image: image !== undefined ? image : db.products[productIndex].image
@@ -306,10 +308,10 @@ app.post('/api/orders', asyncHandler(async (req, res) => {
     const orderItems = items.map((it: any) => {
       const prod = db.products.find((p: Product) => p.id === it.productId)!;
 
-      // Formula: First 5 days cost standard price. Days after 5 get a discount (base_price - incrementalPriceAfter5Days).
+      // Formula: First `discountMinDays` days cost standard price. Days after that get a discount (base_price - incrementalPriceAfter5Days).
       let itemTotal = 0;
       for (let day = 1; day <= rentDuration; day++) {
-        if (day > 5) {
+        if (day > prod.discountMinDays) {
           itemTotal += (prod.price - prod.incrementalPriceAfter5Days);
         } else {
           itemTotal += prod.price;
@@ -323,7 +325,8 @@ app.post('/api/orders', asyncHandler(async (req, res) => {
         productName: prod.name,
         quantity: Number(it.quantity),
         pricePerDay: prod.price,
-        incrementalPrice: prod.incrementalPriceAfter5Days
+        incrementalPrice: prod.incrementalPriceAfter5Days,
+        discountThresholdDays: prod.discountMinDays
       };
     });
 
@@ -407,19 +410,25 @@ app.post('/api/orders/:id/calculate-late', authenticateAdmin, asyncHandler(async
       });
     }
 
-    // Calculate late fee per item
+    // Calculate late fee per item.
+    // INVARIANT: this loop must only read order.items' snapshotted fields
+    // (pricePerDay / incrementalPrice / discountThresholdDays), never db.products.
+    // A later admin edit to the live product must NOT retroactively change an
+    // already-placed order's late fee. If you ever need live product data here
+    // for something else, do not let it touch these three fields.
     let lateFeeTotal = 0;
     const breakdown = order.items.map(item => {
       // For each late day:
       // If the original rentDuration was D, late day i is D + dayIndex.
-      // Tents: discounted rate (-10k) if dayIndex + D > 5.
+      // Discounted rate applies once dayIndex + D > item's own snapshotted threshold.
       let itemLateCost = 0;
       const basePrice = item.pricePerDay;
       const incremental = item.incrementalPrice;
+      const discountThresholdDays = item.discountThresholdDays; // snapshot, not live
 
       for (let dayIndex = 1; dayIndex <= lateDays; dayIndex++) {
         const daySeqNum = order.rentDuration + dayIndex;
-        const dailyPrice = daySeqNum > 5 ? (basePrice - incremental) : basePrice;
+        const dailyPrice = daySeqNum > discountThresholdDays ? (basePrice - incremental) : basePrice;
         itemLateCost += dailyPrice;
       }
 
@@ -429,7 +438,7 @@ app.post('/api/orders/:id/calculate-late', authenticateAdmin, asyncHandler(async
       return {
         productName: item.productName,
         quantity: item.quantity,
-        dailyRateBreakdown: item.incrementalPrice > 0 ? `Base: ${basePrice} (-${incremental} after 5d)` : `Rate: ${basePrice}`,
+        dailyRateBreakdown: item.incrementalPrice > 0 ? `Base: ${basePrice} (-${incremental} after ${discountThresholdDays}d)` : `Rate: ${basePrice}`,
         itemTotalLateCost
       };
     });

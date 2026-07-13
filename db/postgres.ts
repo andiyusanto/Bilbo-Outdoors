@@ -42,11 +42,11 @@ export async function seedPostgresIfEmpty(): Promise<void> {
     await client.query('BEGIN');
     const params: any[] = [];
     defaultProducts.forEach((p) => {
-      params.push(p.id, p.name, p.category, p.price, p.incrementalPriceAfter5Days || 0, p.stock, p.description || '', p.image || '');
+      params.push(p.id, p.name, p.category, p.price, p.incrementalPriceAfter5Days || 0, p.discountMinDays ?? 5, p.stock, p.description || '', p.image || '');
     });
     await client.query(
-      `INSERT INTO products (id, name, category, price, incremental_price_after_5_days, stock, description, image)
-       VALUES ${buildValuesClause(defaultProducts.length, 8)}
+      `INSERT INTO products (id, name, category, price, incremental_price_after_5_days, discount_min_days, stock, description, image)
+       VALUES ${buildValuesClause(defaultProducts.length, 9)}
        ON CONFLICT (id) DO NOTHING`,
       params
     );
@@ -71,6 +71,9 @@ function rowToProduct(row: any): Product {
     category: row.category,
     price: Number(row.price),
     incrementalPriceAfter5Days: Number(row.incremental_price_after_5_days),
+    // ?? not || - 0 is a legitimate threshold value ("discounted from day 1"),
+    // not just a fallback, unlike incrementalPriceAfter5Days where 0 safely means both.
+    discountMinDays: Number(row.discount_min_days ?? 5),
     stock: Number(row.stock),
     description: row.description ?? '',
     image: row.image ?? '',
@@ -84,6 +87,7 @@ function rowToOrderItem(row: any): OrderItem {
     quantity: Number(row.quantity),
     pricePerDay: Number(row.price_per_day),
     incrementalPrice: Number(row.incremental_price),
+    discountThresholdDays: Number(row.discount_threshold_days ?? 5),
   };
 }
 
@@ -150,16 +154,17 @@ export async function writeDBPostgres(data: { products: Product[]; orders: Order
     if (data.products.length > 0) {
       const params: any[] = [];
       data.products.forEach((p) => {
-        params.push(p.id, p.name, p.category, Number(p.price), Number(p.incrementalPriceAfter5Days || 0), Number(p.stock), p.description || '', p.image || '');
+        params.push(p.id, p.name, p.category, Number(p.price), Number(p.incrementalPriceAfter5Days || 0), Number(p.discountMinDays ?? 5), Number(p.stock), p.description || '', p.image || '');
       });
       await client.query(
-        `INSERT INTO products (id, name, category, price, incremental_price_after_5_days, stock, description, image)
-         VALUES ${buildValuesClause(data.products.length, 8)}
+        `INSERT INTO products (id, name, category, price, incremental_price_after_5_days, discount_min_days, stock, description, image)
+         VALUES ${buildValuesClause(data.products.length, 9)}
          ON CONFLICT (id) DO UPDATE SET
            name = EXCLUDED.name,
            category = EXCLUDED.category,
            price = EXCLUDED.price,
            incremental_price_after_5_days = EXCLUDED.incremental_price_after_5_days,
+           discount_min_days = EXCLUDED.discount_min_days,
            stock = EXCLUDED.stock,
            description = EXCLUDED.description,
            image = EXCLUDED.image`,
@@ -220,11 +225,11 @@ export async function writeDBPostgres(data: { products: Product[]; orders: Order
     if (flatItems.length > 0) {
       const params: any[] = [];
       flatItems.forEach(({ orderId, item }) => {
-        params.push(orderId, item.productId, item.productName, Number(item.quantity), Number(item.pricePerDay), Number(item.incrementalPrice || 0));
+        params.push(orderId, item.productId, item.productName, Number(item.quantity), Number(item.pricePerDay), Number(item.incrementalPrice || 0), Number(item.discountThresholdDays ?? 5));
       });
       await client.query(
-        `INSERT INTO order_items (order_id, product_id, product_name, quantity, price_per_day, incremental_price)
-         VALUES ${buildValuesClause(flatItems.length, 6)}`,
+        `INSERT INTO order_items (order_id, product_id, product_name, quantity, price_per_day, incremental_price, discount_threshold_days)
+         VALUES ${buildValuesClause(flatItems.length, 7)}`,
         params
       );
     }

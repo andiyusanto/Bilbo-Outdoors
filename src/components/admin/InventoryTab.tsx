@@ -87,7 +87,7 @@ export default function InventoryTab({ products, productActions }: InventoryTabP
 
                 {prod.incrementalPriceAfter5Days > 0 ? (
                   <div className="flex justify-between text-xs font-bold text-emerald-600 uppercase">
-                    <span>Sewa {'>'}5 hari (diskon):</span>
+                    <span>Sewa {'>'}{prod.discountMinDays} hari (diskon):</span>
                     <strong className="font-mono font-black">Rp {(prod.price - prod.incrementalPriceAfter5Days).toLocaleString('id-ID')}/hari</strong>
                   </div>
                 ) : null}

@@ -6,6 +6,7 @@ interface ProductFormData {
   category: string;
   price: number;
   incrementalPriceAfter5Days: number;
+  discountMinDays: number;
   stock: number;
   description: string;
   image: string;
@@ -84,7 +85,7 @@ export default function ProductFormModal({
               />
             </div>
             <div>
-              <label className="block text-xs font-black text-black uppercase">Diskon Setelah 5 Hari</label>
+              <label className="block text-xs font-black text-black uppercase">Jumlah Diskon (Rp/Hari)</label>
               <input
                 type="number"
                 required
@@ -98,6 +99,17 @@ export default function ProductFormModal({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
+              <label className="block text-xs font-black text-black uppercase">Diskon Berlaku Setelah (Hari)</label>
+              <input
+                type="number"
+                required
+                min="0"
+                value={productFormData.discountMinDays}
+                onChange={(e) => setProductFormData({...productFormData, discountMinDays: Number(e.target.value)})}
+                className="mt-1 block w-full rounded-none border-2 border-black px-3 py-2.5 text-xs font-black font-mono focus:bg-brand/10 focus:outline-none"
+              />
+            </div>
+            <div>
               <label className="block text-xs font-black text-black uppercase">Stok Awal</label>
               <input
                 type="number"
@@ -108,16 +120,17 @@ export default function ProductFormModal({
                 className="mt-1 block w-full rounded-none border-2 border-black px-3 py-2.5 text-xs font-black font-mono focus:bg-brand/10 focus:outline-none"
               />
             </div>
-            <div>
-              <label className="block text-xs font-black text-black uppercase">Gambar (Opsional URL)</label>
-              <input
-                type="text"
-                value={productFormData.image}
-                onChange={(e) => setProductFormData({...productFormData, image: e.target.value})}
-                placeholder="https://..."
-                className="mt-1 block w-full rounded-none border-2 border-black px-3 py-2.5 text-xs font-black focus:bg-brand/10 focus:outline-none"
-              />
-            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-black text-black uppercase">Gambar (Opsional URL)</label>
+            <input
+              type="text"
+              value={productFormData.image}
+              onChange={(e) => setProductFormData({...productFormData, image: e.target.value})}
+              placeholder="https://..."
+              className="mt-1 block w-full rounded-none border-2 border-black px-3 py-2.5 text-xs font-black focus:bg-brand/10 focus:outline-none"
+            />
           </div>
 
           <div>

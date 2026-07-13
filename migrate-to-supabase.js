@@ -46,13 +46,14 @@ async function runMigration() {
     console.log('\n📥 Migrating Products...');
     for (const prod of products) {
       await client.query(
-        `INSERT INTO products (id, name, category, price, incremental_price_after_5_days, stock, description, image)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `INSERT INTO products (id, name, category, price, incremental_price_after_5_days, discount_min_days, stock, description, image)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          ON CONFLICT (id) DO UPDATE SET
            name = EXCLUDED.name,
            category = EXCLUDED.category,
            price = EXCLUDED.price,
            incremental_price_after_5_days = EXCLUDED.incremental_price_after_5_days,
+           discount_min_days = EXCLUDED.discount_min_days,
            stock = EXCLUDED.stock,
            description = EXCLUDED.description,
            image = EXCLUDED.image`,
@@ -62,6 +63,7 @@ async function runMigration() {
           prod.category,
           Number(prod.price),
           Number(prod.incrementalPriceAfter5Days || 0),
+          Number(prod.discountMinDays ?? 5),
           Number(prod.stock),
           prod.description || '',
           prod.image || ''
@@ -99,15 +101,16 @@ async function runMigration() {
         // 3. Insert Order Items
         for (const item of order.items) {
           await client.query(
-            `INSERT INTO order_items (order_id, product_id, product_name, quantity, price_per_day, incremental_price)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
+            `INSERT INTO order_items (order_id, product_id, product_name, quantity, price_per_day, incremental_price, discount_threshold_days)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
             [
               order.id,
               item.productId,
               item.productName,
               Number(item.quantity),
               Number(item.pricePerDay),
-              Number(item.incrementalPrice || 0)
+              Number(item.incrementalPrice || 0),
+              Number(item.discountThresholdDays ?? 5)
             ]
           );
         }

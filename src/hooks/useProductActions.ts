@@ -13,6 +13,7 @@ const DEFAULT_PRODUCT_FORM = {
   category: 'TENT & SHELTER',
   price: 0,
   incrementalPriceAfter5Days: 0,
+  discountMinDays: 5,
   stock: 5,
   description: '',
   image: '',
@@ -90,6 +91,7 @@ export function useProductActions({ token, fetchAdminData, setProducts }: UsePro
       category: product.category,
       price: product.price,
       incrementalPriceAfter5Days: product.incrementalPriceAfter5Days,
+      discountMinDays: product.discountMinDays,
       stock: product.stock,
       description: product.description || '',
       image: product.image || ''

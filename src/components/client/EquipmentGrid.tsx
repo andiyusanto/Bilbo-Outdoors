@@ -91,7 +91,7 @@ export default function EquipmentGrid({
                 </div>
                 {prod.incrementalPriceAfter5Days > 0 && (
                   <p className="text-[9px] text-emerald-600 font-black mt-1 uppercase">
-                    {`>5 HARI: -${(prod.incrementalPriceAfter5Days/1000)}K/HARI`}
+                    {`>${prod.discountMinDays} HARI: -${(prod.incrementalPriceAfter5Days/1000)}K/HARI`}
                   </p>
                 )}
               </div>

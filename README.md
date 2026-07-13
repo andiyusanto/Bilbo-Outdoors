@@ -110,6 +110,7 @@ CREATE TABLE IF NOT EXISTS products (
   category VARCHAR(255) NOT NULL,
   price NUMERIC NOT NULL,
   incremental_price_after_5_days NUMERIC NOT NULL DEFAULT 0,
+  discount_min_days INT NOT NULL DEFAULT 5,
   stock INT NOT NULL,
   description TEXT,
   image TEXT
@@ -139,9 +140,16 @@ CREATE TABLE IF NOT EXISTS order_items (
   product_name VARCHAR(255) NOT NULL,
   quantity INT NOT NULL,
   price_per_day NUMERIC NOT NULL,
-  incremental_price NUMERIC NOT NULL DEFAULT 0
+  incremental_price NUMERIC NOT NULL DEFAULT 0,
+  discount_threshold_days INT NOT NULL DEFAULT 5
 );
 ```
+
+> **Sudah pernah menjalankan Step A sebelum kolom `discount_min_days`/`discount_threshold_days` ada?** Cukup jalankan ini sekali di SQL Editor yang sama (aman dijalankan berulang, dan nilai default `5` otomatis mengisi baris yang sudah ada, sesuai dengan aturan harga yang memang berlaku sebelumnya):
+> ```sql
+> ALTER TABLE products    ADD COLUMN IF NOT EXISTS discount_min_days       INT NOT NULL DEFAULT 5;
+> ALTER TABLE order_items ADD COLUMN IF NOT EXISTS discount_threshold_days INT NOT NULL DEFAULT 5;
+> ```
 
 ### Step B: Dapatkan Connection String Supabase Anda
 1. Di dashboard Supabase Anda, buka project Anda, lalu klik tombol **Connect** (di bagian atas halaman project).

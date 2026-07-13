@@ -4,6 +4,7 @@ export interface Product {
   category: 'TENT & SHELTER' | 'SLEEPING SYSTEM' | 'CARRIER & BACKPACK' | 'COOKING GEAR' | 'LIGHTING & POWER' | 'HIKING ESSENTIALS' | 'CAMP SUPPORT' | string;
   price: number; // Daily rate in IDR, e.g., 35000
   incrementalPriceAfter5Days: number; // e.g. 10000 for tents, 0 for others
+  discountMinDays: number; // day threshold after which the discount applies, e.g. 5
   stock: number; // Max total inventory
   description?: string;
   image?: string;
@@ -15,6 +16,7 @@ export interface OrderItem {
   quantity: number;
   pricePerDay: number;
   incrementalPrice: number;
+  discountThresholdDays: number; // snapshotted from Product.discountMinDays at booking time - never re-read live
 }
 
 export type OrderStatus = 'Pending' | 'Approved/Paid' | 'Item Picked Up' | 'Item Returned/Completed';

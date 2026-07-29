@@ -121,10 +121,11 @@ function rowToOrder(row: any, items: OrderItem[]): Order {
     rentDuration: Number(row.rent_duration),
     items,
     totalPrice: Number(row.total_price),
-    idCardBase64: row.id_card_base64 ?? '',
+    personalPhotoBase64: row.id_card_base64 ?? '',
     status: row.status,
     createdAt: row.created_at,
     returnedAt: row.returned_at ?? undefined,
+    pickupIdType: row.pickup_id_type ?? undefined,
     lateDays: Number(row.late_days || 0),
     lateFee: Number(row.late_fee || 0),
   };
@@ -214,18 +215,19 @@ export async function writeDBPostgres(data: { products: Product[]; orders: Order
           o.endDate,
           Number(o.rentDuration),
           Number(o.totalPrice),
-          o.idCardBase64 || '',
+          o.personalPhotoBase64 || '',
           o.status,
           o.createdAt,
           Number(o.lateDays || 0),
           Number(o.lateFee || 0),
           o.confirmationToken ?? null,
-          o.returnedAt ?? null
+          o.returnedAt ?? null,
+          o.pickupIdType ?? null
         );
       });
       await client.query(
-        `INSERT INTO orders (id, customer_name, customer_whatsapp, start_date, end_date, rent_duration, total_price, id_card_base64, status, created_at, late_days, late_fee, confirmation_token, returned_at)
-         VALUES ${buildValuesClause(data.orders.length, 14)}
+        `INSERT INTO orders (id, customer_name, customer_whatsapp, start_date, end_date, rent_duration, total_price, id_card_base64, status, created_at, late_days, late_fee, confirmation_token, returned_at, pickup_id_type)
+         VALUES ${buildValuesClause(data.orders.length, 15)}
          ON CONFLICT (id) DO UPDATE SET
            customer_name = EXCLUDED.customer_name,
            customer_whatsapp = EXCLUDED.customer_whatsapp,
@@ -239,7 +241,8 @@ export async function writeDBPostgres(data: { products: Product[]; orders: Order
            late_days = EXCLUDED.late_days,
            late_fee = EXCLUDED.late_fee,
            confirmation_token = EXCLUDED.confirmation_token,
-           returned_at = EXCLUDED.returned_at`,
+           returned_at = EXCLUDED.returned_at,
+           pickup_id_type = EXCLUDED.pickup_id_type`,
         params
       );
     }

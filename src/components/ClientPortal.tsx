@@ -4,7 +4,7 @@ import { Product } from '../types';
 import { calculateRentalCost, calculateSavingsFor5Days } from '../pricing';
 import { useProducts } from '../hooks/useProducts';
 import { useAvailability } from '../hooks/useAvailability';
-import { useIdCardUpload } from '../hooks/useIdCardUpload';
+import { usePersonalPhotoUpload } from '../hooks/usePersonalPhotoUpload';
 import { useOrderSubmission } from '../hooks/useOrderSubmission';
 import DateRangePicker from './client/DateRangePicker';
 import CategoryFilterTabs from './client/CategoryFilterTabs';
@@ -32,7 +32,7 @@ export default function ClientPortal({ onAdminToggle, themeId, setThemeId }: Cli
   // Checkout Form State
   const [customerName, setCustomerName] = useState<string>('');
   const [customerWhatsApp, setCustomerWhatsApp] = useState<string>('');
-  const { idCardFile, idCardBase64, handleFileChange } = useIdCardUpload();
+  const { personalPhotoFile, personalPhotoBase64, handleFileChange } = usePersonalPhotoUpload();
 
   const {
     checkoutError,
@@ -46,7 +46,7 @@ export default function ClientPortal({ onAdminToggle, themeId, setThemeId }: Cli
     startDate,
     endDate,
     rentDuration,
-    idCardBase64,
+    personalPhotoBase64,
   });
 
   // Category filter state
@@ -210,8 +210,8 @@ export default function ClientPortal({ onAdminToggle, themeId, setThemeId }: Cli
             setCustomerName={setCustomerName}
             customerWhatsApp={customerWhatsApp}
             setCustomerWhatsApp={setCustomerWhatsApp}
-            idCardFile={idCardFile}
-            idCardBase64={idCardBase64}
+            personalPhotoFile={personalPhotoFile}
+            personalPhotoBase64={personalPhotoBase64}
             onFileChange={handleFileChange}
             checkoutError={checkoutError}
             submittingOrder={submittingOrder}

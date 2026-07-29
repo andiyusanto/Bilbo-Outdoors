@@ -47,17 +47,18 @@ export interface Order {
   rentDuration: number; // calculated days
   items: OrderItem[];
   totalPrice: number;
-  idCardBase64: string; // rent guarantee KTP/SIM
+  personalPhotoBase64: string; // customer's own photo (face-to-torso or full body), rental guarantee/identity verification
   status: OrderStatus;
   createdAt: string;
   returnedAt?: string; // ISO datetime, set once when status transitions into 'Item Returned/Completed'
+  pickupIdType?: string; // type of physical ID card left as collateral in person (KTP/SIM/KTA/KIP/Kartu Pelajar/etc.), admin-entered at the Approved/Paid -> Item Picked Up transition
   lateDays?: number;
   lateFee?: number;
 }
 
 // Public-safe projection of Order for the customer-facing confirmation page -
 // Omit-based so any future Order field is included by default unless excluded here.
-export type PublicOrder = Omit<Order, 'idCardBase64'>;
+export type PublicOrder = Omit<Order, 'personalPhotoBase64'>;
 
 export interface DashboardStats {
   activeRentalsCount: number;

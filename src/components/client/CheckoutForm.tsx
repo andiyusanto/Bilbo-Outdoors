@@ -6,8 +6,8 @@ interface CheckoutFormProps {
   setCustomerName: (value: string) => void;
   customerWhatsApp: string;
   setCustomerWhatsApp: (value: string) => void;
-  idCardFile: File | null;
-  idCardBase64: string;
+  personalPhotoFile: File | null;
+  personalPhotoBase64: string;
   onFileChange: (e: ChangeEvent<HTMLInputElement>) => void;
   checkoutError: string;
   submittingOrder: boolean;
@@ -20,8 +20,8 @@ export default function CheckoutForm({
   setCustomerName,
   customerWhatsApp,
   setCustomerWhatsApp,
-  idCardFile,
-  idCardBase64,
+  personalPhotoFile,
+  personalPhotoBase64,
   onFileChange,
   checkoutError,
   submittingOrder,
@@ -67,37 +67,38 @@ export default function CheckoutForm({
           />
         </div>
 
-        {/* ID Card file uploader */}
+        {/* Personal photo uploader */}
         <div className="space-y-1.5">
           <label className="block text-[10px] font-black text-black uppercase tracking-wider">
-            Upload Foto Jaminan (KTP / SIM)
+            Upload Foto Diri (Setengah/Seluruh Badan)
           </label>
 
           <div className="border-2 border-dashed border-black rounded-none hover:bg-brand/5 transition-all bg-zinc-50 relative overflow-hidden">
             <input
               type="file"
               accept="image/*"
+              capture="user"
               onChange={onFileChange}
               className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
             />
 
-            {idCardBase64 ? (
+            {personalPhotoBase64 ? (
               <div className="p-3 text-center">
                 <img
-                  src={idCardBase64}
-                  alt="ID Card guarantee thumbnail"
+                  src={personalPhotoBase64}
+                  alt="Foto diri penyewa"
                   referrerPolicy="no-referrer"
                   className="mx-auto max-h-32 rounded-none object-contain border border-black"
                 />
                 <p className="text-[10px] text-zinc-500 font-mono mt-2 truncate max-w-xs mx-auto font-bold uppercase">
-                  {idCardFile?.name} (Siap Diunggah)
+                  {personalPhotoFile?.name} (Siap Diunggah)
                 </p>
               </div>
             ) : (
               <div className="py-6 text-center space-y-1">
                 <Upload className="w-6 h-6 mx-auto text-zinc-600 stroke-[2.5]" />
                 <p className="text-xs font-black text-black uppercase tracking-wider">Tarik gambar / Klik di sini</p>
-                <p className="text-[10px] text-zinc-500 font-bold uppercase leading-normal px-2">KTP atau SIM sebagai jaminan rental fisik</p>
+                <p className="text-[10px] text-zinc-500 font-bold uppercase leading-normal px-2">Foto wajah & badan (setengah/seluruh badan) sebagai jaminan rental</p>
               </div>
             )}
           </div>
@@ -106,7 +107,7 @@ export default function CheckoutForm({
         {/* Warning note */}
         <div className="flex p-3 bg-zinc-50 border-2 border-black rounded-none space-x-2.5 text-[10px] text-zinc-700 leading-normal uppercase font-bold">
           <ShieldAlert className="w-4 h-4 text-black shrink-0 stroke-[2.5]" />
-          <p>Kartu identitas Anda diunggah dengan aman ke server enkripsi Bilbo Outdoors dan hanya digunakan untuk kepentingan administrasi jaminan.</p>
+          <p>Foto Anda diunggah dengan aman ke server enkripsi Bilbo Outdoors dan hanya digunakan untuk kepentingan verifikasi identitas & jaminan sewa.</p>
         </div>
 
         <button

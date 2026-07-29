@@ -1,5 +1,8 @@
+import { useState } from 'react';
 import { Phone, UserCheck, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
 import { Order, OrderStatus } from '../../types';
+
+const PICKUP_ID_TYPE_OPTIONS = ['KTP', 'SIM', 'KTA', 'KIP', 'Kartu Pelajar', 'Lainnya'];
 
 interface LateCalculationResult {
   lateDays: number;
@@ -11,7 +14,7 @@ interface LateCalculationResult {
 interface OrderDetailPanelProps {
   order: Order;
   onClose: () => void;
-  onUpdateStatus: (orderId: string, newStatus: OrderStatus) => void;
+  onUpdateStatus: (orderId: string, newStatus: OrderStatus, pickupIdType?: string) => void;
   showLateCalc: boolean;
   onOpenLateCalc: () => void;
   customReturnDate: string;
@@ -33,6 +36,20 @@ export default function OrderDetailPanel({
   lateCalculationResult,
   onApplyLateFeesAndComplete,
 }: OrderDetailPanelProps) {
+  const [showPickupConfirm, setShowPickupConfirm] = useState(false);
+  const [pickupIdTypeSelect, setPickupIdTypeSelect] = useState('');
+  const [pickupIdTypeCustom, setPickupIdTypeCustom] = useState('');
+
+  const resolvedPickupIdType = pickupIdTypeSelect === 'Lainnya' ? pickupIdTypeCustom.trim() : pickupIdTypeSelect;
+  const canConfirmPickup = pickupIdTypeSelect !== '' && (pickupIdTypeSelect !== 'Lainnya' || pickupIdTypeCustom.trim() !== '');
+
+  const handleConfirmPickup = () => {
+    onUpdateStatus(order.id, 'Item Picked Up', resolvedPickupIdType);
+    setShowPickupConfirm(false);
+    setPickupIdTypeSelect('');
+    setPickupIdTypeCustom('');
+  };
+
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex justify-end transition-opacity">
       <div className="bg-white w-full max-w-lg h-full flex flex-col shadow-2xl relative overflow-hidden">
@@ -138,25 +155,30 @@ export default function OrderDetailPanel({
             </div>
           </div>
 
-          {/* Photo ID Card Guarantee Render */}
+          {/* Personal Photo Render */}
           <div>
             <h4 className="text-[10px] font-black uppercase text-zinc-400 tracking-wider mb-2 flex items-center">
               <UserCheck className="w-4 h-4 mr-1.5 text-black stroke-[2.5]" />
-              Kartu Identitas Jaminan (KTP / SIM)
+              Foto Diri Penyewa (Verifikasi Jaminan)
             </h4>
-            {order.idCardBase64 ? (
+            {order.personalPhotoBase64 ? (
               <div className="border-2 border-black rounded-none overflow-hidden bg-zinc-50 p-2 shadow-[2px_2px_0px_rgba(0,0,0,1)]">
                 <img
-                  src={order.idCardBase64}
-                  alt="Jaminan Identitas KTP/SIM"
+                  src={order.personalPhotoBase64}
+                  alt="Foto diri penyewa"
                   className="w-full max-h-56 object-contain rounded-none"
                 />
-                <p className="text-[9px] text-zinc-500 font-bold uppercase text-center mt-2">Diupload oleh pelanggan sebagai jaminan sewa.</p>
+                <p className="text-[9px] text-zinc-500 font-bold uppercase text-center mt-2">Diupload oleh pelanggan saat pemesanan.</p>
               </div>
             ) : (
               <div className="border-2 border-dashed border-black rounded-none py-6 text-center text-xs text-zinc-400 font-bold uppercase">
-                Tidak ada KTP diupload (Jaminan fisik langsung di toko).
+                Tidak ada foto diunggah (verifikasi langsung di toko).
               </div>
+            )}
+            {order.pickupIdType && (
+              <p className="text-[10px] font-black text-black uppercase mt-2">
+                Jaminan Diberikan Saat Pengambilan: <span className="text-emerald-600">{order.pickupIdType}</span>
+              </p>
             )}
           </div>
 
@@ -173,13 +195,55 @@ export default function OrderDetailPanel({
               </button>
             )}
 
-            {order.status === 'Approved/Paid' && (
+            {order.status === 'Approved/Paid' && !showPickupConfirm && (
               <button
-                onClick={() => onUpdateStatus(order.id, 'Item Picked Up')}
+                onClick={() => setShowPickupConfirm(true)}
                 className="w-full py-3 bg-black hover:bg-brand hover:text-black text-brand font-black text-xs border-2 border-black shadow-[3px_3px_0px_rgba(0,0,0,1)] rounded-none transition-all uppercase tracking-widest cursor-pointer"
               >
                 Barang Diambil (Diserahkan ke Penyewa)
               </button>
+            )}
+
+            {order.status === 'Approved/Paid' && showPickupConfirm && (
+              <div className="border-2 border-black rounded-none p-4 bg-zinc-50 space-y-3 shadow-[2px_2px_0px_rgba(0,0,0,1)]">
+                <p className="text-xs font-black text-black uppercase tracking-wide">Jaminan yang Diberikan</p>
+                <select
+                  value={pickupIdTypeSelect}
+                  onChange={(e) => setPickupIdTypeSelect(e.target.value)}
+                  className="w-full bg-white border-2 border-black px-3 py-2.5 text-xs font-black uppercase rounded-none focus:outline-none cursor-pointer"
+                >
+                  <option value="">Pilih jenis kartu identitas...</option>
+                  {PICKUP_ID_TYPE_OPTIONS.map((opt) => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+
+                {pickupIdTypeSelect === 'Lainnya' && (
+                  <input
+                    type="text"
+                    value={pickupIdTypeCustom}
+                    onChange={(e) => setPickupIdTypeCustom(e.target.value)}
+                    placeholder="Sebutkan jenis kartu identitas"
+                    className="w-full bg-white border-2 border-black px-3 py-2.5 text-xs font-bold uppercase rounded-none focus:outline-none"
+                  />
+                )}
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setShowPickupConfirm(false); setPickupIdTypeSelect(''); setPickupIdTypeCustom(''); }}
+                    className="flex-1 py-2.5 bg-white border-2 border-black text-black hover:bg-zinc-100 font-black text-xs rounded-none transition-all uppercase tracking-wider cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    onClick={handleConfirmPickup}
+                    disabled={!canConfirmPickup}
+                    className="flex-1 py-2.5 bg-black hover:bg-brand hover:text-black text-brand font-black text-xs border-2 border-black rounded-none shadow-[2px_2px_0px_rgba(0,0,0,1)] transition-all uppercase tracking-wider cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Konfirmasi & Serahkan Barang
+                  </button>
+                </div>
+              </div>
             )}
 
             {(order.status === 'Item Picked Up' || order.status === 'Approved/Paid') && (

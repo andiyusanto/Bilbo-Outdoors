@@ -10,7 +10,7 @@ interface UseOrderSubmissionParams {
   startDate: string;
   endDate: string;
   rentDuration: number;
-  idCardBase64: string;
+  personalPhotoBase64: string;
 }
 
 export function useOrderSubmission({
@@ -21,7 +21,7 @@ export function useOrderSubmission({
   startDate,
   endDate,
   rentDuration,
-  idCardBase64,
+  personalPhotoBase64,
 }: UseOrderSubmissionParams) {
   const navigate = useNavigate();
   const [checkoutError, setCheckoutError] = useState<string>('');
@@ -59,7 +59,7 @@ export function useOrderSubmission({
         startDate,
         endDate,
         items: orderItems,
-        idCardBase64
+        personalPhotoBase64
       };
 
       const res = await fetch('/api/orders', {

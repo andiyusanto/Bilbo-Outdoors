@@ -23,12 +23,12 @@ export function useOrderActions({ token, setOrders, fetchAdminData }: UseOrderAc
     actualReturnDate: string;
   } | null>(null);
 
-  const handleUpdateOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
+  const handleUpdateOrderStatus = async (orderId: string, newStatus: OrderStatus, pickupIdType?: string) => {
     try {
       const res = await fetch(`/api/orders/${orderId}/status`, {
         method: 'PUT',
         headers: jsonAuthHeaders(token),
-        body: JSON.stringify({ status: newStatus })
+        body: JSON.stringify({ status: newStatus, pickupIdType })
       });
       const updatedOrder = await parseJsonOrThrow(res);
 

@@ -1,6 +1,6 @@
 # 🏕️ Bilbo Outdoors - Sistem Persewaan Alat Camping
 
-Aplikasi full-stack (React + Express + Vite) untuk manajemen persewaan peralatan luar ruang (camping) Bilbo Outdoors. Proyek ini mendukung manajemen produk, sistem ketersediaan barang real-time (berdasarkan irisan tanggal sewa), pembuatan pesanan pelanggan, perhitungan otomatis denda keterlambatan (dengan tarif harian flat & progresif), serta dashboard analitik bagi staf admin.
+Aplikasi full-stack (React + Express + Vite) untuk manajemen persewaan peralatan luar ruang (camping) Bilbo Outdoors. Proyek ini mendukung manajemen produk dengan skema harga sewa per-hari (tabel kumulatif untuk hari ke-1 s/d ke-5, ditambah tarif flat per hari untuk hari ke-6 dan seterusnya), sistem ketersediaan barang real-time (berdasarkan irisan tanggal sewa dan waktu kesiapan alat setelah dikembalikan), pembuatan pesanan pelanggan dengan verifikasi foto diri penyewa, pencatatan jenis kartu identitas yang diserahkan sebagai jaminan saat barang diambil, perhitungan otomatis denda keterlambatan, serta dashboard analitik bagi staf admin.
 
 ---
 
@@ -132,13 +132,14 @@ CREATE TABLE IF NOT EXISTS orders (
   end_date VARCHAR(255) NOT NULL,
   rent_duration INT NOT NULL,
   total_price NUMERIC NOT NULL,
-  id_card_base64 TEXT,
+  id_card_base64 TEXT, -- stores the customer's personal photo (face/upper-body or full body), not an ID card scan - column name kept for backwards compatibility, see the pickup_id_type note below
   status VARCHAR(255) NOT NULL,
   created_at VARCHAR(255) NOT NULL,
   late_days INT DEFAULT 0,
   late_fee NUMERIC DEFAULT 0,
   confirmation_token VARCHAR(255),
-  returned_at VARCHAR(255)
+  returned_at VARCHAR(255),
+  pickup_id_type VARCHAR(255)
 );
 
 -- 3. Membuat Tabel Order Items (Relasi Detail Item dari Order)
@@ -195,6 +196,11 @@ CREATE TABLE IF NOT EXISTS order_items (
 > ALTER TABLE orders ADD COLUMN IF NOT EXISTS returned_at VARCHAR(255);
 > ```
 > Setelah menjalankan SQL di atas, jalankan `DATABASE_URL="..." npx tsx migrate-pricing-v2.ts` satu kali untuk mengisi angka harga baru ke katalog produk yang sudah ada (dan menambahkan produk-produk baru), **sebelum** men-deploy kode aplikasi versi baru.
+
+> **Sudah pernah menjalankan Step A sebelum kolom `pickup_id_type` ada?** Jalankan ini sekali di SQL Editor yang sama (aman dijalankan berulang). Kolom `id_card_base64` sekarang menyimpan foto diri pelanggan (bukan scan KTP/SIM), sedangkan `pickup_id_type` mencatat jenis kartu identitas fisik (KTP/SIM/KTA/KIP/Kartu Pelajar/dll.) yang diserahkan langsung di toko sebagai jaminan saat status pesanan berubah ke "Item Picked Up". Nullable, tanpa default - order lama tetap `NULL` selamanya, tidak ada regresi.
+> ```sql
+> ALTER TABLE orders ADD COLUMN IF NOT EXISTS pickup_id_type VARCHAR(255);
+> ```
 
 ### Step B: Dapatkan Connection String Supabase Anda
 1. Di dashboard Supabase Anda, buka project Anda, lalu klik tombol **Connect** (di bagian atas halaman project).

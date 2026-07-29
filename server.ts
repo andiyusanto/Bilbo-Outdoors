@@ -315,7 +315,7 @@ app.post('/api/check-availability', asyncHandler(async (req, res) => {
 // Submit Order (Clients)
 app.post('/api/orders', asyncHandler(async (req, res) => {
   await withDbLock(async () => {
-    const { customerName, customerWhatsApp, startDate, endDate, items, idCardBase64 } = req.body;
+    const { customerName, customerWhatsApp, startDate, endDate, items, personalPhotoBase64 } = req.body;
 
     if (!customerName || !customerWhatsApp || !startDate || !endDate || !items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Missing required order fields.' });
@@ -374,7 +374,7 @@ app.post('/api/orders', asyncHandler(async (req, res) => {
       rentDuration,
       items: orderItems,
       totalPrice,
-      idCardBase64: idCardBase64 || '',
+      personalPhotoBase64: personalPhotoBase64 || '',
       status: 'Pending',
       createdAt: new Date().toISOString()
     };
@@ -396,7 +396,7 @@ app.get('/api/orders/confirm/:token', asyncHandler(async (req, res) => {
     return res.status(404).json({ error: 'Pesanan tidak ditemukan.' });
   }
 
-  const { idCardBase64, ...safeOrder } = order;
+  const { personalPhotoBase64, ...safeOrder } = order;
   res.json(safeOrder);
 }));
 
@@ -410,7 +410,7 @@ app.get('/api/orders', authenticateAdmin, asyncHandler(async (req, res) => {
 app.put('/api/orders/:id/status', authenticateAdmin, asyncHandler(async (req, res) => {
   await withDbLock(async () => {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, pickupIdType } = req.body;
 
     const validStatuses: OrderStatus[] = ['Pending', 'Approved/Paid', 'Item Picked Up', 'Item Returned/Completed'];
     if (!validStatuses.includes(status)) {
@@ -425,6 +425,11 @@ app.put('/api/orders/:id/status', authenticateAdmin, asyncHandler(async (req, re
 
     const previousStatus = db.orders[orderIndex].status;
     db.orders[orderIndex].status = status;
+    // Record which physical ID card was left as collateral in person, on the
+    // transition into Item Picked Up.
+    if (status === 'Item Picked Up' && pickupIdType) {
+      db.orders[orderIndex].pickupIdType = pickupIdType;
+    }
     // Stamp the actual return time once, on the transition into Completed - this
     // is what the readiness-time stock calculation anchors on (calculateAllocatedStock).
     if (status === 'Item Returned/Completed' && previousStatus !== 'Item Returned/Completed') {

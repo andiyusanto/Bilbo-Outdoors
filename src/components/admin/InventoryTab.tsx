@@ -30,7 +30,7 @@ export default function InventoryTab({ products, productActions }: InventoryTabP
 
   const filteredProducts = products.filter(p =>
     p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
-    p.price.toString().includes(productSearch)
+    Object.values(p.rates).some(v => v.toString().includes(productSearch))
   );
 
   return (
@@ -126,17 +126,17 @@ export default function InventoryTab({ products, productActions }: InventoryTabP
 
                 {/* Financial info & stock controls */}
                 <div className="border-t-2 border-black pt-3.5 space-y-3">
-                  <div className="flex justify-between text-xs font-bold text-zinc-500 uppercase">
-                    <span>Sewa Pokok:</span>
-                    <strong className="text-black font-mono font-black">Rp {prod.price.toLocaleString('id-ID')}/hari</strong>
+                  <div className="grid grid-cols-3 gap-x-2 gap-y-1 text-[10px] font-bold text-zinc-500 uppercase">
+                    <div><span>Harian:</span> <strong className="block text-black font-mono">{prod.rates.day1Price.toLocaleString('id-ID')}</strong></div>
+                    <div><span>2 Hari:</span> <strong className="block text-black font-mono">{prod.rates.day2Price.toLocaleString('id-ID')}</strong></div>
+                    <div><span>3 Hari:</span> <strong className="block text-black font-mono">{prod.rates.day3Price.toLocaleString('id-ID')}</strong></div>
+                    <div><span>4 Hari:</span> <strong className="block text-black font-mono">{prod.rates.day4Price.toLocaleString('id-ID')}</strong></div>
+                    <div><span>5 Hari:</span> <strong className="block text-black font-mono">{prod.rates.day5Price.toLocaleString('id-ID')}</strong></div>
+                    <div><span>5H+/hari:</span> <strong className="block text-black font-mono">+{prod.rates.extraDayRate.toLocaleString('id-ID')}</strong></div>
                   </div>
-
-                  {prod.incrementalPriceAfter5Days > 0 ? (
-                    <div className="flex justify-between text-xs font-bold text-emerald-600 uppercase">
-                      <span>Sewa {'>'}{prod.discountMinDays} hari (diskon):</span>
-                      <strong className="font-mono font-black">Rp {(prod.price - prod.incrementalPriceAfter5Days).toLocaleString('id-ID')}/hari</strong>
-                    </div>
-                  ) : null}
+                  {prod.readinessHours > 0 && (
+                    <p className="text-[10px] font-bold text-zinc-500 uppercase">Waktu kesiapan setelah kembali: <strong className="text-black">{prod.readinessHours} jam</strong></p>
+                  )}
 
                   {/* Physical Stock Controls */}
                   <div className="flex justify-between items-center bg-zinc-50 px-3 py-2 border-2 border-black rounded-none shadow-[2px_2px_0px_rgba(0,0,0,1)]">

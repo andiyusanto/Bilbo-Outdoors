@@ -1,10 +1,22 @@
+// Cumulative rental price table: day1Price..day5Price are TOTAL cost to rent for
+// that many days (not per-day rates, and not an arithmetic progression - each is
+// independently set per the owner's price list). extraDayRate is a flat amount
+// ADDED per day beyond day 5 (day6 total = day5Price + extraDayRate, etc.).
+export interface DayRateTable {
+  day1Price: number;
+  day2Price: number;
+  day3Price: number;
+  day4Price: number;
+  day5Price: number;
+  extraDayRate: number;
+}
+
 export interface Product {
   id: string;
   name: string;
-  category: 'TENT & SHELTER' | 'SLEEPING SYSTEM' | 'CARRIER & BACKPACK' | 'COOKING GEAR' | 'LIGHTING & POWER' | 'HIKING ESSENTIALS' | 'CAMP SUPPORT' | string;
-  price: number; // Daily rate in IDR, e.g., 35000
-  incrementalPriceAfter5Days: number; // e.g. 10000 for tents, 0 for others
-  discountMinDays: number; // day threshold after which the discount applies, e.g. 5
+  category: 'TENT & SHELTER' | 'SLEEPING SYSTEM' | 'CARRIER & BACKPACK' | 'COOKING GEAR' | 'LIGHTING & POWER' | 'HIKING ESSENTIALS' | 'CAMP SUPPORT' | 'APPAREL & PERSONAL GEAR' | string;
+  rates: DayRateTable;
+  readinessHours: number; // hours after actual return before stock counts as available again (0 = immediately)
   stock: number; // Max total inventory
   description?: string;
   image?: string;
@@ -14,9 +26,13 @@ export interface OrderItem {
   productId: string;
   productName: string;
   quantity: number;
-  pricePerDay: number;
-  incrementalPrice: number;
-  discountThresholdDays: number; // snapshotted from Product.discountMinDays at booking time - never re-read live
+  ratesSnapshot?: DayRateTable; // snapshotted from Product.rates at booking time - never re-read live. Undefined only on pre-migration historical rows.
+  // Legacy bridge fields for orders placed before the pricing-schema migration.
+  // Never written by new order creation - delete these + their call sites once no
+  // pre-migration order can still be open (see server.ts calculate-late).
+  legacyPricePerDay?: number;
+  legacyIncrementalPrice?: number;
+  legacyDiscountThresholdDays?: number;
 }
 
 export type OrderStatus = 'Pending' | 'Approved/Paid' | 'Item Picked Up' | 'Item Returned/Completed';
@@ -34,6 +50,7 @@ export interface Order {
   idCardBase64: string; // rent guarantee KTP/SIM
   status: OrderStatus;
   createdAt: string;
+  returnedAt?: string; // ISO datetime, set once when status transitions into 'Item Returned/Completed'
   lateDays?: number;
   lateFee?: number;
 }

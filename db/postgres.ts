@@ -42,11 +42,11 @@ export async function seedPostgresIfEmpty(): Promise<void> {
     await client.query('BEGIN');
     const params: any[] = [];
     defaultProducts.forEach((p) => {
-      params.push(p.id, p.name, p.category, p.price, p.incrementalPriceAfter5Days || 0, p.discountMinDays ?? 5, p.stock, p.description || '', p.image || '');
+      params.push(p.id, p.name, p.category, p.rates.day1Price, p.rates.day2Price, p.rates.day3Price, p.rates.day4Price, p.rates.day5Price, p.rates.extraDayRate, p.readinessHours || 0, p.stock, p.description || '', p.image || '');
     });
     await client.query(
-      `INSERT INTO products (id, name, category, price, incremental_price_after_5_days, discount_min_days, stock, description, image)
-       VALUES ${buildValuesClause(defaultProducts.length, 9)}
+      `INSERT INTO products (id, name, category, day1_price, day2_price, day3_price, day4_price, day5_price, extra_day_rate, readiness_hours, stock, description, image)
+       VALUES ${buildValuesClause(defaultProducts.length, 13)}
        ON CONFLICT (id) DO NOTHING`,
       params
     );
@@ -62,18 +62,28 @@ export async function seedPostgresIfEmpty(): Promise<void> {
 
 // node-postgres returns NUMERIC/DECIMAL columns as strings, not numbers, to avoid
 // float precision loss. Every numeric column must be explicitly converted here,
-// or downstream code (e.g. `prod.price + prod.incrementalPriceAfter5Days`) would
-// silently do string concatenation instead of addition.
+// or downstream code (e.g. `calculateRentalCost`'s arithmetic) would silently do
+// string concatenation instead of addition.
+//
+// Schema note: this file, migrate-to-supabase.js, and README.md's documented DDL
+// must all stay in sync with each other for the products/orders/order_items
+// column lists - this project has already had to touch all 3 together twice
+// (discount_min_days, confirmation_token), and a third time for this pricing
+// schema migration (day*_price/extra_day_rate/readiness_hours/returned_at).
 function rowToProduct(row: any): Product {
   return {
     id: row.id,
     name: row.name,
     category: row.category,
-    price: Number(row.price),
-    incrementalPriceAfter5Days: Number(row.incremental_price_after_5_days),
-    // ?? not || - 0 is a legitimate threshold value ("discounted from day 1"),
-    // not just a fallback, unlike incrementalPriceAfter5Days where 0 safely means both.
-    discountMinDays: Number(row.discount_min_days ?? 5),
+    rates: {
+      day1Price: Number(row.day1_price),
+      day2Price: Number(row.day2_price),
+      day3Price: Number(row.day3_price),
+      day4Price: Number(row.day4_price),
+      day5Price: Number(row.day5_price),
+      extraDayRate: Number(row.extra_day_rate),
+    },
+    readinessHours: Number(row.readiness_hours ?? 0),
     stock: Number(row.stock),
     description: row.description ?? '',
     image: row.image ?? '',
@@ -81,13 +91,22 @@ function rowToProduct(row: any): Product {
 }
 
 function rowToOrderItem(row: any): OrderItem {
+  const hasNewRates = row.day1_price !== null && row.day1_price !== undefined;
   return {
     productId: row.product_id,
     productName: row.product_name,
     quantity: Number(row.quantity),
-    pricePerDay: Number(row.price_per_day),
-    incrementalPrice: Number(row.incremental_price),
-    discountThresholdDays: Number(row.discount_threshold_days ?? 5),
+    ratesSnapshot: hasNewRates ? {
+      day1Price: Number(row.day1_price),
+      day2Price: Number(row.day2_price),
+      day3Price: Number(row.day3_price),
+      day4Price: Number(row.day4_price),
+      day5Price: Number(row.day5_price),
+      extraDayRate: Number(row.extra_day_rate),
+    } : undefined,
+    legacyPricePerDay: row.price_per_day !== null && row.price_per_day !== undefined ? Number(row.price_per_day) : undefined,
+    legacyIncrementalPrice: row.incremental_price !== null && row.incremental_price !== undefined ? Number(row.incremental_price) : undefined,
+    legacyDiscountThresholdDays: row.discount_threshold_days !== null && row.discount_threshold_days !== undefined ? Number(row.discount_threshold_days) : undefined,
   };
 }
 
@@ -105,6 +124,7 @@ function rowToOrder(row: any, items: OrderItem[]): Order {
     idCardBase64: row.id_card_base64 ?? '',
     status: row.status,
     createdAt: row.created_at,
+    returnedAt: row.returned_at ?? undefined,
     lateDays: Number(row.late_days || 0),
     lateFee: Number(row.late_fee || 0),
   };
@@ -155,17 +175,21 @@ export async function writeDBPostgres(data: { products: Product[]; orders: Order
     if (data.products.length > 0) {
       const params: any[] = [];
       data.products.forEach((p) => {
-        params.push(p.id, p.name, p.category, Number(p.price), Number(p.incrementalPriceAfter5Days || 0), Number(p.discountMinDays ?? 5), Number(p.stock), p.description || '', p.image || '');
+        params.push(p.id, p.name, p.category, Number(p.rates.day1Price), Number(p.rates.day2Price), Number(p.rates.day3Price), Number(p.rates.day4Price), Number(p.rates.day5Price), Number(p.rates.extraDayRate), Number(p.readinessHours || 0), Number(p.stock), p.description || '', p.image || '');
       });
       await client.query(
-        `INSERT INTO products (id, name, category, price, incremental_price_after_5_days, discount_min_days, stock, description, image)
-         VALUES ${buildValuesClause(data.products.length, 9)}
+        `INSERT INTO products (id, name, category, day1_price, day2_price, day3_price, day4_price, day5_price, extra_day_rate, readiness_hours, stock, description, image)
+         VALUES ${buildValuesClause(data.products.length, 13)}
          ON CONFLICT (id) DO UPDATE SET
            name = EXCLUDED.name,
            category = EXCLUDED.category,
-           price = EXCLUDED.price,
-           incremental_price_after_5_days = EXCLUDED.incremental_price_after_5_days,
-           discount_min_days = EXCLUDED.discount_min_days,
+           day1_price = EXCLUDED.day1_price,
+           day2_price = EXCLUDED.day2_price,
+           day3_price = EXCLUDED.day3_price,
+           day4_price = EXCLUDED.day4_price,
+           day5_price = EXCLUDED.day5_price,
+           extra_day_rate = EXCLUDED.extra_day_rate,
+           readiness_hours = EXCLUDED.readiness_hours,
            stock = EXCLUDED.stock,
            description = EXCLUDED.description,
            image = EXCLUDED.image`,
@@ -195,12 +219,13 @@ export async function writeDBPostgres(data: { products: Product[]; orders: Order
           o.createdAt,
           Number(o.lateDays || 0),
           Number(o.lateFee || 0),
-          o.confirmationToken ?? null
+          o.confirmationToken ?? null,
+          o.returnedAt ?? null
         );
       });
       await client.query(
-        `INSERT INTO orders (id, customer_name, customer_whatsapp, start_date, end_date, rent_duration, total_price, id_card_base64, status, created_at, late_days, late_fee, confirmation_token)
-         VALUES ${buildValuesClause(data.orders.length, 13)}
+        `INSERT INTO orders (id, customer_name, customer_whatsapp, start_date, end_date, rent_duration, total_price, id_card_base64, status, created_at, late_days, late_fee, confirmation_token, returned_at)
+         VALUES ${buildValuesClause(data.orders.length, 14)}
          ON CONFLICT (id) DO UPDATE SET
            customer_name = EXCLUDED.customer_name,
            customer_whatsapp = EXCLUDED.customer_whatsapp,
@@ -213,7 +238,8 @@ export async function writeDBPostgres(data: { products: Product[]; orders: Order
            created_at = EXCLUDED.created_at,
            late_days = EXCLUDED.late_days,
            late_fee = EXCLUDED.late_fee,
-           confirmation_token = EXCLUDED.confirmation_token`,
+           confirmation_token = EXCLUDED.confirmation_token,
+           returned_at = EXCLUDED.returned_at`,
         params
       );
     }
@@ -224,15 +250,34 @@ export async function writeDBPostgres(data: { products: Product[]; orders: Order
     if (orderIds.length > 0) {
       await client.query('DELETE FROM order_items WHERE order_id = ANY($1::varchar[])', [orderIds]);
     }
+    // Carries BOTH the new rate-table columns and the legacy pre-migration columns
+    // on every row, regardless of which set a given item actually has - this is a
+    // full delete+reinsert of ALL order_items on every write (see comment above),
+    // so omitting either set here would permanently null out that data on the
+    // very next unrelated write. Only one set is ever non-null per row in practice.
     const flatItems = data.orders.flatMap((o) => o.items.map((item) => ({ orderId: o.id, item })));
     if (flatItems.length > 0) {
       const params: any[] = [];
       flatItems.forEach(({ orderId, item }) => {
-        params.push(orderId, item.productId, item.productName, Number(item.quantity), Number(item.pricePerDay), Number(item.incrementalPrice || 0), Number(item.discountThresholdDays ?? 5));
+        params.push(
+          orderId,
+          item.productId,
+          item.productName,
+          Number(item.quantity),
+          item.ratesSnapshot ? Number(item.ratesSnapshot.day1Price) : null,
+          item.ratesSnapshot ? Number(item.ratesSnapshot.day2Price) : null,
+          item.ratesSnapshot ? Number(item.ratesSnapshot.day3Price) : null,
+          item.ratesSnapshot ? Number(item.ratesSnapshot.day4Price) : null,
+          item.ratesSnapshot ? Number(item.ratesSnapshot.day5Price) : null,
+          item.ratesSnapshot ? Number(item.ratesSnapshot.extraDayRate) : null,
+          item.legacyPricePerDay !== undefined ? Number(item.legacyPricePerDay) : null,
+          item.legacyIncrementalPrice !== undefined ? Number(item.legacyIncrementalPrice) : null,
+          item.legacyDiscountThresholdDays !== undefined ? Number(item.legacyDiscountThresholdDays) : null,
+        );
       });
       await client.query(
-        `INSERT INTO order_items (order_id, product_id, product_name, quantity, price_per_day, incremental_price, discount_threshold_days)
-         VALUES ${buildValuesClause(flatItems.length, 7)}`,
+        `INSERT INTO order_items (order_id, product_id, product_name, quantity, day1_price, day2_price, day3_price, day4_price, day5_price, extra_day_rate, price_per_day, incremental_price, discount_threshold_days)
+         VALUES ${buildValuesClause(flatItems.length, 13)}`,
         params
       );
     }

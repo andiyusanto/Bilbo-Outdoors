@@ -1,12 +1,11 @@
 import { FormEvent } from 'react';
-import { Product } from '../../types';
+import { Product, DayRateTable } from '../../types';
 
 interface ProductFormData {
   name: string;
   category: string;
-  price: number;
-  incrementalPriceAfter5Days: number;
-  discountMinDays: number;
+  rates: DayRateTable;
+  readinessHours: number;
   stock: number;
   description: string;
   image: string;
@@ -69,43 +68,55 @@ export default function ProductFormModal({
               <option value="LIGHTING & POWER">LIGHTING & POWER</option>
               <option value="HIKING ESSENTIALS">HIKING ESSENTIALS</option>
               <option value="CAMP SUPPORT">CAMP SUPPORT</option>
+              <option value="APPAREL & PERSONAL GEAR">APPAREL & PERSONAL GEAR</option>
             </select>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-black text-black uppercase">Sewa Pokok (/Hari)</label>
-              <input
-                type="number"
-                required
-                min="0"
-                value={productFormData.price}
-                onChange={(e) => setProductFormData({...productFormData, price: Number(e.target.value)})}
-                className="mt-1 block w-full rounded-none border-2 border-black px-3 py-2.5 text-xs font-black font-mono focus:bg-brand/10 focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-black text-black uppercase">Jumlah Diskon (Rp/Hari)</label>
-              <input
-                type="number"
-                required
-                min="0"
-                value={productFormData.incrementalPriceAfter5Days}
-                onChange={(e) => setProductFormData({...productFormData, incrementalPriceAfter5Days: Number(e.target.value)})}
-                className="mt-1 block w-full rounded-none border-2 border-black px-3 py-2.5 text-xs font-black font-mono focus:bg-brand/10 focus:outline-none"
-              />
+          <div>
+            <label className="block text-xs font-black text-black uppercase">Tabel Harga Sewa (Rp)</label>
+            <div className="grid grid-cols-3 gap-3 mt-1">
+              {([
+                ['day1Price', 'Harian'],
+                ['day2Price', '2 Hari'],
+                ['day3Price', '3 Hari'],
+                ['day4Price', '4 Hari'],
+                ['day5Price', '5 Hari'],
+              ] as const).map(([field, label]) => (
+                <div key={field}>
+                  <label className="block text-[9px] font-bold text-zinc-500 uppercase">{label}</label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    value={productFormData.rates[field]}
+                    onChange={(e) => setProductFormData({...productFormData, rates: {...productFormData.rates, [field]: Number(e.target.value)}})}
+                    className="mt-0.5 block w-full rounded-none border-2 border-black px-2 py-2 text-xs font-black font-mono focus:bg-brand/10 focus:outline-none"
+                  />
+                </div>
+              ))}
+              <div>
+                <label className="block text-[9px] font-bold text-zinc-500 uppercase">5 Hari+ (/hari)</label>
+                <input
+                  type="number"
+                  required
+                  min="0"
+                  value={productFormData.rates.extraDayRate}
+                  onChange={(e) => setProductFormData({...productFormData, rates: {...productFormData.rates, extraDayRate: Number(e.target.value)}})}
+                  className="mt-0.5 block w-full rounded-none border-2 border-black px-2 py-2 text-xs font-black font-mono focus:bg-brand/10 focus:outline-none"
+                />
+              </div>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-black text-black uppercase">Diskon Berlaku Setelah (Hari)</label>
+              <label className="block text-xs font-black text-black uppercase">Waktu Kesiapan Setelah Kembali (Jam)</label>
               <input
                 type="number"
                 required
                 min="0"
-                value={productFormData.discountMinDays}
-                onChange={(e) => setProductFormData({...productFormData, discountMinDays: Number(e.target.value)})}
+                value={productFormData.readinessHours}
+                onChange={(e) => setProductFormData({...productFormData, readinessHours: Number(e.target.value)})}
                 className="mt-1 block w-full rounded-none border-2 border-black px-3 py-2.5 text-xs font-black font-mono focus:bg-brand/10 focus:outline-none"
               />
             </div>

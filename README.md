@@ -104,13 +104,20 @@ Ikuti petunjuk langkah demi langkah berikut ini untuk melakukan migrasi dengan a
 
 ```sql
 -- 1. Membuat Tabel Products
+-- Catatan: kolom harga bertipe INTEGER (bukan NUMERIC) - dikonfirmasi dari skema
+-- live Supabase yang sudah berjalan (price/price_per_day/dll ternyata INTEGER,
+-- bukan NUMERIC seperti dokumentasi lama), dan Rupiah memang selalu bilangan bulat.
 CREATE TABLE IF NOT EXISTS products (
   id VARCHAR(255) PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
   category VARCHAR(255) NOT NULL,
-  price NUMERIC NOT NULL,
-  incremental_price_after_5_days NUMERIC NOT NULL DEFAULT 0,
-  discount_min_days INT NOT NULL DEFAULT 5,
+  day1_price INTEGER,
+  day2_price INTEGER,
+  day3_price INTEGER,
+  day4_price INTEGER,
+  day5_price INTEGER,
+  extra_day_rate INTEGER,
+  readiness_hours INT NOT NULL DEFAULT 0,
   stock INT NOT NULL,
   description TEXT,
   image TEXT
@@ -130,7 +137,8 @@ CREATE TABLE IF NOT EXISTS orders (
   created_at VARCHAR(255) NOT NULL,
   late_days INT DEFAULT 0,
   late_fee NUMERIC DEFAULT 0,
-  confirmation_token VARCHAR(255)
+  confirmation_token VARCHAR(255),
+  returned_at VARCHAR(255)
 );
 
 -- 3. Membuat Tabel Order Items (Relasi Detail Item dari Order)
@@ -140,9 +148,15 @@ CREATE TABLE IF NOT EXISTS order_items (
   product_id VARCHAR(255) NOT NULL,
   product_name VARCHAR(255) NOT NULL,
   quantity INT NOT NULL,
-  price_per_day NUMERIC NOT NULL,
-  incremental_price NUMERIC NOT NULL DEFAULT 0,
-  discount_threshold_days INT NOT NULL DEFAULT 5
+  day1_price INTEGER,
+  day2_price INTEGER,
+  day3_price INTEGER,
+  day4_price INTEGER,
+  day5_price INTEGER,
+  extra_day_rate INTEGER,
+  price_per_day INTEGER,
+  incremental_price INTEGER,
+  discount_threshold_days INT
 );
 ```
 
@@ -156,6 +170,31 @@ CREATE TABLE IF NOT EXISTS order_items (
 > ```sql
 > ALTER TABLE orders ADD COLUMN IF NOT EXISTS confirmation_token VARCHAR(255);
 > ```
+
+> **Sudah pernah menjalankan Step A sebelum skema harga 2026 (tabel harga per-hari + waktu kesiapan alat) ada?** Jalankan ini **sekali, sebelum men-deploy kode baru**, di SQL Editor yang sama (aman dijalankan berulang). Kolom harga lama (`price`, `price_per_day`) dilonggarkan jadi nullable karena kolom-kolom baru menggantikannya sepenuhnya - lihat "⚠️ Database Architecture" di `CLAUDE.md` untuk urutan migrasi yang aman (ALTER dulu → `migrate-pricing-v2.ts` untuk mengisi data → baru deploy kode baru). Kolom lama di `order_items` (`price_per_day`/`incremental_price`/`discount_threshold_days`) **tidak dihapus** - order lama (sebelum migrasi ini) tetap menyimpan datanya di sana selamanya, agar detail harga pesanan lama tidak hilang.
+> ```sql
+> ALTER TABLE products ADD COLUMN IF NOT EXISTS day1_price INTEGER;
+> ALTER TABLE products ADD COLUMN IF NOT EXISTS day2_price INTEGER;
+> ALTER TABLE products ADD COLUMN IF NOT EXISTS day3_price INTEGER;
+> ALTER TABLE products ADD COLUMN IF NOT EXISTS day4_price INTEGER;
+> ALTER TABLE products ADD COLUMN IF NOT EXISTS day5_price INTEGER;
+> ALTER TABLE products ADD COLUMN IF NOT EXISTS extra_day_rate INTEGER;
+> ALTER TABLE products ADD COLUMN IF NOT EXISTS readiness_hours INT NOT NULL DEFAULT 0;
+> ALTER TABLE products ALTER COLUMN price DROP NOT NULL;
+>
+> ALTER TABLE order_items ADD COLUMN IF NOT EXISTS day1_price INTEGER;
+> ALTER TABLE order_items ADD COLUMN IF NOT EXISTS day2_price INTEGER;
+> ALTER TABLE order_items ADD COLUMN IF NOT EXISTS day3_price INTEGER;
+> ALTER TABLE order_items ADD COLUMN IF NOT EXISTS day4_price INTEGER;
+> ALTER TABLE order_items ADD COLUMN IF NOT EXISTS day5_price INTEGER;
+> ALTER TABLE order_items ADD COLUMN IF NOT EXISTS extra_day_rate INTEGER;
+> ALTER TABLE order_items ALTER COLUMN price_per_day DROP NOT NULL;
+> ALTER TABLE order_items ALTER COLUMN incremental_price DROP NOT NULL;
+> ALTER TABLE order_items ALTER COLUMN discount_threshold_days DROP NOT NULL;
+>
+> ALTER TABLE orders ADD COLUMN IF NOT EXISTS returned_at VARCHAR(255);
+> ```
+> Setelah menjalankan SQL di atas, jalankan `DATABASE_URL="..." npx tsx migrate-pricing-v2.ts` satu kali untuk mengisi angka harga baru ke katalog produk yang sudah ada (dan menambahkan produk-produk baru), **sebelum** men-deploy kode aplikasi versi baru.
 
 ### Step B: Dapatkan Connection String Supabase Anda
 1. Di dashboard Supabase Anda, buka project Anda, lalu klik tombol **Connect** (di bagian atas halaman project).

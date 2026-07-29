@@ -7,6 +7,7 @@ import { createServer as createViteServer } from 'vite';
 import { Product, Order, OrderStatus, DashboardStats } from './src/types';
 import { defaultProducts } from './db/defaultProducts';
 import { initPostgresPool, seedPostgresIfEmpty, readDBPostgres, writeDBPostgres } from './db/postgres';
+import { calculateRentalCost, calculateLegacyRentalCost } from './src/pricing';
 
 const app = express();
 const PORT = 3000;
@@ -119,8 +120,8 @@ app.get('/api/products', asyncHandler(async (req, res) => {
 // Admin CRUD: Create Product
 app.post('/api/products', authenticateAdmin, asyncHandler(async (req, res) => {
   await withDbLock(async () => {
-    const { name, category, price, incrementalPriceAfter5Days, discountMinDays, stock, description, image } = req.body;
-    if (!name || !category || price === undefined || stock === undefined) {
+    const { name, category, rates, readinessHours, stock, description, image } = req.body;
+    if (!name || !category || !rates || stock === undefined) {
       return res.status(400).json({ error: 'Missing required product fields.' });
     }
 
@@ -129,9 +130,15 @@ app.post('/api/products', authenticateAdmin, asyncHandler(async (req, res) => {
       id: `product-${Date.now()}`,
       name,
       category,
-      price: Number(price),
-      incrementalPriceAfter5Days: Number(incrementalPriceAfter5Days || 0),
-      discountMinDays: discountMinDays !== undefined ? Number(discountMinDays) : 5,
+      rates: {
+        day1Price: Number(rates.day1Price),
+        day2Price: Number(rates.day2Price),
+        day3Price: Number(rates.day3Price),
+        day4Price: Number(rates.day4Price),
+        day5Price: Number(rates.day5Price),
+        extraDayRate: Number(rates.extraDayRate),
+      },
+      readinessHours: readinessHours !== undefined ? Number(readinessHours) : 0,
       stock: Number(stock),
       description: description || '',
       image: image || ''
@@ -147,7 +154,7 @@ app.post('/api/products', authenticateAdmin, asyncHandler(async (req, res) => {
 app.put('/api/products/:id', authenticateAdmin, asyncHandler(async (req, res) => {
   await withDbLock(async () => {
     const { id } = req.params;
-    const { name, category, price, incrementalPriceAfter5Days, discountMinDays, stock, description, image } = req.body;
+    const { name, category, rates, readinessHours, stock, description, image } = req.body;
 
     const db = await readDB();
     const productIndex = db.products.findIndex((p: Product) => p.id === id);
@@ -159,9 +166,15 @@ app.put('/api/products/:id', authenticateAdmin, asyncHandler(async (req, res) =>
       ...db.products[productIndex],
       name: name !== undefined ? name : db.products[productIndex].name,
       category: category !== undefined ? category : db.products[productIndex].category,
-      price: price !== undefined ? Number(price) : db.products[productIndex].price,
-      incrementalPriceAfter5Days: incrementalPriceAfter5Days !== undefined ? Number(incrementalPriceAfter5Days) : db.products[productIndex].incrementalPriceAfter5Days,
-      discountMinDays: discountMinDays !== undefined ? Number(discountMinDays) : db.products[productIndex].discountMinDays,
+      rates: rates !== undefined ? {
+        day1Price: Number(rates.day1Price),
+        day2Price: Number(rates.day2Price),
+        day3Price: Number(rates.day3Price),
+        day4Price: Number(rates.day4Price),
+        day5Price: Number(rates.day5Price),
+        extraDayRate: Number(rates.extraDayRate),
+      } : db.products[productIndex].rates,
+      readinessHours: readinessHours !== undefined ? Number(readinessHours) : db.products[productIndex].readinessHours,
       stock: stock !== undefined ? Number(stock) : db.products[productIndex].stock,
       description: description !== undefined ? description : db.products[productIndex].description,
       image: image !== undefined ? image : db.products[productIndex].image
@@ -191,33 +204,62 @@ app.delete('/api/products/:id', authenticateAdmin, asyncHandler(async (req, res)
 
 // Helper function to calculate overlapping stock usage for products
 // Returns a map of productId -> maxAllocated quantity during the period
-function calculateAllocatedStock(orders: Order[], startDateStr: string, endDateStr: string): Record<string, number> {
+//
+// Readiness time: a completed order still occupies its items' stock for
+// `readinessHours` after the *actual* return (order.returnedAt), converted to
+// whole blocked calendar days (Math.ceil) since dates elsewhere in this app have
+// no time-of-day granularity - a short readiness window still blocks the entire
+// next calendar day, not just part of it. A completed order with no returnedAt
+// (placed before this feature existed) is excluded entirely, exactly as before -
+// readiness is never applied retroactively. Active (not-yet-returned) orders are
+// unaffected by readiness and block through their scheduled endDate only, same as
+// before this feature.
+function calculateAllocatedStock(orders: Order[], products: Product[], startDateStr: string, endDateStr: string): Record<string, number> {
   const startReq = new Date(startDateStr);
   const endReq = new Date(endDateStr);
 
+  const readinessDaysById = new Map(products.map(p => [p.id, Math.ceil((p.readinessHours || 0) / 24)]));
+
   const allocationMap: Record<string, number> = {};
 
-  // For each overlapping order that is NOT completed/returned
-  const activeOrders = orders.filter(o => o.status !== 'Item Returned/Completed');
+  // Legacy completed orders (no returnedAt) are excluded entirely, same as before.
+  const relevantOrders = orders.filter(o => o.status !== 'Item Returned/Completed' || o.returnedAt);
 
   // Let's iterate through each day of the requested range
   const tempDate = new Date(startReq);
   while (tempDate <= endReq) {
     const dayStr = tempDate.toISOString().split('T')[0];
 
-    // For this specific day, sum up allocations for all active overlapping orders
+    // For this specific day, sum up allocations for all relevant overlapping orders
     const dailyAllocation: Record<string, number> = {};
 
-    activeOrders.forEach(order => {
+    relevantOrders.forEach(order => {
+      const isCompleted = order.status === 'Item Returned/Completed';
       const orderStart = new Date(order.startDate);
-      const orderEnd = new Date(order.endDate);
       const currentDay = new Date(dayStr);
 
-      if (currentDay >= orderStart && currentDay <= orderEnd) {
-        order.items.forEach(item => {
+      order.items.forEach(item => {
+        let effectiveStart: Date;
+        let effectiveEnd: Date;
+        if (isCompleted) {
+          // Blocked range is anchored on the actual return date, not the original
+          // orderStart - the historical rental days are moot once returned. Spans
+          // exactly `readinessDays` calendar days starting on the return day itself.
+          // When readinessDays is 0, effectiveEnd lands one day BEFORE effectiveStart,
+          // making the range empty - i.e. no blocking at all, immediately available
+          // even on the return day itself, matching the pre-readiness-feature default.
+          effectiveStart = new Date(order.returnedAt!.split('T')[0]);
+          effectiveEnd = new Date(order.returnedAt!.split('T')[0]);
+          effectiveEnd.setDate(effectiveEnd.getDate() + (readinessDaysById.get(item.productId) || 0) - 1);
+        } else {
+          effectiveStart = orderStart;
+          effectiveEnd = new Date(order.endDate);
+        }
+
+        if (currentDay >= effectiveStart && currentDay <= effectiveEnd) {
           dailyAllocation[item.productId] = (dailyAllocation[item.productId] || 0) + item.quantity;
-        });
-      }
+        }
+      });
     });
 
     // Update the maximum allocation found on any single day within the range
@@ -239,7 +281,7 @@ app.post('/api/check-availability', asyncHandler(async (req, res) => {
   }
 
   const db = await readDB();
-  const allocatedMap = calculateAllocatedStock(db.orders, startDate, endDate);
+  const allocatedMap = calculateAllocatedStock(db.orders, db.products, startDate, endDate);
 
   const availabilityDetails = db.products.map((prod: Product) => {
     const allocated = allocatedMap[prod.id] || 0;
@@ -282,7 +324,7 @@ app.post('/api/orders', asyncHandler(async (req, res) => {
     const db = await readDB();
 
     // 1. Re-verify stock availability server-side to guarantee integrity
-    const allocatedMap = calculateAllocatedStock(db.orders, startDate, endDate);
+    const allocatedMap = calculateAllocatedStock(db.orders, db.products, startDate, endDate);
 
     for (const item of items) {
       const product = db.products.find((p: Product) => p.id === item.productId);
@@ -309,15 +351,7 @@ app.post('/api/orders', asyncHandler(async (req, res) => {
     const orderItems = items.map((it: any) => {
       const prod = db.products.find((p: Product) => p.id === it.productId)!;
 
-      // Formula: First `discountMinDays` days cost standard price. Days after that get a discount (base_price - incrementalPriceAfter5Days).
-      let itemTotal = 0;
-      for (let day = 1; day <= rentDuration; day++) {
-        if (day > prod.discountMinDays) {
-          itemTotal += (prod.price - prod.incrementalPriceAfter5Days);
-        } else {
-          itemTotal += prod.price;
-        }
-      }
+      const itemTotal = calculateRentalCost(prod.rates, rentDuration);
       const itemCost = itemTotal * it.quantity;
       totalPrice += itemCost;
 
@@ -325,9 +359,7 @@ app.post('/api/orders', asyncHandler(async (req, res) => {
         productId: prod.id,
         productName: prod.name,
         quantity: Number(it.quantity),
-        pricePerDay: prod.price,
-        incrementalPrice: prod.incrementalPriceAfter5Days,
-        discountThresholdDays: prod.discountMinDays
+        ratesSnapshot: { ...prod.rates }
       };
     });
 
@@ -391,7 +423,13 @@ app.put('/api/orders/:id/status', authenticateAdmin, asyncHandler(async (req, re
       return res.status(404).json({ error: 'Order not found.' });
     }
 
+    const previousStatus = db.orders[orderIndex].status;
     db.orders[orderIndex].status = status;
+    // Stamp the actual return time once, on the transition into Completed - this
+    // is what the readiness-time stock calculation anchors on (calculateAllocatedStock).
+    if (status === 'Item Returned/Completed' && previousStatus !== 'Item Returned/Completed') {
+      db.orders[orderIndex].returnedAt = new Date().toISOString();
+    }
     await writeDB(db);
     res.json(db.orders[orderIndex]);
   });
@@ -428,25 +466,34 @@ app.post('/api/orders/:id/calculate-late', authenticateAdmin, asyncHandler(async
 
     // Calculate late fee per item.
     // INVARIANT: this loop must only read order.items' snapshotted fields
-    // (pricePerDay / incrementalPrice / discountThresholdDays), never db.products.
-    // A later admin edit to the live product must NOT retroactively change an
-    // already-placed order's late fee. If you ever need live product data here
-    // for something else, do not let it touch these three fields.
+    // (ratesSnapshot, or the legacy pricePerDay-equivalent fields), never
+    // db.products. A later admin edit to the live product must NOT retroactively
+    // change an already-placed order's late fee. If you ever need live product
+    // data here for something else, do not let it touch these snapshotted fields.
+    //
+    // The late-day cost is the diff of cumulative totals - cost(rentDuration + lateDays)
+    // minus cost(rentDuration) - which is exactly the marginal cost of the late
+    // days regardless of where the day-5 breakpoint falls, so no per-day loop is
+    // needed. Same trick works for legacy (pre-migration) OrderItems using the old
+    // formula's own notion of cumulative cost.
     let lateFeeTotal = 0;
     const breakdown = order.items.map(item => {
-      // For each late day:
-      // If the original rentDuration was D, late day i is D + dayIndex.
-      // Discounted rate applies once dayIndex + D > item's own snapshotted threshold.
-      let itemLateCost = 0;
-      const basePrice = item.pricePerDay;
-      const incremental = item.incrementalPrice;
-      const discountThresholdDays = item.discountThresholdDays; // snapshot, not live
+      let itemLateCost: number;
+      let dailyRateBreakdown: string;
 
-      for (let dayIndex = 1; dayIndex <= lateDays; dayIndex++) {
-        const daySeqNum = order.rentDuration + dayIndex;
-        const dailyPrice = daySeqNum > discountThresholdDays ? (basePrice - incremental) : basePrice;
-        itemLateCost += dailyPrice;
+      if (item.ratesSnapshot) {
+        itemLateCost = calculateRentalCost(item.ratesSnapshot, order.rentDuration + lateDays)
+          - calculateRentalCost(item.ratesSnapshot, order.rentDuration);
+        dailyRateBreakdown = `5 Hari: Rp${item.ratesSnapshot.day5Price} (+Rp${item.ratesSnapshot.extraDayRate}/hari setelahnya)`;
+      } else {
+        const basePrice = item.legacyPricePerDay!;
+        const incremental = item.legacyIncrementalPrice ?? 0;
+        const discountThresholdDays = item.legacyDiscountThresholdDays ?? 5;
+        itemLateCost = calculateLegacyRentalCost(basePrice, incremental, discountThresholdDays, order.rentDuration + lateDays)
+          - calculateLegacyRentalCost(basePrice, incremental, discountThresholdDays, order.rentDuration);
+        dailyRateBreakdown = incremental > 0 ? `Base: ${basePrice} (-${incremental} after ${discountThresholdDays}d)` : `Rate: ${basePrice}`;
       }
+      itemLateCost = Math.max(0, itemLateCost); // defensive: a mistyped (non-monotonic) rate table could otherwise produce a negative late fee
 
       const itemTotalLateCost = itemLateCost * item.quantity;
       lateFeeTotal += itemTotalLateCost;
@@ -454,7 +501,7 @@ app.post('/api/orders/:id/calculate-late', authenticateAdmin, asyncHandler(async
       return {
         productName: item.productName,
         quantity: item.quantity,
-        dailyRateBreakdown: item.incrementalPrice > 0 ? `Base: ${basePrice} (-${incremental} after ${discountThresholdDays}d)` : `Rate: ${basePrice}`,
+        dailyRateBreakdown,
         itemTotalLateCost
       };
     });

@@ -46,14 +46,18 @@ async function runMigration() {
     console.log('\n📥 Migrating Products...');
     for (const prod of products) {
       await client.query(
-        `INSERT INTO products (id, name, category, price, incremental_price_after_5_days, discount_min_days, stock, description, image)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `INSERT INTO products (id, name, category, day1_price, day2_price, day3_price, day4_price, day5_price, extra_day_rate, readiness_hours, stock, description, image)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
          ON CONFLICT (id) DO UPDATE SET
            name = EXCLUDED.name,
            category = EXCLUDED.category,
-           price = EXCLUDED.price,
-           incremental_price_after_5_days = EXCLUDED.incremental_price_after_5_days,
-           discount_min_days = EXCLUDED.discount_min_days,
+           day1_price = EXCLUDED.day1_price,
+           day2_price = EXCLUDED.day2_price,
+           day3_price = EXCLUDED.day3_price,
+           day4_price = EXCLUDED.day4_price,
+           day5_price = EXCLUDED.day5_price,
+           extra_day_rate = EXCLUDED.extra_day_rate,
+           readiness_hours = EXCLUDED.readiness_hours,
            stock = EXCLUDED.stock,
            description = EXCLUDED.description,
            image = EXCLUDED.image`,
@@ -61,9 +65,13 @@ async function runMigration() {
           prod.id,
           prod.name,
           prod.category,
-          Number(prod.price),
-          Number(prod.incrementalPriceAfter5Days || 0),
-          Number(prod.discountMinDays ?? 5),
+          Number(prod.rates.day1Price),
+          Number(prod.rates.day2Price),
+          Number(prod.rates.day3Price),
+          Number(prod.rates.day4Price),
+          Number(prod.rates.day5Price),
+          Number(prod.rates.extraDayRate),
+          Number(prod.readinessHours || 0),
           Number(prod.stock),
           prod.description || '',
           prod.image || ''
@@ -79,8 +87,8 @@ async function runMigration() {
       const existing = await client.query('SELECT id FROM orders WHERE id = $1', [order.id]);
       if (existing.rows.length === 0) {
         await client.query(
-          `INSERT INTO orders (id, customer_name, customer_whatsapp, start_date, end_date, rent_duration, total_price, id_card_base64, status, created_at, late_days, late_fee, confirmation_token)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+          `INSERT INTO orders (id, customer_name, customer_whatsapp, start_date, end_date, rent_duration, total_price, id_card_base64, status, created_at, late_days, late_fee, confirmation_token, returned_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
           [
             order.id,
             order.customerName,
@@ -94,24 +102,33 @@ async function runMigration() {
             order.createdAt,
             Number(order.lateDays || 0),
             Number(order.lateFee || 0),
-            order.confirmationToken ?? null
+            order.confirmationToken ?? null,
+            order.returnedAt ?? null
           ]
         );
         console.log(`   - Order: ${order.id} by ${order.customerName} migrated.`);
 
-        // 3. Insert Order Items
+        // 3. Insert Order Items - carries both the new rate-table columns and the
+        // legacy pre-migration columns, whichever the item actually has (see the
+        // same pattern in db/postgres.ts's writeDBPostgres for why both are kept).
         for (const item of order.items) {
           await client.query(
-            `INSERT INTO order_items (order_id, product_id, product_name, quantity, price_per_day, incremental_price, discount_threshold_days)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            `INSERT INTO order_items (order_id, product_id, product_name, quantity, day1_price, day2_price, day3_price, day4_price, day5_price, extra_day_rate, price_per_day, incremental_price, discount_threshold_days)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
             [
               order.id,
               item.productId,
               item.productName,
               Number(item.quantity),
-              Number(item.pricePerDay),
-              Number(item.incrementalPrice || 0),
-              Number(item.discountThresholdDays ?? 5)
+              item.ratesSnapshot ? Number(item.ratesSnapshot.day1Price) : null,
+              item.ratesSnapshot ? Number(item.ratesSnapshot.day2Price) : null,
+              item.ratesSnapshot ? Number(item.ratesSnapshot.day3Price) : null,
+              item.ratesSnapshot ? Number(item.ratesSnapshot.day4Price) : null,
+              item.ratesSnapshot ? Number(item.ratesSnapshot.day5Price) : null,
+              item.ratesSnapshot ? Number(item.ratesSnapshot.extraDayRate) : null,
+              item.legacyPricePerDay !== undefined ? Number(item.legacyPricePerDay) : null,
+              item.legacyIncrementalPrice !== undefined ? Number(item.legacyIncrementalPrice) : null,
+              item.legacyDiscountThresholdDays !== undefined ? Number(item.legacyDiscountThresholdDays) : null
             ]
           );
         }

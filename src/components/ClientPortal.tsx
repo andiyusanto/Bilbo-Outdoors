@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { MapPin, Instagram, Phone } from 'lucide-react';
 import { Product } from '../types';
+import { calculateRentalCost, calculateSavingsFor5Days } from '../pricing';
 import { useProducts } from '../hooks/useProducts';
 import { useAvailability } from '../hooks/useAvailability';
 import { useIdCardUpload } from '../hooks/useIdCardUpload';
@@ -60,7 +61,8 @@ export default function ClientPortal({ onAdminToggle, themeId, setThemeId }: Cli
     'COOKING GEAR',
     'LIGHTING & POWER',
     'HIKING ESSENTIALS',
-    'CAMP SUPPORT'
+    'CAMP SUPPORT',
+    'APPAREL & PERSONAL GEAR'
   ];
 
   const handleUpdateCart = (productId: string, quantity: number) => {
@@ -85,16 +87,7 @@ export default function ClientPortal({ onAdminToggle, themeId, setThemeId }: Cli
 
   // Pricing helper
   const calculateItemCost = (product: Product, quantity: number) => {
-    if (rentDuration <= 0) return 0;
-    let singleItemCost = 0;
-    for (let day = 1; day <= rentDuration; day++) {
-      if (day > product.discountMinDays) {
-        singleItemCost += (product.price - product.incrementalPriceAfter5Days);
-      } else {
-        singleItemCost += product.price;
-      }
-    }
-    return singleItemCost * quantity;
+    return calculateRentalCost(product.rates, rentDuration) * quantity;
   };
 
   const getCartTotal = () => {
@@ -113,7 +106,7 @@ export default function ClientPortal({ onAdminToggle, themeId, setThemeId }: Cli
   // 0 and keep their existing relative order via the stable sort.
   const filteredProducts = products
     .filter(p => activeCategory === 'ALL' || p.category === activeCategory)
-    .sort((a, b) => b.incrementalPriceAfter5Days - a.incrementalPriceAfter5Days);
+    .sort((a, b) => calculateSavingsFor5Days(b.rates) - calculateSavingsFor5Days(a.rates));
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-12 pb-24">
@@ -238,6 +231,7 @@ export default function ClientPortal({ onAdminToggle, themeId, setThemeId }: Cli
           <span>Lighting & Power</span>
           <span>Hiking Essentials</span>
           <span>Camp Support</span>
+          <span>Apparel & Personal Gear</span>
           <span>Tent & Shelter</span>
           <span>Sleeping Systems</span>
           <span>Carrier & Backpack</span>
@@ -245,6 +239,7 @@ export default function ClientPortal({ onAdminToggle, themeId, setThemeId }: Cli
           <span>Lighting & Power</span>
           <span>Hiking Essentials</span>
           <span>Camp Support</span>
+          <span>Apparel & Personal Gear</span>
         </div>
       </div>
 

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ZoomIn } from 'lucide-react';
 import { Product } from '../../types';
+import { calculateSavingsFor5Days } from '../../pricing';
 import bilboIcon from '../../assets/bilbo-icon.png';
 import ImagePreviewModal from '../ImagePreviewModal';
 
@@ -114,12 +115,12 @@ export default function EquipmentGrid({
                   <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Sewa / Hari</p>
                   <div className="flex items-center gap-1.5 mt-0.5">
                     <span className="bg-brand px-2 py-0.5 text-xs font-black border border-black shadow-[1px_1px_0px_rgba(0,0,0,1)]">
-                      {Math.round(prod.price/1000)}K / HARI
+                      {Math.round(prod.rates.day1Price/1000)}K / HARI
                     </span>
                   </div>
-                  {prod.incrementalPriceAfter5Days > 0 && (
+                  {calculateSavingsFor5Days(prod.rates) > 0 && (
                     <p className="text-[9px] text-emerald-600 font-black mt-1 uppercase">
-                      {`>${prod.discountMinDays} HARI: -${(prod.incrementalPriceAfter5Days/1000)}K/HARI`}
+                      {`HEMAT ${Math.round(calculateSavingsFor5Days(prod.rates)/1000)}K UNTUK 5 HARI`}
                     </p>
                   )}
                 </div>

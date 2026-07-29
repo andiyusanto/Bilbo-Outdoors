@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Info, Percent } from 'lucide-react';
 import { Product } from '../../types';
+import { calculateSavingsFor5Days } from '../../pricing';
 import bilboIcon from '../../assets/bilbo-icon.png';
 import ImagePreviewModal from '../ImagePreviewModal';
 
@@ -36,7 +37,7 @@ function usePrefersReducedMotion(): boolean {
 // discounted product gets its own slide after that, in categoryOrder order -
 // categories with no discounted products get no slide at all.
 function buildSlides(products: Product[], categoryOrder: string[]): Slide[] {
-  const discounted = products.filter(p => p.incrementalPriceAfter5Days > 0);
+  const discounted = products.filter(p => calculateSavingsFor5Days(p.rates) > 0);
   const categorySlides: CategorySlide[] = categoryOrder
     .map(category => ({
       kind: 'category' as const,
@@ -83,7 +84,7 @@ export default function DiscountCarousel({ products, categoryOrder }: DiscountCa
             <div className="flex items-start space-x-3 text-xs text-black">
               <Info className="w-4.5 h-4.5 text-black shrink-0 mt-0.5 stroke-[3]" />
               <p className="leading-normal font-bold uppercase tracking-wide text-[11px]">
-                <strong>SISTEM DISKON OTOMATIS:</strong> SEWA ALAT YANG BERLAKU LEBIH DARI <strong>5 HARI BERTURUT-TURUT</strong> DAN DAPATKAN POTONGAN HARGA HARIAN — CEK LABEL DISKON DI TIAP ALAT!
+                <strong>SEWA LEBIH HEMAT:</strong> SEWA ALAT UNTUK <strong>5 HARI BERTURUT-TURUT</strong> DAN DAPATKAN HARGA TOTAL LEBIH HEMAT DIBANDING TARIF HARIAN — CEK LABEL HEMAT DI TIAP ALAT!
               </p>
             </div>
           ) : (
@@ -91,7 +92,7 @@ export default function DiscountCarousel({ products, categoryOrder }: DiscountCa
               <Percent className="w-4.5 h-4.5 text-black shrink-0 mt-0.5 stroke-[3]" />
               <div className="flex-1 min-w-0">
                 <p className="font-black uppercase tracking-wide text-[11px] mb-2">
-                  {currentSlide.category} — ALAT YANG SEDANG DISKON:
+                  {currentSlide.category} — ALAT LEBIH HEMAT UNTUK 5 HARI:
                 </p>
                 <div className="space-y-1.5">
                   {currentSlide.items.map(item => (
@@ -118,7 +119,7 @@ export default function DiscountCarousel({ products, categoryOrder }: DiscountCa
                         {item.name}
                       </span>
                       <span className="text-[9px] font-black bg-black text-brand px-1.5 py-0.5 border border-black uppercase shrink-0">
-                        {`-${Math.round(item.incrementalPriceAfter5Days / 1000)}K/HARI · >${item.discountMinDays} HARI`}
+                        {`HEMAT ${Math.round(calculateSavingsFor5Days(item.rates) / 1000)}K / 5 HARI`}
                       </span>
                     </div>
                   ))}

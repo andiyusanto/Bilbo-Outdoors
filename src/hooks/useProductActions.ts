@@ -11,9 +11,8 @@ interface UseProductActionsParams {
 const DEFAULT_PRODUCT_FORM = {
   name: '',
   category: 'TENT & SHELTER',
-  price: 0,
-  incrementalPriceAfter5Days: 0,
-  discountMinDays: 5,
+  rates: { day1Price: 0, day2Price: 0, day3Price: 0, day4Price: 0, day5Price: 0, extraDayRate: 0 },
+  readinessHours: 0,
   stock: 5,
   description: '',
   image: '',
@@ -89,9 +88,8 @@ export function useProductActions({ token, fetchAdminData, setProducts }: UsePro
     setProductFormData({
       name: product.name,
       category: product.category,
-      price: product.price,
-      incrementalPriceAfter5Days: product.incrementalPriceAfter5Days,
-      discountMinDays: product.discountMinDays,
+      rates: { ...product.rates },
+      readinessHours: product.readinessHours,
       stock: product.stock,
       description: product.description || '',
       image: product.image || ''

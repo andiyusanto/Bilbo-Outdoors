@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Search, ChevronRight } from 'lucide-react';
 import { Order } from '../../types';
 import { useOrderActions } from '../../hooks/useOrderActions';
+import { formatDateLabel } from '../../lib/date';
 import OrderDetailPanel from './OrderDetailPanel';
 
 interface OrdersTabProps {
@@ -101,9 +102,9 @@ export default function OrdersTab({ orders, orderActions }: OrdersTabProps) {
                     </td>
                     <td className="px-5 py-4">
                       <div className="text-xs text-zinc-800 font-bold uppercase">
-                        <span>{order.startDate}</span>
+                        <span>{formatDateLabel(order.startDate)}</span>
                         <span className="text-zinc-400 mx-1.5 font-mono">s/d</span>
-                        <span>{order.endDate}</span>
+                        <span>{formatDateLabel(order.endDate)}</span>
                       </div>
                     </td>
                     <td className="px-5 py-4 text-xs font-mono font-black text-black">

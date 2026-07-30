@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Phone, UserCheck, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
 import { Order, OrderStatus } from '../../types';
+import { formatDateLabel, formatDateTimeLabel } from '../../lib/date';
 
 const PICKUP_ID_TYPE_OPTIONS = ['KTP', 'SIM', 'KTA', 'KIP', 'Kartu Pelajar', 'Lainnya'];
 
@@ -84,7 +85,7 @@ export default function OrderDetailPanel({
               <div>
                 <p className="text-[10px] text-zinc-500 font-black uppercase tracking-wider">Dibuat Pada</p>
                 <p className="text-xs text-black font-bold mt-1 uppercase">
-                  {new Date(order.createdAt).toLocaleDateString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                  {formatDateTimeLabel(order.createdAt)}
                 </p>
               </div>
             </div>
@@ -93,7 +94,7 @@ export default function OrderDetailPanel({
               <div>
                 <p className="text-[10px] text-zinc-500 font-black uppercase tracking-wider">Jadwal Sewa</p>
                 <p className="text-xs text-black mt-1 font-black uppercase">
-                  {order.startDate} s/d {order.endDate}
+                  {formatDateLabel(order.startDate)} s/d {formatDateLabel(order.endDate)}
                 </p>
               </div>
               <div className="text-right">
@@ -318,7 +319,7 @@ export default function OrderDetailPanel({
                   </div>
 
                   <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-wide">
-                    Batas Waktu Pengembalian: {new Date(lateCalculationResult.deadline).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}
+                    Batas Waktu Pengembalian: {formatDateTimeLabel(lateCalculationResult.deadline)}
                   </p>
 
                   {lateCalculationResult.lateDays > 0 ? (

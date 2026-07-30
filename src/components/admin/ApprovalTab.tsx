@@ -1,5 +1,6 @@
 import { JobEntry, JobType } from '../../types';
 import { useApprovalActions } from '../../hooks/useApprovalActions';
+import { formatDateLabel } from '../../lib/date';
 
 interface ApprovalTabProps {
   jobEntries: JobEntry[];
@@ -80,7 +81,7 @@ export default function ApprovalTab({ jobEntries, approvalActions }: ApprovalTab
                     />
                   </td>
                   <td className="px-4 py-3 text-black uppercase">{entry.employeeName}</td>
-                  <td className="px-4 py-3 font-mono text-zinc-600">{entry.entryDate}</td>
+                  <td className="px-4 py-3 font-mono text-zinc-600">{formatDateLabel(entry.entryDate)}</td>
                   <td className="px-4 py-3 uppercase">{entry.itemName}</td>
                   <td className="px-4 py-3 uppercase">{JOB_TYPE_LABELS[entry.jobType]}</td>
                   <td className="px-4 py-3 font-mono">{entry.quantity}</td>
@@ -113,7 +114,7 @@ export default function ApprovalTab({ jobEntries, approvalActions }: ApprovalTab
                     <td className="px-4 py-3 uppercase">{entry.itemName}</td>
                     <td className="px-4 py-3 uppercase">{JOB_TYPE_LABELS[entry.jobType]}</td>
                     <td className="px-4 py-3 font-mono">Rp {entry.total.toLocaleString('id-ID')}</td>
-                    <td className="px-4 py-3 font-mono text-emerald-700">{entry.paymentDate}</td>
+                    <td className="px-4 py-3 font-mono text-emerald-700">{entry.paymentDate ? formatDateLabel(entry.paymentDate) : '-'}</td>
                   </tr>
                 ))}
               </tbody>

@@ -1,6 +1,7 @@
 import { Plus } from 'lucide-react';
 import { JobEntry, JobPriceListItem, JobType } from '../../types';
 import { useJobEntryActions } from '../../hooks/useJobEntryActions';
+import { formatDateLabel } from '../../lib/date';
 
 interface OperationalTabProps {
   jobEntries: JobEntry[];
@@ -82,7 +83,7 @@ export default function OperationalTab({ jobEntries, jobPriceList, jobEntryActio
               jobEntries.map((entry) => (
                 <tr key={entry.id} className="text-xs font-bold">
                   <td className="px-4 py-3 text-black uppercase">{entry.employeeName}</td>
-                  <td className="px-4 py-3 font-mono text-zinc-600">{entry.entryDate}</td>
+                  <td className="px-4 py-3 font-mono text-zinc-600">{formatDateLabel(entry.entryDate)}</td>
                   <td className="px-4 py-3 uppercase">{entry.itemName}</td>
                   <td className="px-4 py-3 uppercase">{JOB_TYPE_LABELS[entry.jobType]}</td>
                   <td className="px-4 py-3 font-mono">{entry.quantity}</td>

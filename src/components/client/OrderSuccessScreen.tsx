@@ -1,6 +1,7 @@
 import { Check, Phone } from 'lucide-react';
 import { PublicOrder } from '../../types';
 import QRISCode from '../QRISCode';
+import { formatDateLabel } from '../../lib/date';
 
 interface OrderSuccessScreenProps {
   completedOrder: PublicOrder;
@@ -22,7 +23,7 @@ const triggerWhatsAppRedirect = (order: PublicOrder) => {
 *Detail Penyewa:*
 Nama: ${order.customerName}
 WhatsApp: ${order.customerWhatsApp}
-Periode: ${order.startDate} s/d ${order.endDate} (${order.rentDuration} Hari)
+Periode: ${formatDateLabel(order.startDate)} s/d ${formatDateLabel(order.endDate)} (${order.rentDuration} Hari)
 
 *Peralatan Yang Disewa:*
 ${itemLines}
@@ -87,7 +88,7 @@ export default function OrderSuccessScreen({ completedOrder, onReset }: OrderSuc
             <div className="text-xs space-y-2 text-zinc-800 uppercase font-bold">
               <div className="flex justify-between">
                 <span>Durasi Sewa ({completedOrder.rentDuration} Hari):</span>
-                <strong className="text-black font-mono">{completedOrder.startDate} s/d {completedOrder.endDate}</strong>
+                <strong className="text-black font-mono">{formatDateLabel(completedOrder.startDate)} s/d {formatDateLabel(completedOrder.endDate)}</strong>
               </div>
               <div className="flex justify-between">
                 <span>Nama Penyewa:</span>

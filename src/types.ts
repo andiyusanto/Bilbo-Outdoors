@@ -35,7 +35,7 @@ export interface OrderItem {
   legacyDiscountThresholdDays?: number;
 }
 
-export type OrderStatus = 'Pending' | 'Approved/Paid' | 'Item Picked Up' | 'Item Returned/Completed';
+export type OrderStatus = 'Pending' | 'Approved/Paid' | 'Item Picked Up' | 'Item Returned/Completed' | 'Expired';
 
 export interface Order {
   id: string;
@@ -108,6 +108,8 @@ export interface JobPriceListItem {
   cleaningPrice?: number; // undefined where this service doesn't apply to this item
   laundryPrice?: number;
   inventarisPrice?: number;
+  active: boolean; // default true - read as `!== false` everywhere, never `!item.active`, so rows written before this field existed are never misread as inactive
+  productIds?: string[]; // Product.id[] this row was derived from at creation time; absent on legacy freeform rows; provenance only, not a live FK - itemName (snapshotted onto JobEntry) remains the sole operative field for pricing lookups
 }
 
 export type JobType = 'CLEANING' | 'LAUNDRY' | 'INVENTARIS';

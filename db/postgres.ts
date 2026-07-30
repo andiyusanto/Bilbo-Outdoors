@@ -98,11 +98,11 @@ export async function seedPostgresIfEmpty(): Promise<void> {
   if (jobPricesCountRes.rows[0].count === 0) {
     const params: any[] = [];
     defaultJobPriceList.forEach((j) => {
-      params.push(j.id, j.itemName, j.cleaningPrice ?? null, j.laundryPrice ?? null, j.inventarisPrice ?? null);
+      params.push(j.id, j.itemName, j.cleaningPrice ?? null, j.laundryPrice ?? null, j.inventarisPrice ?? null, j.active ?? true, j.productIds && j.productIds.length > 0 ? j.productIds : null);
     });
     await pool.query(
-      `INSERT INTO job_price_list (id, item_name, cleaning_price, laundry_price, inventaris_price)
-       VALUES ${buildValuesClause(defaultJobPriceList.length, 5)}
+      `INSERT INTO job_price_list (id, item_name, cleaning_price, laundry_price, inventaris_price, active, product_ids)
+       VALUES ${buildValuesClause(defaultJobPriceList.length, 7)}
        ON CONFLICT (id) DO NOTHING`,
       params
     );
@@ -208,6 +208,8 @@ function rowToJobPriceItem(row: any): JobPriceListItem {
     cleaningPrice: row.cleaning_price !== null && row.cleaning_price !== undefined ? Number(row.cleaning_price) : undefined,
     laundryPrice: row.laundry_price !== null && row.laundry_price !== undefined ? Number(row.laundry_price) : undefined,
     inventarisPrice: row.inventaris_price !== null && row.inventaris_price !== undefined ? Number(row.inventaris_price) : undefined,
+    active: row.active !== null && row.active !== undefined ? Boolean(row.active) : true,
+    productIds: row.product_ids && row.product_ids.length > 0 ? row.product_ids : undefined,
   };
 }
 
@@ -327,16 +329,18 @@ export async function writeDBPostgres(data: { products: Product[]; orders: Order
     if (data.jobPriceList.length > 0) {
       const params: any[] = [];
       data.jobPriceList.forEach((j) => {
-        params.push(j.id, j.itemName, j.cleaningPrice ?? null, j.laundryPrice ?? null, j.inventarisPrice ?? null);
+        params.push(j.id, j.itemName, j.cleaningPrice ?? null, j.laundryPrice ?? null, j.inventarisPrice ?? null, j.active !== undefined ? j.active : true, j.productIds && j.productIds.length > 0 ? j.productIds : null);
       });
       await client.query(
-        `INSERT INTO job_price_list (id, item_name, cleaning_price, laundry_price, inventaris_price)
-         VALUES ${buildValuesClause(data.jobPriceList.length, 5)}
+        `INSERT INTO job_price_list (id, item_name, cleaning_price, laundry_price, inventaris_price, active, product_ids)
+         VALUES ${buildValuesClause(data.jobPriceList.length, 7)}
          ON CONFLICT (id) DO UPDATE SET
            item_name = EXCLUDED.item_name,
            cleaning_price = EXCLUDED.cleaning_price,
            laundry_price = EXCLUDED.laundry_price,
-           inventaris_price = EXCLUDED.inventaris_price`,
+           inventaris_price = EXCLUDED.inventaris_price,
+           active = EXCLUDED.active,
+           product_ids = EXCLUDED.product_ids`,
         params
       );
     }

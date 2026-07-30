@@ -34,7 +34,13 @@ export default function OperationalTab({ jobEntries, jobPriceList, jobEntryActio
     openEditEntryModal,
   } = jobEntryActions;
 
-  const selectedItem = jobPriceList.find((j) => j.itemName === entryFormData.itemName);
+  // Inactive items are hidden from new entries, but a Pending entry already
+  // referencing a since-deactivated item must keep showing it while being
+  // edited - otherwise the <select> silently desyncs from entryFormData.itemName.
+  const visibleJobPriceList = jobPriceList.filter(
+    (item) => item.active !== false || item.itemName === entryFormData.itemName
+  );
+  const selectedItem = visibleJobPriceList.find((j) => j.itemName === entryFormData.itemName);
   const availableJobTypes = (['CLEANING', 'LAUNDRY', 'INVENTARIS'] as JobType[]).filter(
     (jt) => selectedItem && priceFor(selectedItem, jt) !== undefined
   );
@@ -148,7 +154,7 @@ export default function OperationalTab({ jobEntries, jobPriceList, jobEntryActio
                   className="mt-1 block w-full rounded-none border-2 border-black px-3 py-2.5 text-xs font-black uppercase tracking-wider focus:bg-brand/10 focus:outline-none cursor-pointer"
                 >
                   <option value="">PILIH ITEM</option>
-                  {jobPriceList.map((item) => (
+                  {visibleJobPriceList.map((item) => (
                     <option key={item.id} value={item.itemName}>{item.itemName}</option>
                   ))}
                 </select>

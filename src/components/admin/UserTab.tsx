@@ -90,8 +90,8 @@ export default function UserTab({ users, userActions }: UserTabProps) {
                   required
                   value={userFormData.displayName}
                   onChange={(e) => setUserFormData({ ...userFormData, displayName: e.target.value })}
-                  placeholder="CONTOH: FACHRUL ROZI"
-                  className="mt-1 block w-full rounded-none border-2 border-black px-3 py-2.5 text-xs font-black uppercase tracking-wider focus:bg-brand/10 focus:outline-none"
+                  placeholder="Contoh: Fachrul Rozi"
+                  className="mt-1 block w-full rounded-none border-2 border-black px-3 py-2.5 text-xs font-black tracking-wider focus:bg-brand/10 focus:outline-none"
                 />
               </div>
 

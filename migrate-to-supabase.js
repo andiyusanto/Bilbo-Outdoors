@@ -185,14 +185,16 @@ async function runMigration() {
       console.log('\n📥 Migrating Job Price List...');
       for (const item of jobPriceList) {
         await client.query(
-          `INSERT INTO job_price_list (id, item_name, cleaning_price, laundry_price, inventaris_price)
-           VALUES ($1, $2, $3, $4, $5)
+          `INSERT INTO job_price_list (id, item_name, cleaning_price, laundry_price, inventaris_price, active, product_ids)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
            ON CONFLICT (id) DO UPDATE SET
              item_name = EXCLUDED.item_name,
              cleaning_price = EXCLUDED.cleaning_price,
              laundry_price = EXCLUDED.laundry_price,
-             inventaris_price = EXCLUDED.inventaris_price`,
-          [item.id, item.itemName, item.cleaningPrice ?? null, item.laundryPrice ?? null, item.inventarisPrice ?? null]
+             inventaris_price = EXCLUDED.inventaris_price,
+             active = EXCLUDED.active,
+             product_ids = EXCLUDED.product_ids`,
+          [item.id, item.itemName, item.cleaningPrice ?? null, item.laundryPrice ?? null, item.inventarisPrice ?? null, item.active ?? true, item.productIds && item.productIds.length > 0 ? item.productIds : null]
         );
       }
       console.log(`   - ${jobPriceList.length} job price list items migrated.`);

@@ -52,7 +52,7 @@ export default function CheckoutForm({
             value={customerName}
             onChange={(e) => setCustomerName(e.target.value)}
             placeholder="Contoh: Budi Santoso"
-            className="mt-1 block w-full rounded-none border-2 border-black px-4 py-2.5 text-xs font-bold focus:bg-brand/10 focus:outline-none bg-white uppercase text-black"
+            className="mt-1 block w-full rounded-none border-2 border-black px-4 py-2.5 text-xs font-bold focus:bg-brand/10 focus:outline-none bg-white text-black"
           />
         </div>
 
@@ -65,7 +65,7 @@ export default function CheckoutForm({
             value={customerWhatsApp}
             onChange={(e) => setCustomerWhatsApp(e.target.value)}
             placeholder="Contoh: 08123456789"
-            className="mt-1 block w-full rounded-none border-2 border-black px-4 py-2.5 text-xs font-bold focus:bg-brand/10 focus:outline-none bg-white uppercase text-black"
+            className="mt-1 block w-full rounded-none border-2 border-black px-4 py-2.5 text-xs font-bold focus:bg-brand/10 focus:outline-none bg-white text-black"
           />
         </div>
 

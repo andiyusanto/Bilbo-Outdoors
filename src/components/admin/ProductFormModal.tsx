@@ -49,8 +49,8 @@ export default function ProductFormModal({
               required
               value={productFormData.name}
               onChange={(e) => setProductFormData({...productFormData, name: e.target.value})}
-              placeholder="CONTOH: COMPASS UL 2P"
-              className="mt-1 block w-full rounded-none border-2 border-black px-3 py-2.5 text-xs font-black uppercase tracking-wider focus:bg-brand/10 focus:outline-none"
+              placeholder="Contoh: Compass UL 2P"
+              className="mt-1 block w-full rounded-none border-2 border-black px-3 py-2.5 text-xs font-black tracking-wider focus:bg-brand/10 focus:outline-none"
             />
           </div>
 

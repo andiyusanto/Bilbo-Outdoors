@@ -26,6 +26,7 @@ export default function OverviewTab({ stats, orders, products }: OverviewTabProp
     approved: orders.filter(o => o.status === 'Approved/Paid').length,
     pickedUp: orders.filter(o => o.status === 'Item Picked Up').length,
     completed: orders.filter(o => o.status === 'Item Returned/Completed').length,
+    expired: orders.filter(o => o.status === 'Expired').length,
   };
 
   return (
@@ -124,6 +125,17 @@ export default function OverviewTab({ stats, orders, products }: OverviewTabProp
               </div>
               <div className="w-full bg-zinc-100 h-3 rounded-none overflow-hidden border border-black">
                 <div className="bg-zinc-400 h-full transition-all duration-500" style={{ width: `${orders.length ? (orderStatsByStatus.completed / orders.length) * 100 : 0}%` }}></div>
+              </div>
+            </div>
+
+            {/* Progress Bar 5 */}
+            <div>
+              <div className="flex justify-between text-xs font-black text-zinc-700 mb-1 uppercase">
+                <span className="flex items-center"><span className="w-2.5 h-2.5 bg-red-500 border border-black rounded-none mr-2"></span>Expired</span>
+                <span className="font-mono">{orderStatsByStatus.expired} ({orders.length ? Math.round((orderStatsByStatus.expired / orders.length) * 100) : 0}%)</span>
+              </div>
+              <div className="w-full bg-zinc-100 h-3 rounded-none overflow-hidden border border-black">
+                <div className="bg-red-500 h-full transition-all duration-500" style={{ width: `${orders.length ? (orderStatsByStatus.expired / orders.length) * 100 : 0}%` }}></div>
               </div>
             </div>
           </div>

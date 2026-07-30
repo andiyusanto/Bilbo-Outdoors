@@ -185,7 +185,9 @@ CREATE TABLE IF NOT EXISTS job_price_list (
   item_name VARCHAR(255) NOT NULL,
   cleaning_price INTEGER,
   laundry_price INTEGER,
-  inventaris_price INTEGER
+  inventaris_price INTEGER,
+  active BOOLEAN NOT NULL DEFAULT true,
+  product_ids VARCHAR(255)[]
 );
 
 -- 7. Membuat Tabel Job Entries (pekerjaan yang dicatat karyawan, untuk approval & pembayaran)
@@ -246,6 +248,12 @@ CREATE TABLE IF NOT EXISTS job_entries (
 > ALTER TABLE orders ADD COLUMN IF NOT EXISTS pickup_id_type VARCHAR(255);
 > ```
 
+> **Sudah pernah menjalankan Step A sebelum kolom `active`/`product_ids` di `job_price_list` ada?** Jalankan ini sekali di SQL Editor yang sama (aman dijalankan berulang) - `active` otomatis mengisi `true` untuk semua baris yang sudah ada saat ALTER dijalankan (item lama tidak pernah tiba-tiba jadi nonaktif), dan `product_ids` (array id dari tabel `products`, dipakai menu "Item Operasional" untuk menyimpan alat rental mana saja yang jadi dasar item harga tersebut) nullable tanpa default - baris lama yang dibuat sebelum fitur ini tetap `NULL` selamanya, tidak ada regresi.
+> ```sql
+> ALTER TABLE job_price_list ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true;
+> ALTER TABLE job_price_list ADD COLUMN IF NOT EXISTS product_ids VARCHAR(255)[];
+> ```
+
 > **Sudah pernah menjalankan Step A sebelum tabel `settings` ada?** Jalankan ini sekali di SQL Editor yang sama (aman dijalankan berulang), **sebelum men-deploy kode baru** - kode aplikasi mengasumsikan tabel ini sudah ada saat boot. Tabel ini menyimpan toleransi keterlambatan (jam) dan jadwal jam buka toko per hari (dipakai kalkulator denda keterlambatan), diatur dari menu "Pengaturan" di admin panel. Baris tunggal (`id = 1`) - `operating_hours` disimpan sebagai JSONB (bukan 7×2 kolom terpisah) karena strukturnya berbentuk objek per-hari yang lebih pas dipetakan langsung ke `WeeklyHours` di `src/types.ts` tanpa kode mapping tambahan.
 > ```sql
 > CREATE TABLE IF NOT EXISTS settings (
@@ -274,7 +282,9 @@ CREATE TABLE IF NOT EXISTS job_entries (
 >   item_name VARCHAR(255) NOT NULL,
 >   cleaning_price INTEGER,
 >   laundry_price INTEGER,
->   inventaris_price INTEGER
+>   inventaris_price INTEGER,
+>   active BOOLEAN NOT NULL DEFAULT true,
+>   product_ids VARCHAR(255)[]
 > );
 >
 > CREATE TABLE IF NOT EXISTS job_entries (

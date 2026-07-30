@@ -187,7 +187,14 @@ export default function OrderDetailPanel({
           <div className="border-t-2 border-black pt-5 space-y-3">
             <h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-wider">Alur Kerja Sewa</h4>
 
-            {order.status === 'Pending' && (
+            {order.status === 'Expired' && (
+              <div className="bg-red-50 border-2 border-red-500 text-red-800 text-xs p-3 rounded-none flex items-start uppercase font-bold">
+                <AlertTriangle className="w-4 h-4 mr-2 shrink-0 mt-0.5" />
+                <span className="normal-case">Pesanan ini sudah kedaluwarsa (tidak dibayar dalam 2 jam) dan berhenti menahan stok. Jika penyewa ternyata sudah membayar, Anda tetap bisa menyetujuinya di bawah ini selama stok masih tersedia.</span>
+              </div>
+            )}
+
+            {(order.status === 'Pending' || order.status === 'Expired') && (
               <button
                 onClick={() => onUpdateStatus(order.id, 'Approved/Paid')}
                 className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs border-2 border-black shadow-[3px_3px_0px_rgba(0,0,0,1)] rounded-none transition-all uppercase tracking-widest cursor-pointer"
@@ -225,7 +232,7 @@ export default function OrderDetailPanel({
                     value={pickupIdTypeCustom}
                     onChange={(e) => setPickupIdTypeCustom(e.target.value)}
                     placeholder="Sebutkan jenis kartu identitas"
-                    className="w-full bg-white border-2 border-black px-3 py-2.5 text-xs font-bold uppercase rounded-none focus:outline-none"
+                    className="w-full bg-white border-2 border-black px-3 py-2.5 text-xs font-bold rounded-none focus:outline-none"
                   />
                 )}
 

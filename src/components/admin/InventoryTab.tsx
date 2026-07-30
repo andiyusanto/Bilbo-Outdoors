@@ -46,10 +46,10 @@ export default function InventoryTab({ products, productActions }: InventoryTabP
             <Search className="w-4 h-4 text-black absolute left-3 top-3.5 stroke-[2.5]" />
             <input
               type="text"
-              placeholder="CARI NAMA / HARGA..."
+              placeholder="Cari nama / harga..."
               value={productSearch}
               onChange={(e) => setProductSearch(e.target.value)}
-              className="pl-9 pr-4 py-2.5 text-xs bg-white border-2 border-black rounded-none focus:bg-brand/10 focus:outline-none w-full sm:w-48 font-black uppercase tracking-wider"
+              className="pl-9 pr-4 py-2.5 text-xs bg-white border-2 border-black rounded-none focus:bg-brand/10 focus:outline-none w-full sm:w-48 font-black tracking-wider"
             />
           </div>
 

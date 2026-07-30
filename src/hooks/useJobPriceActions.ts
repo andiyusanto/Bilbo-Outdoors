@@ -12,6 +12,7 @@ const DEFAULT_JOB_PRICE_FORM = {
   cleaningPrice: '' as number | '',
   laundryPrice: '' as number | '',
   inventarisPrice: '' as number | '',
+  productIds: [] as string[],
 };
 
 export function useJobPriceActions({ token, fetchAdminData }: UseJobPriceActionsParams) {
@@ -40,7 +41,7 @@ export function useJobPriceActions({ token, fetchAdminData }: UseJobPriceActions
   };
 
   const handleDeleteJobPrice = async (id: string) => {
-    if (!confirm('Apakah Anda yakin ingin menghapus item ini dari daftar harga?')) return;
+    if (!confirm('Apakah Anda yakin ingin menghapus PERMANEN item ini dari daftar harga? Tindakan ini tidak bisa dibatalkan - gunakan "Nonaktifkan" jika hanya ingin menyembunyikannya sementara.')) return;
     try {
       const res = await fetch(`/api/job-prices/${id}`, {
         method: 'DELETE',
@@ -51,6 +52,29 @@ export function useJobPriceActions({ token, fetchAdminData }: UseJobPriceActions
     } catch (err: any) {
       alert(`Gagal menghapus item: ${err.message}`);
     }
+  };
+
+  const handleToggleActive = async (item: JobPriceListItem) => {
+    try {
+      const res = await fetch(`/api/job-prices/${item.id}`, {
+        method: 'PUT',
+        headers: jsonAuthHeaders(token),
+        body: JSON.stringify({ active: item.active === false ? true : false })
+      });
+      await parseJsonOrThrow(res);
+      fetchAdminData();
+    } catch (err: any) {
+      alert(`Gagal mengubah status item: ${err.message}`);
+    }
+  };
+
+  const toggleProductId = (productId: string) => {
+    setJobPriceFormData((prev) => ({
+      ...prev,
+      productIds: prev.productIds.includes(productId)
+        ? prev.productIds.filter((id) => id !== productId)
+        : [...prev.productIds, productId],
+    }));
   };
 
   const openAddJobPriceModal = () => {
@@ -66,6 +90,7 @@ export function useJobPriceActions({ token, fetchAdminData }: UseJobPriceActions
       cleaningPrice: item.cleaningPrice ?? '',
       laundryPrice: item.laundryPrice ?? '',
       inventarisPrice: item.inventarisPrice ?? '',
+      productIds: item.productIds ?? [],
     });
     setShowJobPriceModal(true);
   };
@@ -78,6 +103,8 @@ export function useJobPriceActions({ token, fetchAdminData }: UseJobPriceActions
     setJobPriceFormData,
     handleSaveJobPrice,
     handleDeleteJobPrice,
+    handleToggleActive,
+    toggleProductId,
     openAddJobPriceModal,
     openEditJobPriceModal,
   };

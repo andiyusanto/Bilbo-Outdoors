@@ -377,7 +377,12 @@ function calculateAllocatedStock(orders: Order[], products: Product[], startDate
   const allocationMap: Record<string, number> = {};
 
   // Legacy completed orders (no returnedAt) are excluded entirely, same as before.
-  const relevantOrders = orders.filter(o => o.status !== 'Item Returned/Completed' || o.returnedAt);
+  // Expired orders never block stock either - by the time this runs, expireStaleOrders
+  // has already persisted any stale Pending->Expired flip earlier in the same request.
+  const relevantOrders = orders.filter(o =>
+    o.status !== 'Expired' &&
+    (o.status !== 'Item Returned/Completed' || o.returnedAt)
+  );
 
   // Let's iterate through each day of the requested range
   const tempDate = new Date(startReq);
@@ -427,6 +432,31 @@ function calculateAllocatedStock(orders: Order[], products: Product[], startDate
   return allocationMap;
 }
 
+// An order left Pending for more than 2 hours with no payment confirmation is
+// treated as abandoned - it's flipped to Expired so it stops blocking stock and
+// shows up distinctly in the admin order list. No cron/background worker exists
+// in this app (single Express process, no scheduler infra); this mirrors the
+// existing calculate-late lazy-computation pattern, but runs automatically at
+// the top of every route that reads orders, rather than behind an explicit
+// button click, so stock availability and the order list reflect expiry
+// promptly. Each order flips at most once, so repeated calls are self-limiting.
+// Staff can still manually approve payment on an Expired order afterwards (see
+// PUT /api/orders/:id/status's validStatuses) - expiring never revokes stock,
+// it just stops reserving it, and remains reversible.
+const PENDING_ORDER_EXPIRY_MS = 2 * 60 * 60 * 1000;
+
+function expireStaleOrders(db: DbShape): boolean {
+  const now = Date.now();
+  let changed = false;
+  for (const order of db.orders) {
+    if (order.status === 'Pending' && now - new Date(order.createdAt).getTime() > PENDING_ORDER_EXPIRY_MS) {
+      order.status = 'Expired';
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 // Check Availability (Available to clients and admins)
 app.post('/api/check-availability', asyncHandler(async (req, res) => {
   const { startDate, endDate, items } = req.body; // items is optional array of { productId, quantity }
@@ -434,35 +464,40 @@ app.post('/api/check-availability', asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'Missing start date or end date.' });
   }
 
-  const db = await readDB();
-  const allocatedMap = calculateAllocatedStock(db.orders, db.products, startDate, endDate);
+  await withDbLock(async () => {
+    const db = await readDB();
+    if (expireStaleOrders(db)) {
+      await writeDB(db);
+    }
+    const allocatedMap = calculateAllocatedStock(db.orders, db.products, startDate, endDate);
 
-  const availabilityDetails = db.products.map((prod: Product) => {
-    const allocated = allocatedMap[prod.id] || 0;
-    const remaining = Math.max(0, prod.stock - allocated);
+    const availabilityDetails = db.products.map((prod: Product) => {
+      const allocated = allocatedMap[prod.id] || 0;
+      const remaining = Math.max(0, prod.stock - allocated);
 
-    // If the request checked a specific quantity
-    const requestedItem = items?.find((it: any) => it.productId === prod.id);
-    const requestedQty = requestedItem ? Number(requestedItem.quantity) : 0;
-    const isAvailable = remaining >= requestedQty;
+      // If the request checked a specific quantity
+      const requestedItem = items?.find((it: any) => it.productId === prod.id);
+      const requestedQty = requestedItem ? Number(requestedItem.quantity) : 0;
+      const isAvailable = remaining >= requestedQty;
 
-    return {
-      productId: prod.id,
-      name: prod.name,
-      category: prod.category,
-      totalStock: prod.stock,
-      allocated,
-      remaining,
-      requestedQty,
-      isAvailable
-    };
-  });
+      return {
+        productId: prod.id,
+        name: prod.name,
+        category: prod.category,
+        totalStock: prod.stock,
+        allocated,
+        remaining,
+        requestedQty,
+        isAvailable
+      };
+    });
 
-  const overallAvailable = availabilityDetails.every((item: any) => item.requestedQty === 0 || item.isAvailable);
+    const overallAvailable = availabilityDetails.every((item: any) => item.requestedQty === 0 || item.isAvailable);
 
-  res.json({
-    available: overallAvailable,
-    details: availabilityDetails
+    res.json({
+      available: overallAvailable,
+      details: availabilityDetails
+    });
   });
 }));
 
@@ -476,6 +511,9 @@ app.post('/api/orders', asyncHandler(async (req, res) => {
     }
 
     const db = await readDB();
+    if (expireStaleOrders(db)) {
+      await writeDB(db);
+    }
 
     // 1. Re-verify stock availability server-side to guarantee integrity
     const allocatedMap = calculateAllocatedStock(db.orders, db.products, startDate, endDate);
@@ -556,8 +594,13 @@ app.get('/api/orders/confirm/:token', asyncHandler(async (req, res) => {
 
 // Admin: Get all orders
 app.get('/api/orders', authenticateUser, asyncHandler(async (req, res) => {
-  const db = await readDB();
-  res.json(db.orders);
+  await withDbLock(async () => {
+    const db = await readDB();
+    if (expireStaleOrders(db)) {
+      await writeDB(db);
+    }
+    res.json(db.orders);
+  });
 }));
 
 // Admin: Update order status
@@ -566,7 +609,7 @@ app.put('/api/orders/:id/status', authenticateUser, asyncHandler(async (req, res
     const { id } = req.params;
     const { status, pickupIdType } = req.body;
 
-    const validStatuses: OrderStatus[] = ['Pending', 'Approved/Paid', 'Item Picked Up', 'Item Returned/Completed'];
+    const validStatuses: OrderStatus[] = ['Pending', 'Approved/Paid', 'Item Picked Up', 'Item Returned/Completed', 'Expired'];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({ error: 'Invalid order status.' });
     }
@@ -716,29 +759,35 @@ app.put('/api/settings', authenticateUser, requireOwner, asyncHandler(async (req
 
 // Admin: Get Dashboard Stats
 app.get('/api/stats', authenticateUser, requireOwner, asyncHandler(async (req, res) => {
-  const db = await readDB();
-  const orders: Order[] = db.orders;
+  await withDbLock(async () => {
+    const db = await readDB();
+    if (expireStaleOrders(db)) {
+      await writeDB(db);
+    }
+    const orders: Order[] = db.orders;
 
-  const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = new Date().toISOString().split('T')[0];
 
-  // Active rentals = orders that have been approved or items picked up
-  const activeRentalsCount = orders.filter(o => o.status === 'Approved/Paid' || o.status === 'Item Picked Up').length;
+    // Active rentals = orders that have been approved or items picked up
+    const activeRentalsCount = orders.filter(o => o.status === 'Approved/Paid' || o.status === 'Item Picked Up').length;
 
-  // Total Revenue = Sum of totalPrice of all Approved, Picked Up, and Completed orders, plus any late fees
-  const finishedOrPaidOrders = orders.filter(o => o.status !== 'Pending');
-  const totalRevenue = finishedOrPaidOrders.reduce((sum, o) => {
-    return sum + o.totalPrice + (o.lateFee || 0);
-  }, 0);
+    // Total Revenue = Sum of totalPrice of all Approved, Picked Up, and Completed orders, plus any late fees
+    // (Expired orders were never paid, so they're excluded alongside Pending)
+    const finishedOrPaidOrders = orders.filter(o => o.status !== 'Pending' && o.status !== 'Expired');
+    const totalRevenue = finishedOrPaidOrders.reduce((sum, o) => {
+      return sum + o.totalPrice + (o.lateFee || 0);
+    }, 0);
 
-  // Items due for return today = Active orders with EndDate === todayStr or before today and not completed
-  const dueTodayCount = orders.filter(o => {
-    return (o.status === 'Item Picked Up' || o.status === 'Approved/Paid') && (o.endDate <= todayStr);
-  }).length;
+    // Items due for return today = Active orders with EndDate === todayStr or before today and not completed
+    const dueTodayCount = orders.filter(o => {
+      return (o.status === 'Item Picked Up' || o.status === 'Approved/Paid') && (o.endDate <= todayStr);
+    }).length;
 
-  res.json({
-    activeRentalsCount,
-    totalRevenue,
-    dueTodayCount
+    res.json({
+      activeRentalsCount,
+      totalRevenue,
+      dueTodayCount
+    });
   });
 }));
 
@@ -751,17 +800,26 @@ app.get('/api/job-prices', authenticateUser, asyncHandler(async (req, res) => {
 
 app.post('/api/job-prices', authenticateUser, requireOwner, asyncHandler(async (req, res) => {
   await withDbLock(async () => {
-    const { itemName, cleaningPrice, laundryPrice, inventarisPrice } = req.body;
+    const { itemName, cleaningPrice, laundryPrice, inventarisPrice, productIds } = req.body;
     if (!itemName) {
       return res.status(400).json({ error: 'Missing item name.' });
     }
+    if (!Array.isArray(productIds) || productIds.length === 0) {
+      return res.status(400).json({ error: 'Pilih minimal satu alat dari katalog rental.' });
+    }
     const db = await readDB();
+    const invalidId = productIds.find((pid: string) => !db.products.some((p: Product) => p.id === pid));
+    if (invalidId) {
+      return res.status(400).json({ error: `Product with ID ${invalidId} not found.` });
+    }
     const newItem: JobPriceListItem = {
       id: `job-price-${Date.now()}`,
       itemName,
       cleaningPrice: cleaningPrice !== undefined && cleaningPrice !== '' ? Number(cleaningPrice) : undefined,
       laundryPrice: laundryPrice !== undefined && laundryPrice !== '' ? Number(laundryPrice) : undefined,
       inventarisPrice: inventarisPrice !== undefined && inventarisPrice !== '' ? Number(inventarisPrice) : undefined,
+      active: true,
+      productIds,
     };
     db.jobPriceList.push(newItem);
     await writeDB(db);
@@ -772,7 +830,7 @@ app.post('/api/job-prices', authenticateUser, requireOwner, asyncHandler(async (
 app.put('/api/job-prices/:id', authenticateUser, requireOwner, asyncHandler(async (req, res) => {
   await withDbLock(async () => {
     const { id } = req.params;
-    const { itemName, cleaningPrice, laundryPrice, inventarisPrice } = req.body;
+    const { itemName, cleaningPrice, laundryPrice, inventarisPrice, active, productIds } = req.body;
     const db = await readDB();
     const idx = db.jobPriceList.findIndex((j: JobPriceListItem) => j.id === id);
     if (idx === -1) {
@@ -785,6 +843,8 @@ app.put('/api/job-prices/:id', authenticateUser, requireOwner, asyncHandler(asyn
       cleaningPrice: cleaningPrice !== undefined ? (cleaningPrice === '' ? undefined : Number(cleaningPrice)) : existing.cleaningPrice,
       laundryPrice: laundryPrice !== undefined ? (laundryPrice === '' ? undefined : Number(laundryPrice)) : existing.laundryPrice,
       inventarisPrice: inventarisPrice !== undefined ? (inventarisPrice === '' ? undefined : Number(inventarisPrice)) : existing.inventarisPrice,
+      active: active !== undefined ? active : existing.active,
+      productIds: productIds !== undefined ? productIds : existing.productIds,
     };
     await writeDB(db);
     res.json(db.jobPriceList[idx]);

@@ -50,10 +50,10 @@ export default function OrdersTab({ orders, orderActions }: OrdersTabProps) {
             <Search className="w-4 h-4 text-black absolute left-3 top-3.5 stroke-[2.5]" />
             <input
               type="text"
-              placeholder="CARI NAMA / WHATSAPP..."
+              placeholder="Cari nama / WhatsApp..."
               value={orderSearch}
               onChange={(e) => setOrderSearch(e.target.value)}
-              className="pl-9 pr-4 py-2.5 text-xs bg-white border-2 border-black rounded-none focus:bg-brand/10 focus:outline-none w-full sm:w-48 font-black uppercase tracking-wider"
+              className="pl-9 pr-4 py-2.5 text-xs bg-white border-2 border-black rounded-none focus:bg-brand/10 focus:outline-none w-full sm:w-48 font-black tracking-wider"
             />
           </div>
 
@@ -68,6 +68,7 @@ export default function OrdersTab({ orders, orderActions }: OrdersTabProps) {
             <option value="Approved/Paid">APPROVED/PAID</option>
             <option value="Item Picked Up">ITEM PICKED UP</option>
             <option value="Item Returned/Completed">RETURNED/COMPLETED</option>
+            <option value="Expired">EXPIRED</option>
           </select>
         </div>
       </div>
@@ -125,6 +126,7 @@ export default function OrdersTab({ orders, orderActions }: OrdersTabProps) {
                         order.status === 'Pending' ? 'bg-amber-400 text-black' :
                         order.status === 'Approved/Paid' ? 'bg-brand text-black' :
                         order.status === 'Item Picked Up' ? 'bg-black text-white' :
+                        order.status === 'Expired' ? 'bg-red-100 text-red-700' :
                         'bg-zinc-200 text-zinc-800'
                       }`}>
                         {order.status}

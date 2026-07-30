@@ -10,6 +10,7 @@ import {
   CheckSquare,
   Users,
   KeyRound,
+  Tags,
 } from 'lucide-react';
 import { useAdminAuth } from '../hooks/useAdminAuth';
 import { useAdminData } from '../hooks/useAdminData';
@@ -28,6 +29,7 @@ import InventoryTab from './admin/InventoryTab';
 import SettingsTab from './admin/SettingsTab';
 import UserTab from './admin/UserTab';
 import OperationalTab from './admin/OperationalTab';
+import OperationalItemsTab from './admin/OperationalItemsTab';
 import ApprovalTab from './admin/ApprovalTab';
 import ChangePasswordModal from './admin/ChangePasswordModal';
 import bilboIcon from '../assets/bilbo-icon.png';
@@ -206,6 +208,13 @@ export default function AdminPanel() {
           )}
 
           {isOwner && (
+            <NavLink to="/admin/operational-items" className={NAV_LINK_CLASS}>
+              <Tags className="w-4 h-4 text-black stroke-[2.5]" />
+              <span>Item Operasional</span>
+            </NavLink>
+          )}
+
+          {isOwner && (
             <NavLink to="/admin/settings" className={NAV_LINK_CLASS}>
               <Settings className="w-4 h-4 text-black stroke-[2.5]" />
               <span>Pengaturan</span>
@@ -250,8 +259,14 @@ export default function AdminPanel() {
             )}
             {isOwner && (
               <Route
+                path="operational-items"
+                element={<OperationalItemsTab jobPriceList={data.jobPriceList} jobPriceActions={jobPriceActions} products={data.products} />}
+              />
+            )}
+            {isOwner && (
+              <Route
                 path="settings"
-                element={<SettingsTab settings={data.settings} settingsActions={settingsActions} jobPriceList={data.jobPriceList} jobPriceActions={jobPriceActions} />}
+                element={<SettingsTab settings={data.settings} settingsActions={settingsActions} />}
               />
             )}
             {isOwner && (

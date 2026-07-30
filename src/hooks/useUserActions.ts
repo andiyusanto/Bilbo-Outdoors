@@ -1,6 +1,8 @@
 import { useState, Dispatch, SetStateAction, FormEvent } from 'react';
 import { PublicUser, UserRole } from '../types';
 import { jsonAuthHeaders, parseJsonOrThrow } from '../lib/api';
+import { useLoading } from '../contexts/LoadingContext';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface UseUserActionsParams {
   token: string;
@@ -18,23 +20,27 @@ const DEFAULT_USER_FORM = {
 export function useUserActions({ token, fetchAdminData }: UseUserActionsParams) {
   const [showUserModal, setShowUserModal] = useState<boolean>(false);
   const [userFormData, setUserFormData] = useState(DEFAULT_USER_FORM);
+  const { withLoading } = useLoading();
+  const { notifySuccess, notifyError } = useNotification();
 
   const handleSaveUser = async (e: FormEvent) => {
     e.preventDefault();
-    try {
-      const res = await fetch('/api/users', {
-        method: 'POST',
-        headers: jsonAuthHeaders(token),
-        body: JSON.stringify(userFormData)
-      });
-      await parseJsonOrThrow(res);
-      alert('User baru berhasil ditambahkan!');
-      setShowUserModal(false);
-      setUserFormData(DEFAULT_USER_FORM);
-      fetchAdminData();
-    } catch (err: any) {
-      alert(`Gagal menambahkan user: ${err.message}`);
-    }
+    await withLoading(async () => {
+      try {
+        const res = await fetch('/api/users', {
+          method: 'POST',
+          headers: jsonAuthHeaders(token),
+          body: JSON.stringify(userFormData)
+        });
+        await parseJsonOrThrow(res);
+        notifySuccess('User baru berhasil ditambahkan!');
+        setShowUserModal(false);
+        setUserFormData(DEFAULT_USER_FORM);
+        fetchAdminData();
+      } catch (err: any) {
+        notifyError(`Gagal menambahkan user: ${err.message}`);
+      }
+    });
   };
 
   const openAddUserModal = () => {

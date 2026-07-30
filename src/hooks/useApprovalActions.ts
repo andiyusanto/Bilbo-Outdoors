@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { jsonAuthHeaders, parseJsonOrThrow } from '../lib/api';
+import { useLoading } from '../contexts/LoadingContext';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface UseApprovalActionsParams {
   token: string;
@@ -17,22 +19,26 @@ export function useApprovalActions({ token, fetchAdminData }: UseApprovalActions
   };
 
   const clearSelection = () => setSelectedIds([]);
+  const { withLoading } = useLoading();
+  const { notifySuccess, notifyError } = useNotification();
 
   const handleApproveBatch = async () => {
     if (selectedIds.length === 0) return;
-    try {
-      const res = await fetch('/api/job-entries/approve-batch', {
-        method: 'PUT',
-        headers: jsonAuthHeaders(token),
-        body: JSON.stringify({ ids: selectedIds, paymentDate: paymentDateInput })
-      });
-      const data = await parseJsonOrThrow(res);
-      alert(`${data.updatedCount} pekerjaan berhasil disetujui & dibayar!`);
-      clearSelection();
-      fetchAdminData();
-    } catch (err: any) {
-      alert(`Gagal memproses pembayaran: ${err.message}`);
-    }
+    await withLoading(async () => {
+      try {
+        const res = await fetch('/api/job-entries/approve-batch', {
+          method: 'PUT',
+          headers: jsonAuthHeaders(token),
+          body: JSON.stringify({ ids: selectedIds, paymentDate: paymentDateInput })
+        });
+        const data = await parseJsonOrThrow(res);
+        notifySuccess(`${data.updatedCount} pekerjaan berhasil disetujui & dibayar!`);
+        clearSelection();
+        fetchAdminData();
+      } catch (err: any) {
+        notifyError(`Gagal memproses pembayaran: ${err.message}`);
+      }
+    });
   };
 
   return {

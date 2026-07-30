@@ -1,6 +1,7 @@
 import { useState, FormEvent, Dispatch, SetStateAction } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { JSON_HEADERS, parseJsonOrThrow } from '../lib/api';
+import { useLoading } from '../contexts/LoadingContext';
 
 interface UseOrderSubmissionParams {
   cart: Record<string, number>;
@@ -26,6 +27,7 @@ export function useOrderSubmission({
   const navigate = useNavigate();
   const [checkoutError, setCheckoutError] = useState<string>('');
   const [submittingOrder, setSubmittingOrder] = useState<boolean>(false);
+  const { withLoading } = useLoading();
 
   const handleCheckout = async (e: FormEvent) => {
     e.preventDefault();
@@ -48,30 +50,32 @@ export function useOrderSubmission({
 
     setSubmittingOrder(true);
     try {
-      const orderItems = Object.entries(cart).map(([productId, quantity]) => ({
-        productId,
-        quantity
-      }));
+      await withLoading(async () => {
+        const orderItems = Object.entries(cart).map(([productId, quantity]) => ({
+          productId,
+          quantity
+        }));
 
-      const payload = {
-        customerName,
-        customerWhatsApp,
-        startDate,
-        endDate,
-        items: orderItems,
-        personalPhotoBase64
-      };
+        const payload = {
+          customerName,
+          customerWhatsApp,
+          startDate,
+          endDate,
+          items: orderItems,
+          personalPhotoBase64
+        };
 
-      const res = await fetch('/api/orders', {
-        method: 'POST',
-        headers: JSON_HEADERS,
-        body: JSON.stringify(payload)
+        const res = await fetch('/api/orders', {
+          method: 'POST',
+          headers: JSON_HEADERS,
+          body: JSON.stringify(payload)
+        });
+
+        const data = await parseJsonOrThrow(res, 'Gagal mengirim pesanan');
+
+        setCart({}); // clear cart
+        navigate(`/pesanan/${data.confirmationToken}`);
       });
-
-      const data = await parseJsonOrThrow(res, 'Gagal mengirim pesanan');
-
-      setCart({}); // clear cart
-      navigate(`/pesanan/${data.confirmationToken}`);
     } catch (err: any) {
       setCheckoutError(err.message || 'Terjadi kesalahan sistem saat memproses pemesanan.');
     } finally {

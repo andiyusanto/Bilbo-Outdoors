@@ -1,6 +1,8 @@
 import { useState, FormEvent } from 'react';
 import { JobPriceListItem } from '../types';
 import { jsonAuthHeaders, authHeaders, parseJsonOrThrow } from '../lib/api';
+import { useLoading } from '../contexts/LoadingContext';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface UseJobPriceActionsParams {
   token: string;
@@ -19,53 +21,61 @@ export function useJobPriceActions({ token, fetchAdminData }: UseJobPriceActions
   const [showJobPriceModal, setShowJobPriceModal] = useState<boolean>(false);
   const [editingJobPrice, setEditingJobPrice] = useState<JobPriceListItem | null>(null);
   const [jobPriceFormData, setJobPriceFormData] = useState(DEFAULT_JOB_PRICE_FORM);
+  const { withLoading } = useLoading();
+  const { notifyError, confirmAction } = useNotification();
 
   const handleSaveJobPrice = async (e: FormEvent) => {
     e.preventDefault();
-    try {
-      const method = editingJobPrice ? 'PUT' : 'POST';
-      const url = editingJobPrice ? `/api/job-prices/${editingJobPrice.id}` : '/api/job-prices';
-      const res = await fetch(url, {
-        method,
-        headers: jsonAuthHeaders(token),
-        body: JSON.stringify(jobPriceFormData)
-      });
-      await parseJsonOrThrow(res);
-      setShowJobPriceModal(false);
-      setEditingJobPrice(null);
-      setJobPriceFormData(DEFAULT_JOB_PRICE_FORM);
-      fetchAdminData();
-    } catch (err: any) {
-      alert(`Gagal menyimpan harga pekerjaan: ${err.message}`);
-    }
+    await withLoading(async () => {
+      try {
+        const method = editingJobPrice ? 'PUT' : 'POST';
+        const url = editingJobPrice ? `/api/job-prices/${editingJobPrice.id}` : '/api/job-prices';
+        const res = await fetch(url, {
+          method,
+          headers: jsonAuthHeaders(token),
+          body: JSON.stringify(jobPriceFormData)
+        });
+        await parseJsonOrThrow(res);
+        setShowJobPriceModal(false);
+        setEditingJobPrice(null);
+        setJobPriceFormData(DEFAULT_JOB_PRICE_FORM);
+        fetchAdminData();
+      } catch (err: any) {
+        notifyError(`Gagal menyimpan harga pekerjaan: ${err.message}`);
+      }
+    });
   };
 
   const handleDeleteJobPrice = async (id: string) => {
-    if (!confirm('Apakah Anda yakin ingin menghapus PERMANEN item ini dari daftar harga? Tindakan ini tidak bisa dibatalkan - gunakan "Nonaktifkan" jika hanya ingin menyembunyikannya sementara.')) return;
-    try {
-      const res = await fetch(`/api/job-prices/${id}`, {
-        method: 'DELETE',
-        headers: authHeaders(token)
-      });
-      await parseJsonOrThrow(res);
-      fetchAdminData();
-    } catch (err: any) {
-      alert(`Gagal menghapus item: ${err.message}`);
-    }
+    if (!(await confirmAction('Apakah Anda yakin ingin menghapus PERMANEN item ini dari daftar harga? Tindakan ini tidak bisa dibatalkan - gunakan "Nonaktifkan" jika hanya ingin menyembunyikannya sementara.'))) return;
+    await withLoading(async () => {
+      try {
+        const res = await fetch(`/api/job-prices/${id}`, {
+          method: 'DELETE',
+          headers: authHeaders(token)
+        });
+        await parseJsonOrThrow(res);
+        fetchAdminData();
+      } catch (err: any) {
+        notifyError(`Gagal menghapus item: ${err.message}`);
+      }
+    });
   };
 
   const handleToggleActive = async (item: JobPriceListItem) => {
-    try {
-      const res = await fetch(`/api/job-prices/${item.id}`, {
-        method: 'PUT',
-        headers: jsonAuthHeaders(token),
-        body: JSON.stringify({ active: item.active === false ? true : false })
-      });
-      await parseJsonOrThrow(res);
-      fetchAdminData();
-    } catch (err: any) {
-      alert(`Gagal mengubah status item: ${err.message}`);
-    }
+    await withLoading(async () => {
+      try {
+        const res = await fetch(`/api/job-prices/${item.id}`, {
+          method: 'PUT',
+          headers: jsonAuthHeaders(token),
+          body: JSON.stringify({ active: item.active === false ? true : false })
+        });
+        await parseJsonOrThrow(res);
+        fetchAdminData();
+      } catch (err: any) {
+        notifyError(`Gagal mengubah status item: ${err.message}`);
+      }
+    });
   };
 
   const toggleProductId = (productId: string) => {

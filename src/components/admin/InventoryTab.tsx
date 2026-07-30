@@ -2,8 +2,10 @@ import { useState } from 'react';
 import { Plus, Edit3, Trash2, Search, ZoomIn } from 'lucide-react';
 import { Product } from '../../types';
 import { useProductActions } from '../../hooks/useProductActions';
+import { getDistinctCategories } from '../../lib/categories';
 import ProductFormModal from './ProductFormModal';
 import ImagePreviewModal from '../ImagePreviewModal';
+import CategoryFilterTabs from '../client/CategoryFilterTabs';
 import bilboIcon from '../../assets/bilbo-icon.png';
 
 interface InventoryTabProps {
@@ -27,10 +29,14 @@ export default function InventoryTab({ products, productActions }: InventoryTabP
 
   const [productSearch, setProductSearch] = useState<string>('');
   const [previewImage, setPreviewImage] = useState<{ url: string; alt: string } | null>(null);
+  const [activeCategory, setActiveCategory] = useState<string>('ALL');
+
+  const categories = ['ALL', ...getDistinctCategories(products)];
 
   const filteredProducts = products.filter(p =>
-    p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
-    Object.values(p.rates).some(v => v.toString().includes(productSearch))
+    (activeCategory === 'ALL' || p.category === activeCategory) &&
+    (p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
+      Object.values(p.rates).some(v => v.toString().includes(productSearch)))
   );
 
   return (
@@ -63,11 +69,17 @@ export default function InventoryTab({ products, productActions }: InventoryTabP
         </div>
       </div>
 
+      <CategoryFilterTabs
+        categories={categories}
+        activeCategory={activeCategory}
+        setActiveCategory={setActiveCategory}
+      />
+
       {/* Grid of Products */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredProducts.length === 0 ? (
           <div className="col-span-full py-16 text-center text-xs text-zinc-400 font-bold uppercase border-2 border-black bg-zinc-50">
-            {products.length === 0 ? 'Stok alat camping kosong.' : 'Tidak ada alat camping yang cocok dengan pencarian.'}
+            {products.length === 0 ? 'Stok alat camping kosong.' : 'Tidak ada alat camping yang cocok dengan pencarian atau kategori.'}
           </div>
         ) : (
           filteredProducts.map((prod) => (
@@ -170,6 +182,7 @@ export default function InventoryTab({ products, productActions }: InventoryTabP
           editingProduct={editingProduct}
           productFormData={productFormData}
           setProductFormData={setProductFormData}
+          categories={getDistinctCategories(products)}
           onSubmit={handleSaveProduct}
           onClose={() => setShowProductModal(false)}
         />

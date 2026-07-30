@@ -1,6 +1,7 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { JSON_HEADERS, authHeaders, parseJsonOrThrow } from '../lib/api';
 import { UserRole } from '../types';
+import { useLoading } from '../contexts/LoadingContext';
 
 export function useAdminAuth() {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
@@ -10,6 +11,7 @@ export function useAdminAuth() {
   const [token, setToken] = useState<string>('');
   const [role, setRole] = useState<UserRole | ''>('');
   const [displayName, setDisplayName] = useState<string>('');
+  const { withLoading } = useLoading();
 
   // Load existing session
   useEffect(() => {
@@ -28,19 +30,21 @@ export function useAdminAuth() {
     e.preventDefault();
     setLoginError('');
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: JSON_HEADERS,
-        body: JSON.stringify({ username: usernameInput, password: passwordInput })
+      await withLoading(async () => {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: JSON_HEADERS,
+          body: JSON.stringify({ username: usernameInput, password: passwordInput })
+        });
+        const data = await parseJsonOrThrow(res, 'Login failed');
+        localStorage.setItem('bilbo_admin_token', data.token);
+        localStorage.setItem('bilbo_admin_role', data.role);
+        localStorage.setItem('bilbo_admin_display_name', data.displayName);
+        setToken(data.token);
+        setRole(data.role);
+        setDisplayName(data.displayName);
+        setIsLoggedIn(true);
       });
-      const data = await parseJsonOrThrow(res, 'Login failed');
-      localStorage.setItem('bilbo_admin_token', data.token);
-      localStorage.setItem('bilbo_admin_role', data.role);
-      localStorage.setItem('bilbo_admin_display_name', data.displayName);
-      setToken(data.token);
-      setRole(data.role);
-      setDisplayName(data.displayName);
-      setIsLoggedIn(true);
     } catch (err: any) {
       setLoginError(err.message || 'Error logging in');
     }

@@ -1,6 +1,8 @@
 import { useState, FormEvent } from 'react';
 import { JobEntry, JobType } from '../types';
 import { jsonAuthHeaders, parseJsonOrThrow } from '../lib/api';
+import { useLoading } from '../contexts/LoadingContext';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface UseJobEntryActionsParams {
   token: string;
@@ -18,26 +20,30 @@ export function useJobEntryActions({ token, fetchAdminData }: UseJobEntryActions
   const [showEntryModal, setShowEntryModal] = useState<boolean>(false);
   const [editingEntry, setEditingEntry] = useState<JobEntry | null>(null);
   const [entryFormData, setEntryFormData] = useState(DEFAULT_ENTRY_FORM);
+  const { withLoading } = useLoading();
+  const { notifySuccess, notifyError } = useNotification();
 
   const handleSaveEntry = async (e: FormEvent) => {
     e.preventDefault();
-    try {
-      const method = editingEntry ? 'PUT' : 'POST';
-      const url = editingEntry ? `/api/job-entries/${editingEntry.id}` : '/api/job-entries';
-      const res = await fetch(url, {
-        method,
-        headers: jsonAuthHeaders(token),
-        body: JSON.stringify(entryFormData)
-      });
-      await parseJsonOrThrow(res);
-      alert(editingEntry ? 'Pekerjaan berhasil diperbarui!' : 'Pekerjaan berhasil dicatat!');
-      setShowEntryModal(false);
-      setEditingEntry(null);
-      setEntryFormData(DEFAULT_ENTRY_FORM);
-      fetchAdminData();
-    } catch (err: any) {
-      alert(`Gagal menyimpan pekerjaan: ${err.message}`);
-    }
+    await withLoading(async () => {
+      try {
+        const method = editingEntry ? 'PUT' : 'POST';
+        const url = editingEntry ? `/api/job-entries/${editingEntry.id}` : '/api/job-entries';
+        const res = await fetch(url, {
+          method,
+          headers: jsonAuthHeaders(token),
+          body: JSON.stringify(entryFormData)
+        });
+        await parseJsonOrThrow(res);
+        notifySuccess(editingEntry ? 'Pekerjaan berhasil diperbarui!' : 'Pekerjaan berhasil dicatat!');
+        setShowEntryModal(false);
+        setEditingEntry(null);
+        setEntryFormData(DEFAULT_ENTRY_FORM);
+        fetchAdminData();
+      } catch (err: any) {
+        notifyError(`Gagal menyimpan pekerjaan: ${err.message}`);
+      }
+    });
   };
 
   const openAddEntryModal = () => {

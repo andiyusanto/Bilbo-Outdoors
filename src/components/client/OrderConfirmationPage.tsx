@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { PublicOrder } from '../../types';
 import { parseJsonOrThrow } from '../../lib/api';
 import OrderSuccessScreen from './OrderSuccessScreen';
+import { useLoading } from '../../contexts/LoadingContext';
 
 export default function OrderConfirmationPage() {
   const { token } = useParams<{ token: string }>();
@@ -10,6 +11,7 @@ export default function OrderConfirmationPage() {
   const [order, setOrder] = useState<PublicOrder | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const { withLoading } = useLoading();
 
   useEffect(() => {
     if (!token) {
@@ -18,7 +20,7 @@ export default function OrderConfirmationPage() {
       return;
     }
 
-    (async () => {
+    withLoading(async () => {
       try {
         const res = await fetch(`/api/orders/confirm/${token}`);
         const data = await parseJsonOrThrow(res, 'Pesanan tidak ditemukan.');
@@ -28,7 +30,7 @@ export default function OrderConfirmationPage() {
       } finally {
         setLoading(false);
       }
-    })();
+    });
   }, [token]);
 
   if (loading) {

@@ -2,10 +2,12 @@ import { useState } from 'react';
 import { MapPin, Instagram, Phone } from 'lucide-react';
 import { Product } from '../types';
 import { calculateRentalCost, calculateSavingsFor5Days } from '../pricing';
+import { getDistinctCategories } from '../lib/categories';
 import { useProducts } from '../hooks/useProducts';
 import { useAvailability } from '../hooks/useAvailability';
 import { usePersonalPhotoUpload } from '../hooks/usePersonalPhotoUpload';
 import { useOrderSubmission } from '../hooks/useOrderSubmission';
+import { useNotification } from '../contexts/NotificationContext';
 import DateRangePicker from './client/DateRangePicker';
 import CategoryFilterTabs from './client/CategoryFilterTabs';
 import EquipmentGrid from './client/EquipmentGrid';
@@ -50,22 +52,16 @@ export default function ClientPortal({ onAdminToggle }: ClientPortalProps) {
   // Category filter state
   const [activeCategory, setActiveCategory] = useState<string>('ALL');
 
-  // Categories list
-  const categories = [
-    'ALL',
-    'TENT & SHELTER',
-    'SLEEPING SYSTEM',
-    'CARRIER & BACKPACK',
-    'COOKING GEAR',
-    'LIGHTING & POWER',
-    'HIKING ESSENTIALS',
-    'CAMP SUPPORT',
-    'APPAREL & PERSONAL GEAR'
-  ];
+  // Categories list - derived from live products so newly admin-added
+  // categories (see ProductFormModal's "add new category" flow) show up here
+  // automatically, no separate hardcoded list to keep in sync.
+  const categories = ['ALL', ...getDistinctCategories(products)];
+
+  const { notifyError } = useNotification();
 
   const handleUpdateCart = (productId: string, quantity: number) => {
     if (!startDate || !endDate) {
-      alert('Silakan pilih Tanggal Mulai & Tanggal Selesai sewa terlebih dahulu!');
+      notifyError('Silakan pilih Tanggal Mulai & Tanggal Selesai sewa terlebih dahulu!');
       return;
     }
 

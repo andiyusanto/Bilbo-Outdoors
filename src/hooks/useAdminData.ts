@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Product, Order, DashboardStats, StoreSettings, PublicUser, JobPriceListItem, JobEntry, UserRole } from '../types';
 import { authHeaders, parseJsonOrThrow } from '../lib/api';
+import { useLoading } from '../contexts/LoadingContext';
 
 interface UseAdminDataParams {
   isLoggedIn: boolean;
@@ -35,8 +36,10 @@ export function useAdminData({ isLoggedIn, token, role, onUnauthorized }: UseAdm
   const [jobPriceList, setJobPriceList] = useState<JobPriceListItem[]>([]);
   const [jobEntries, setJobEntries] = useState<JobEntry[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const { withLoading } = useLoading();
 
   const fetchAdminData = async () => {
+    await withLoading(async () => {
     setIsLoading(true);
     try {
       const headers = authHeaders(token);
@@ -85,6 +88,7 @@ export function useAdminData({ isLoggedIn, token, role, onUnauthorized }: UseAdm
     } finally {
       setIsLoading(false);
     }
+    });
   };
 
   // Fetch all admin data

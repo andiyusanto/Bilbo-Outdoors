@@ -1,6 +1,8 @@
 import { useState, Dispatch, SetStateAction, FormEvent } from 'react';
 import { Product } from '../types';
 import { jsonAuthHeaders, authHeaders, parseJsonOrThrow } from '../lib/api';
+import { useLoading } from '../contexts/LoadingContext';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface UseProductActionsParams {
   token: string;
@@ -22,59 +24,67 @@ export function useProductActions({ token, fetchAdminData, setProducts }: UsePro
   const [showProductModal, setShowProductModal] = useState<boolean>(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [productFormData, setProductFormData] = useState(DEFAULT_PRODUCT_FORM);
+  const { withLoading } = useLoading();
+  const { notifySuccess, notifyError, confirmAction } = useNotification();
 
   const handleSaveProduct = async (e: FormEvent) => {
     e.preventDefault();
-    try {
-      const method = editingProduct ? 'PUT' : 'POST';
-      const url = editingProduct ? `/api/products/${editingProduct.id}` : '/api/products';
+    await withLoading(async () => {
+      try {
+        const method = editingProduct ? 'PUT' : 'POST';
+        const url = editingProduct ? `/api/products/${editingProduct.id}` : '/api/products';
 
-      const res = await fetch(url, {
-        method,
-        headers: jsonAuthHeaders(token),
-        body: JSON.stringify(productFormData)
-      });
+        const res = await fetch(url, {
+          method,
+          headers: jsonAuthHeaders(token),
+          body: JSON.stringify(productFormData)
+        });
 
-      await parseJsonOrThrow(res);
+        await parseJsonOrThrow(res);
 
-      alert(editingProduct ? 'Alat camping berhasil diperbarui!' : 'Alat camping baru berhasil ditambahkan!');
-      setShowProductModal(false);
-      setEditingProduct(null);
-      setProductFormData(DEFAULT_PRODUCT_FORM);
-      fetchAdminData();
-    } catch (err: any) {
-      alert(`Gagal menyimpan produk: ${err.message}`);
-    }
+        notifySuccess(editingProduct ? 'Alat camping berhasil diperbarui!' : 'Alat camping baru berhasil ditambahkan!');
+        setShowProductModal(false);
+        setEditingProduct(null);
+        setProductFormData(DEFAULT_PRODUCT_FORM);
+        fetchAdminData();
+      } catch (err: any) {
+        notifyError(`Gagal menyimpan produk: ${err.message}`);
+      }
+    });
   };
 
   const handleDeleteProduct = async (id: string) => {
-    if (!confirm('Apakah Anda yakin ingin menghapus alat camping ini?')) return;
-    try {
-      const res = await fetch(`/api/products/${id}`, {
-        method: 'DELETE',
-        headers: authHeaders(token)
-      });
-      await parseJsonOrThrow(res);
-      alert('Alat camping berhasil dihapus!');
-      fetchAdminData();
-    } catch (err: any) {
-      alert(`Gagal menghapus produk: ${err.message}`);
-    }
+    if (!(await confirmAction('Apakah Anda yakin ingin menghapus alat camping ini?'))) return;
+    await withLoading(async () => {
+      try {
+        const res = await fetch(`/api/products/${id}`, {
+          method: 'DELETE',
+          headers: authHeaders(token)
+        });
+        await parseJsonOrThrow(res);
+        notifySuccess('Alat camping berhasil dihapus!');
+        fetchAdminData();
+      } catch (err: any) {
+        notifyError(`Gagal menghapus produk: ${err.message}`);
+      }
+    });
   };
 
   const handleAdjustStock = async (product: Product, delta: number) => {
     const newStock = Math.max(0, product.stock + delta);
-    try {
-      const res = await fetch(`/api/products/${product.id}`, {
-        method: 'PUT',
-        headers: jsonAuthHeaders(token),
-        body: JSON.stringify({ stock: newStock })
-      });
-      const updated = await parseJsonOrThrow(res);
-      setProducts(prev => prev.map(p => p.id === product.id ? updated : p));
-    } catch (err: any) {
-      alert(`Gagal mengubah stok: ${err.message}`);
-    }
+    await withLoading(async () => {
+      try {
+        const res = await fetch(`/api/products/${product.id}`, {
+          method: 'PUT',
+          headers: jsonAuthHeaders(token),
+          body: JSON.stringify({ stock: newStock })
+        });
+        const updated = await parseJsonOrThrow(res);
+        setProducts(prev => prev.map(p => p.id === product.id ? updated : p));
+      } catch (err: any) {
+        notifyError(`Gagal mengubah stok: ${err.message}`);
+      }
+    });
   };
 
   const openAddProductModal = () => {

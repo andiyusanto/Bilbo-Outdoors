@@ -8,6 +8,8 @@ import { THEMES } from './themes';
 import { Theme } from './types';
 import bilboLogoWide from './assets/bilbo-logo-wide.png';
 import bilboIcon from './assets/bilbo-icon.png';
+import { LoadingProvider } from './contexts/LoadingContext';
+import { NotificationProvider } from './contexts/NotificationContext';
 
 export default function App() {
   const { pathname } = useLocation();
@@ -23,8 +25,10 @@ export default function App() {
   }, [activeTheme]);
 
   return (
+    <LoadingProvider>
+    <NotificationProvider>
     <div className="min-h-screen bg-white flex flex-col font-sans selection:bg-brand selection:text-black">
-      
+
       {/* Global Header */}
       {!isAdminRoute && (
         <header className="bg-white border-b-2 border-black sticky top-0 z-40">
@@ -125,5 +129,7 @@ export default function App() {
       )}
 
     </div>
+    </NotificationProvider>
+    </LoadingProvider>
   );
 }

@@ -1,5 +1,7 @@
 import { useState, FormEvent } from 'react';
 import { jsonAuthHeaders, parseJsonOrThrow } from '../lib/api';
+import { useLoading } from '../contexts/LoadingContext';
+import { useNotification } from '../contexts/NotificationContext';
 
 export function useChangePassword(token: string, onSessionTokenRotated: (newToken: string) => void) {
   const [showModal, setShowModalState] = useState<boolean>(false);
@@ -7,6 +9,8 @@ export function useChangePassword(token: string, onSessionTokenRotated: (newToke
   const [newPassword, setNewPassword] = useState<string>('');
   const [confirmPassword, setConfirmPassword] = useState<string>('');
   const [error, setError] = useState<string>('');
+  const { withLoading } = useLoading();
+  const { notifySuccess } = useNotification();
 
   const reset = () => {
     setCurrentPassword('');
@@ -28,15 +32,17 @@ export function useChangePassword(token: string, onSessionTokenRotated: (newToke
       return;
     }
     try {
-      const res = await fetch('/api/auth/change-password', {
-        method: 'POST',
-        headers: jsonAuthHeaders(token),
-        body: JSON.stringify({ currentPassword, newPassword })
+      await withLoading(async () => {
+        const res = await fetch('/api/auth/change-password', {
+          method: 'POST',
+          headers: jsonAuthHeaders(token),
+          body: JSON.stringify({ currentPassword, newPassword })
+        });
+        const data = await parseJsonOrThrow(res);
+        onSessionTokenRotated(data.token);
+        notifySuccess('Password berhasil diubah!');
+        setShowModal(false);
       });
-      const data = await parseJsonOrThrow(res);
-      onSessionTokenRotated(data.token);
-      alert('Password berhasil diubah!');
-      setShowModal(false);
     } catch (err: any) {
       setError(err.message || 'Gagal mengubah password.');
     }

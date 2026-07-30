@@ -1,5 +1,6 @@
 import { useState, useEffect, Dispatch, SetStateAction } from 'react';
 import { JSON_HEADERS } from '../lib/api';
+import { useLoading } from '../contexts/LoadingContext';
 
 interface StockInfo {
   remaining: number;
@@ -14,50 +15,53 @@ export function useAvailability(setCart: Dispatch<SetStateAction<Record<string, 
   // Real-time stock checked details from the backend
   const [stockDetails, setStockDetails] = useState<Record<string, StockInfo>>({});
   const [checkingStock, setCheckingStock] = useState<boolean>(false);
+  const { withLoading } = useLoading();
 
   // Check database stock in real-time
   const checkInventoryStock = async (startStr: string, endStr: string) => {
-    setCheckingStock(true);
-    try {
-      const res = await fetch('/api/check-availability', {
-        method: 'POST',
-        headers: JSON_HEADERS,
-        body: JSON.stringify({ startDate: startStr, endDate: endStr })
-      });
-      const data = await res.json();
-      if (res.ok && data.details) {
-        const stockMap: Record<string, StockInfo> = {};
-        data.details.forEach((item: any) => {
-          stockMap[item.productId] = {
-            remaining: item.remaining,
-            allocated: item.allocated
-          };
+    await withLoading(async () => {
+      setCheckingStock(true);
+      try {
+        const res = await fetch('/api/check-availability', {
+          method: 'POST',
+          headers: JSON_HEADERS,
+          body: JSON.stringify({ startDate: startStr, endDate: endStr })
         });
-        setStockDetails(stockMap);
-
-        // Adjust cart if any quantity exceeds new available stock
-        setCart(prev => {
-          const updated = { ...prev };
-          let changed = false;
-          Object.keys(updated).forEach(pId => {
-            const avail = stockMap[pId]?.remaining ?? 999;
-            if (updated[pId] > avail) {
-              if (avail <= 0) {
-                delete updated[pId];
-              } else {
-                updated[pId] = avail;
-              }
-              changed = true;
-            }
+        const data = await res.json();
+        if (res.ok && data.details) {
+          const stockMap: Record<string, StockInfo> = {};
+          data.details.forEach((item: any) => {
+            stockMap[item.productId] = {
+              remaining: item.remaining,
+              allocated: item.allocated
+            };
           });
-          return changed ? updated : prev;
-        });
+          setStockDetails(stockMap);
+
+          // Adjust cart if any quantity exceeds new available stock
+          setCart(prev => {
+            const updated = { ...prev };
+            let changed = false;
+            Object.keys(updated).forEach(pId => {
+              const avail = stockMap[pId]?.remaining ?? 999;
+              if (updated[pId] > avail) {
+                if (avail <= 0) {
+                  delete updated[pId];
+                } else {
+                  updated[pId] = avail;
+                }
+                changed = true;
+              }
+            });
+            return changed ? updated : prev;
+          });
+        }
+      } catch (err) {
+        console.error('Error checking stock:', err);
+      } finally {
+        setCheckingStock(false);
       }
-    } catch (err) {
-      console.error('Error checking stock:', err);
-    } finally {
-      setCheckingStock(false);
-    }
+    });
   };
 
   // Recalculate duration when dates change

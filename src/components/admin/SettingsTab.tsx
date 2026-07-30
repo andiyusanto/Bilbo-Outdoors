@@ -58,10 +58,16 @@ export default function SettingsTab({ settings, settingsActions }: SettingsTabPr
           onChange={(e) => setFormState(prev => ({ ...prev, lateToleranceHours: Number(e.target.value) }))}
           className="bg-white border-2 border-black px-3 py-2 text-xs font-bold rounded-none focus:outline-none w-32"
         />
+        <p className="text-[10px] text-zinc-500 font-semibold normal-case leading-relaxed">
+          Penyewa hanya bebas denda jika mengembalikan dalam jam toleransi ini <strong>DAN</strong> toko masih buka saat itu. Jika sudah lewat jam operasional, otomatis dianggap kembali di hari berikutnya dan tetap kena denda walau belum melewati jumlah jam toleransi.
+        </p>
       </div>
 
       <div className="bg-white border-2 border-black rounded-none shadow-[4px_4px_0px_rgba(0,0,0,1)] p-5 space-y-4 max-w-xl">
         <h3 className="text-xs font-black text-black uppercase tracking-wider">Jam Operasional Toko</h3>
+        <p className="text-[10px] text-zinc-500 font-semibold normal-case leading-relaxed -mt-2">
+          Pengembalian di luar jam buka-tutup ini dianggap baru bisa diproses keesokan harinya, sehingga otomatis kena denda minimal 1 hari.
+        </p>
         <div className="space-y-2">
           {DAY_ROWS.map(({ key, label }) => (
             <div key={key} className="flex items-center gap-3">

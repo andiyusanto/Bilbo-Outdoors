@@ -39,7 +39,6 @@ export function useAdminData({ isLoggedIn, token, role, onUnauthorized }: UseAdm
   const { withLoading } = useLoading();
 
   const fetchAdminData = async () => {
-    await withLoading(async () => {
     setIsLoading(true);
     try {
       const headers = authHeaders(token);
@@ -88,13 +87,17 @@ export function useAdminData({ isLoggedIn, token, role, onUnauthorized }: UseAdm
     } finally {
       setIsLoading(false);
     }
-    });
   };
 
-  // Fetch all admin data
+  // Fetch all admin data. Wrapped in withLoading only here, for the initial
+  // post-login load - fetchAdminData is also called (unawaited) as a silent
+  // background refresh after other actions (save/delete/approve/etc.), each
+  // already inside their own withLoading scope; wrapping it internally would
+  // keep the shared overlay open for this whole multi-fetch refresh, well
+  // past the point where the triggering action's own success already showed.
   useEffect(() => {
     if (isLoggedIn && token) {
-      fetchAdminData();
+      withLoading(fetchAdminData);
     }
   }, [isLoggedIn, token]);
 

@@ -12,6 +12,16 @@ import { calculateRentalCost, calculateLegacyRentalCost } from './src/pricing';
 
 const WEEKDAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
 
+// Whether the store is physically open at the given moment, per its own
+// weekday's operating hours (which may differ from the order's endDate weekday
+// once a late return crosses into a new calendar day).
+function isStoreOpenAt(dateTime: Date, operatingHours: StoreSettings['operatingHours']): boolean {
+  const dayKey = WEEKDAY_KEYS[dateTime.getDay()];
+  const hours = operatingHours[dayKey];
+  const hhmm = `${String(dateTime.getHours()).padStart(2, '0')}:${String(dateTime.getMinutes()).padStart(2, '0')}`;
+  return hhmm >= hours.open && hhmm < hours.close;
+}
+
 const app = express();
 const PORT = 3000;
 const DB_FILE = path.join(process.cwd(), 'server_db.json');
@@ -469,11 +479,18 @@ app.post('/api/orders/:id/calculate-late', authenticateAdmin, asyncHandler(async
     const closeTime = db.settings.operatingHours[WEEKDAY_KEYS[endDateDow]].close;
     const deadline = new Date(`${order.endDate}T${closeTime}:00`);
 
-    // Strict wall-clock tolerance (does not pause for hours the store is closed):
-    // the first `lateToleranceHours` past closing time are free, then the fee
-    // escalates in 24-hour buckets counted from the deadline itself.
+    // Tolerance only forgives a return that both (a) happens within
+    // `lateToleranceHours` of closing time, AND (b) happens while the store is
+    // actually open at that moment. Once the return moment falls outside
+    // operating hours, the customer can only physically return the item at the
+    // store's next opening - which, for this store's schedule (close-to-reopen
+    // gaps always longer than the tolerance), always means "tomorrow" and an
+    // automatic penalty, regardless of how few hours have technically elapsed.
     const hoursLate = Math.max(0, (actualReturn.getTime() - deadline.getTime()) / (1000 * 60 * 60));
-    const lateDays = hoursLate <= db.settings.lateToleranceHours ? 0 : Math.ceil(hoursLate / 24);
+    const withinTolerance = hoursLate > 0
+      && hoursLate <= db.settings.lateToleranceHours
+      && isStoreOpenAt(actualReturn, db.settings.operatingHours);
+    const lateDays = hoursLate === 0 || withinTolerance ? 0 : Math.ceil(hoursLate / 24);
 
     if (lateDays === 0) {
       return res.json({

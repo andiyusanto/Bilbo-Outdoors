@@ -66,6 +66,26 @@ export interface DashboardStats {
   dueTodayCount: number;
 }
 
+export interface DayHours {
+  open: string; // "HH:mm", 24h
+  close: string; // "HH:mm", 24h
+}
+
+export interface WeeklyHours {
+  monday: DayHours;
+  tuesday: DayHours;
+  wednesday: DayHours;
+  thursday: DayHours;
+  friday: DayHours;
+  saturday: DayHours;
+  sunday: DayHours;
+}
+
+export interface StoreSettings {
+  lateToleranceHours: number; // grace period past closing time before a late fee starts
+  operatingHours: WeeklyHours;
+}
+
 export interface Theme {
   id: string;
   name: string;

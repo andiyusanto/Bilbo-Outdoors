@@ -4,10 +4,13 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { createServer as createViteServer } from 'vite';
-import { Product, Order, OrderStatus, DashboardStats } from './src/types';
+import { Product, Order, OrderStatus, DashboardStats, StoreSettings } from './src/types';
 import { defaultProducts } from './db/defaultProducts';
+import { defaultSettings } from './db/defaultSettings';
 import { initPostgresPool, seedPostgresIfEmpty, readDBPostgres, writeDBPostgres } from './db/postgres';
 import { calculateRentalCost, calculateLegacyRentalCost } from './src/pricing';
+
+const WEEKDAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
 
 const app = express();
 const PORT = 3000;
@@ -21,14 +24,15 @@ app.use(express.json({ limit: '10mb' }));
 // Otherwise, falls back to the local server_db.json file (unchanged from before).
 // This is an exclusive boot-time branch, never both at once.
 
-let readDB: () => Promise<{ products: Product[]; orders: Order[] }>;
-let writeDB: (data: { products: Product[]; orders: Order[] }) => Promise<void>;
+let readDB: () => Promise<{ products: Product[]; orders: Order[]; settings: StoreSettings }>;
+let writeDB: (data: { products: Product[]; orders: Order[]; settings: StoreSettings }) => Promise<void>;
 
 function seedJsonFileIfMissing(): void {
   if (!fs.existsSync(DB_FILE)) {
     const dbData = {
       products: defaultProducts,
-      orders: [] as Order[]
+      orders: [] as Order[],
+      settings: defaultSettings,
     };
     fs.writeFileSync(DB_FILE, JSON.stringify(dbData, null, 2), 'utf-8');
     console.log('Database seeded successfully at', DB_FILE);
@@ -49,7 +53,11 @@ async function initDatabase(): Promise<void> {
     readDB = async () => {
       try {
         const data = fs.readFileSync(DB_FILE, 'utf-8');
-        return JSON.parse(data);
+        const parsed = JSON.parse(data);
+        // Old server_db.json files predate the settings feature - never crash on a
+        // missing key, just fall back to defaults until the next write persists them.
+        if (!parsed.settings) parsed.settings = defaultSettings;
+        return parsed;
       } catch (error) {
         console.error('Error reading database file, re-initializing...', error);
         seedJsonFileIfMissing();
@@ -444,7 +452,7 @@ app.put('/api/orders/:id/status', authenticateAdmin, asyncHandler(async (req, re
 app.post('/api/orders/:id/calculate-late', authenticateAdmin, asyncHandler(async (req, res) => {
   await withDbLock(async () => {
     const { id } = req.params;
-    const { returnDate } = req.body; // YYYY-MM-DD (defaults to today if not provided)
+    const { returnDateTime } = req.body; // "YYYY-MM-DDTHH:mm" local string (defaults to now if not provided)
 
     const db = await readDB();
     const order = db.orders.find((o: Order) => o.id === id);
@@ -452,20 +460,27 @@ app.post('/api/orders/:id/calculate-late', authenticateAdmin, asyncHandler(async
       return res.status(404).json({ error: 'Order not found.' });
     }
 
-    // Use provided return date, or default to current date in Surabaya (local server time)
-    const actualReturnDateStr = returnDate || new Date().toISOString().split('T')[0];
-    const actualReturn = new Date(actualReturnDateStr);
-    const scheduledEnd = new Date(order.endDate);
+    // Both sides parsed as local-time literals (no 'Z' suffix) so they compare
+    // correctly against each other regardless of the server's timezone offset -
+    // same class of UTC-vs-local mismatch this project has been bitten by before
+    // with DATE columns (see db/postgres.ts's DATE-oid override comment).
+    const actualReturn = returnDateTime ? new Date(returnDateTime) : new Date();
+    const endDateDow = new Date(`${order.endDate}T00:00:00`).getDay();
+    const closeTime = db.settings.operatingHours[WEEKDAY_KEYS[endDateDow]].close;
+    const deadline = new Date(`${order.endDate}T${closeTime}:00`);
 
-    // Calculate late days
-    const diffTime = actualReturn.getTime() - scheduledEnd.getTime();
-    const lateDays = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+    // Strict wall-clock tolerance (does not pause for hours the store is closed):
+    // the first `lateToleranceHours` past closing time are free, then the fee
+    // escalates in 24-hour buckets counted from the deadline itself.
+    const hoursLate = Math.max(0, (actualReturn.getTime() - deadline.getTime()) / (1000 * 60 * 60));
+    const lateDays = hoursLate <= db.settings.lateToleranceHours ? 0 : Math.ceil(hoursLate / 24);
 
     if (lateDays === 0) {
       return res.json({
         lateDays: 0,
         lateFee: 0,
-        breakdown: []
+        breakdown: [],
+        deadline: deadline.toISOString()
       });
     }
 
@@ -525,8 +540,24 @@ app.post('/api/orders/:id/calculate-late', authenticateAdmin, asyncHandler(async
       lateDays,
       lateFee: lateFeeTotal,
       breakdown,
-      actualReturnDate: actualReturnDateStr
+      deadline: deadline.toISOString()
     });
+  });
+}));
+
+// Admin: Get/Update store settings (late-return tolerance + weekly operating hours)
+app.get('/api/settings', authenticateAdmin, asyncHandler(async (req, res) => {
+  const db = await readDB();
+  res.json(db.settings);
+}));
+
+app.put('/api/settings', authenticateAdmin, asyncHandler(async (req, res) => {
+  await withDbLock(async () => {
+    const { lateToleranceHours, operatingHours } = req.body;
+    const db = await readDB();
+    db.settings = { lateToleranceHours, operatingHours };
+    await writeDB(db);
+    res.json(db.settings);
   });
 }));
 

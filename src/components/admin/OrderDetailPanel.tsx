@@ -8,7 +8,7 @@ interface LateCalculationResult {
   lateDays: number;
   lateFee: number;
   breakdown: any[];
-  actualReturnDate: string;
+  deadline: string;
 }
 
 interface OrderDetailPanelProps {
@@ -17,8 +17,8 @@ interface OrderDetailPanelProps {
   onUpdateStatus: (orderId: string, newStatus: OrderStatus, pickupIdType?: string) => void;
   showLateCalc: boolean;
   onOpenLateCalc: () => void;
-  customReturnDate: string;
-  onCustomReturnDateChange: (date: string) => void;
+  customReturnDateTime: string;
+  onCustomReturnDateTimeChange: (dateTime: string) => void;
   onCalculateLateFees: () => void;
   lateCalculationResult: LateCalculationResult | null;
   onApplyLateFeesAndComplete: () => void;
@@ -30,8 +30,8 @@ export default function OrderDetailPanel({
   onUpdateStatus,
   showLateCalc,
   onOpenLateCalc,
-  customReturnDate,
-  onCustomReturnDateChange,
+  customReturnDateTime,
+  onCustomReturnDateTimeChange,
   onCalculateLateFees,
   lateCalculationResult,
   onApplyLateFeesAndComplete,
@@ -292,13 +292,13 @@ export default function OrderDetailPanel({
 
               <div className="space-y-2">
                 <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-wider">
-                  Pilih Tanggal Pengembalian Aktual
+                  Pilih Tanggal & Jam Pengembalian Aktual
                 </label>
                 <div className="flex gap-2">
                   <input
-                    type="date"
-                    value={customReturnDate}
-                    onChange={(e) => onCustomReturnDateChange(e.target.value)}
+                    type="datetime-local"
+                    value={customReturnDateTime}
+                    onChange={(e) => onCustomReturnDateTimeChange(e.target.value)}
                     className="bg-white border-2 border-black px-3 py-2 text-xs font-bold uppercase rounded-none focus:outline-none flex-1"
                   />
                   <button
@@ -316,6 +316,10 @@ export default function OrderDetailPanel({
                     <span>Keterlambatan:</span>
                     <span className="text-red-700 font-mono font-black">{lateCalculationResult.lateDays} HARI</span>
                   </div>
+
+                  <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-wide">
+                    Batas Waktu Pengembalian: {new Date(lateCalculationResult.deadline).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}
+                  </p>
 
                   {lateCalculationResult.lateDays > 0 ? (
                     <>

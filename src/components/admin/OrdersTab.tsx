@@ -17,8 +17,8 @@ export default function OrdersTab({ orders, orderActions }: OrdersTabProps) {
     selectedOrder,
     setSelectedOrder,
     showLateCalc,
-    customReturnDate,
-    setCustomReturnDate,
+    customReturnDateTime,
+    setCustomReturnDateTime,
     lateCalculationResult,
     handleUpdateOrderStatus,
     handleCalculateLateFees,
@@ -154,8 +154,8 @@ export default function OrdersTab({ orders, orderActions }: OrdersTabProps) {
           onUpdateStatus={handleUpdateOrderStatus}
           showLateCalc={showLateCalc}
           onOpenLateCalc={openLateCalc}
-          customReturnDate={customReturnDate}
-          onCustomReturnDateChange={setCustomReturnDate}
+          customReturnDateTime={customReturnDateTime}
+          onCustomReturnDateTimeChange={setCustomReturnDateTime}
           onCalculateLateFees={handleCalculateLateFees}
           lateCalculationResult={lateCalculationResult}
           onApplyLateFeesAndComplete={handleApplyLateFeesAndComplete}

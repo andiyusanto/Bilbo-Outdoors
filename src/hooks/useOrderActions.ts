@@ -8,19 +8,27 @@ interface UseOrderActionsParams {
   fetchAdminData: () => Promise<void>;
 }
 
+// Formats a Date as the naive local "YYYY-MM-DDTHH:mm" string a
+// datetime-local input expects - Date.toISOString() is UTC and would silently
+// default the picker to the wrong local time on this server (Asia/Jakarta).
+function toLocalDateTimeInputValue(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 export function useOrderActions({ token, setOrders, fetchAdminData }: UseOrderActionsParams) {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
   // Late Fee Calculation Modal/State
   const [showLateCalc, setShowLateCalc] = useState<boolean>(false);
-  const [customReturnDate, setCustomReturnDate] = useState<string>(
-    new Date().toISOString().split('T')[0]
+  const [customReturnDateTime, setCustomReturnDateTime] = useState<string>(
+    toLocalDateTimeInputValue(new Date())
   );
   const [lateCalculationResult, setLateCalculationResult] = useState<{
     lateDays: number;
     lateFee: number;
     breakdown: any[];
-    actualReturnDate: string;
+    deadline: string;
   } | null>(null);
 
   const handleUpdateOrderStatus = async (orderId: string, newStatus: OrderStatus, pickupIdType?: string) => {
@@ -51,7 +59,7 @@ export function useOrderActions({ token, setOrders, fetchAdminData }: UseOrderAc
       const res = await fetch(`/api/orders/${selectedOrder.id}/calculate-late`, {
         method: 'POST',
         headers: jsonAuthHeaders(token),
-        body: JSON.stringify({ returnDate: customReturnDate })
+        body: JSON.stringify({ returnDateTime: customReturnDateTime })
       });
       const data = await parseJsonOrThrow(res);
       setLateCalculationResult(data);
@@ -89,8 +97,8 @@ export function useOrderActions({ token, setOrders, fetchAdminData }: UseOrderAc
     setSelectedOrder,
     showLateCalc,
     setShowLateCalc,
-    customReturnDate,
-    setCustomReturnDate,
+    customReturnDateTime,
+    setCustomReturnDateTime,
     lateCalculationResult,
     setLateCalculationResult,
     handleUpdateOrderStatus,

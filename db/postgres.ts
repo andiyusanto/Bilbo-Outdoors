@@ -1,7 +1,8 @@
 import pg from 'pg';
 import dns from 'dns';
-import { Product, Order, OrderItem } from '../src/types';
+import { Product, Order, OrderItem, StoreSettings } from '../src/types';
 import { defaultProducts } from './defaultProducts';
+import { defaultSettings } from './defaultSettings';
 
 let pool: pg.Pool;
 
@@ -35,28 +36,42 @@ export function initPostgresPool(connectionString: string): void {
 export async function seedPostgresIfEmpty(): Promise<void> {
   const countRes = await pool.query('SELECT COUNT(*)::int AS count FROM products');
   const count = countRes.rows[0].count;
-  if (count > 0) return;
+  if (count === 0) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const params: any[] = [];
+      defaultProducts.forEach((p) => {
+        params.push(p.id, p.name, p.category, p.rates.day1Price, p.rates.day2Price, p.rates.day3Price, p.rates.day4Price, p.rates.day5Price, p.rates.extraDayRate, p.readinessHours || 0, p.stock, p.description || '', p.image || '');
+      });
+      await client.query(
+        `INSERT INTO products (id, name, category, day1_price, day2_price, day3_price, day4_price, day5_price, extra_day_rate, readiness_hours, stock, description, image)
+         VALUES ${buildValuesClause(defaultProducts.length, 13)}
+         ON CONFLICT (id) DO NOTHING`,
+        params
+      );
+      await client.query('COMMIT');
+      console.log('Postgres seeded successfully with default product catalog.');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
 
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const params: any[] = [];
-    defaultProducts.forEach((p) => {
-      params.push(p.id, p.name, p.category, p.rates.day1Price, p.rates.day2Price, p.rates.day3Price, p.rates.day4Price, p.rates.day5Price, p.rates.extraDayRate, p.readinessHours || 0, p.stock, p.description || '', p.image || '');
-    });
-    await client.query(
-      `INSERT INTO products (id, name, category, day1_price, day2_price, day3_price, day4_price, day5_price, extra_day_rate, readiness_hours, stock, description, image)
-       VALUES ${buildValuesClause(defaultProducts.length, 13)}
+  // Independent of the products check above - an existing deployment (products
+  // already seeded long ago) still needs its one settings row seeded the first
+  // time this runs after the `settings` table migration lands.
+  const settingsCountRes = await pool.query('SELECT COUNT(*)::int AS count FROM settings');
+  if (settingsCountRes.rows[0].count === 0) {
+    await pool.query(
+      `INSERT INTO settings (id, late_tolerance_hours, operating_hours)
+       VALUES (1, $1, $2::jsonb)
        ON CONFLICT (id) DO NOTHING`,
-      params
+      [defaultSettings.lateToleranceHours, JSON.stringify(defaultSettings.operatingHours)]
     );
-    await client.query('COMMIT');
-    console.log('Postgres seeded successfully with default product catalog.');
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
+    console.log('Postgres seeded successfully with default store settings.');
   }
 }
 
@@ -131,7 +146,14 @@ function rowToOrder(row: any, items: OrderItem[]): Order {
   };
 }
 
-export async function readDBPostgres(): Promise<{ products: Product[]; orders: Order[] }> {
+function rowToSettings(row: any): StoreSettings {
+  return {
+    lateToleranceHours: Number(row.late_tolerance_hours),
+    operatingHours: row.operating_hours, // JSONB - pg already parses this into a plain object
+  };
+}
+
+export async function readDBPostgres(): Promise<{ products: Product[]; orders: Order[]; settings: StoreSettings }> {
   const productsRes = await pool.query('SELECT * FROM products ORDER BY category ASC, id ASC');
   const products = productsRes.rows.map(rowToProduct);
 
@@ -147,7 +169,13 @@ export async function readDBPostgres(): Promise<{ products: Product[]; orders: O
 
   const orders = ordersRes.rows.map((row) => rowToOrder(row, itemsByOrderId.get(row.id) || []));
 
-  return { products, orders };
+  const settingsRes = await pool.query('SELECT * FROM settings WHERE id = 1');
+  // Defensive fallback (never crash) if the settings row hasn't been seeded yet on
+  // this connection - mirrors the same fallback the JSON-file mode does for an
+  // old server_db.json predating this feature.
+  const settings = settingsRes.rows[0] ? rowToSettings(settingsRes.rows[0]) : defaultSettings;
+
+  return { products, orders, settings };
 }
 
 // Builds a `VALUES ($1,$2,...),($n+1,$n+2,...),...` clause plus the flattened
@@ -167,10 +195,20 @@ function buildValuesClause(rowCount: number, colsPerRow: number): string {
   return rows.join(', ');
 }
 
-export async function writeDBPostgres(data: { products: Product[]; orders: Order[] }): Promise<void> {
+export async function writeDBPostgres(data: { products: Product[]; orders: Order[]; settings: StoreSettings }): Promise<void> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
+    // Settings: single-row upsert, no batching helper needed.
+    await client.query(
+      `INSERT INTO settings (id, late_tolerance_hours, operating_hours)
+       VALUES (1, $1, $2::jsonb)
+       ON CONFLICT (id) DO UPDATE SET
+         late_tolerance_hours = EXCLUDED.late_tolerance_hours,
+         operating_hours = EXCLUDED.operating_hours`,
+      [Number(data.settings.lateToleranceHours), JSON.stringify(data.settings.operatingHours)]
+    );
 
     // Products: batched upsert of everything present, then prune anything removed
     if (data.products.length > 0) {

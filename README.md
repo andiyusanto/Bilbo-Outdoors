@@ -159,6 +159,13 @@ CREATE TABLE IF NOT EXISTS order_items (
   incremental_price INTEGER,
   discount_threshold_days INT
 );
+
+-- 4. Membuat Tabel Settings (Toleransi Keterlambatan + Jam Operasional Toko) - baris tunggal (id selalu 1)
+CREATE TABLE IF NOT EXISTS settings (
+  id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  late_tolerance_hours INTEGER NOT NULL DEFAULT 4,
+  operating_hours JSONB NOT NULL
+);
 ```
 
 > **Sudah pernah menjalankan Step A sebelum kolom `discount_min_days`/`discount_threshold_days` ada?** Cukup jalankan ini sekali di SQL Editor yang sama (aman dijalankan berulang, dan nilai default `5` otomatis mengisi baris yang sudah ada, sesuai dengan aturan harga yang memang berlaku sebelumnya):
@@ -201,6 +208,16 @@ CREATE TABLE IF NOT EXISTS order_items (
 > ```sql
 > ALTER TABLE orders ADD COLUMN IF NOT EXISTS pickup_id_type VARCHAR(255);
 > ```
+
+> **Sudah pernah menjalankan Step A sebelum tabel `settings` ada?** Jalankan ini sekali di SQL Editor yang sama (aman dijalankan berulang), **sebelum men-deploy kode baru** - kode aplikasi mengasumsikan tabel ini sudah ada saat boot. Tabel ini menyimpan toleransi keterlambatan (jam) dan jadwal jam buka toko per hari (dipakai kalkulator denda keterlambatan), diatur dari menu "Pengaturan" di admin panel. Baris tunggal (`id = 1`) - `operating_hours` disimpan sebagai JSONB (bukan 7×2 kolom terpisah) karena strukturnya berbentuk objek per-hari yang lebih pas dipetakan langsung ke `WeeklyHours` di `src/types.ts` tanpa kode mapping tambahan.
+> ```sql
+> CREATE TABLE IF NOT EXISTS settings (
+>   id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+>   late_tolerance_hours INTEGER NOT NULL DEFAULT 4,
+>   operating_hours JSONB NOT NULL
+> );
+> ```
+> Setelah tabel dibuat, boot aplikasi berikutnya akan otomatis mengisi baris default (lihat `seedPostgresIfEmpty` di `db/postgres.ts`) - tidak perlu INSERT manual.
 
 ### Step B: Dapatkan Connection String Supabase Anda
 1. Di dashboard Supabase Anda, buka project Anda, lalu klik tombol **Connect** (di bagian atas halaman project).

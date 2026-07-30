@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Product, Order, DashboardStats } from '../types';
+import { Product, Order, DashboardStats, StoreSettings } from '../types';
 import { authHeaders, parseJsonOrThrow } from '../lib/api';
 
 interface UseAdminDataParams {
@@ -7,6 +7,19 @@ interface UseAdminDataParams {
   token: string;
   onUnauthorized: () => void;
 }
+
+const DEFAULT_SETTINGS: StoreSettings = {
+  lateToleranceHours: 4,
+  operatingHours: {
+    monday: { open: '09:00', close: '22:00' },
+    tuesday: { open: '09:00', close: '22:00' },
+    wednesday: { open: '09:00', close: '22:00' },
+    thursday: { open: '09:00', close: '22:00' },
+    friday: { open: '09:00', close: '22:00' },
+    saturday: { open: '09:00', close: '22:00' },
+    sunday: { open: '09:00', close: '22:00' },
+  },
+};
 
 export function useAdminData({ isLoggedIn, token, onUnauthorized }: UseAdminDataParams) {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -16,6 +29,7 @@ export function useAdminData({ isLoggedIn, token, onUnauthorized }: UseAdminData
     totalRevenue: 0,
     dueTodayCount: 0,
   });
+  const [settings, setSettings] = useState<StoreSettings>(DEFAULT_SETTINGS);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const fetchAdminData = async () => {
@@ -37,6 +51,11 @@ export function useAdminData({ isLoggedIn, token, onUnauthorized }: UseAdminData
       const statsRes = await fetch('/api/stats', { headers });
       const statsData = await parseJsonOrThrow(statsRes, 'Failed to fetch stats');
       setStats(statsData);
+
+      // Fetch Settings
+      const settingsRes = await fetch('/api/settings', { headers });
+      const settingsData = await parseJsonOrThrow(settingsRes, 'Failed to fetch settings');
+      setSettings(settingsData);
 
     } catch (err: any) {
       console.error(err);
@@ -61,6 +80,8 @@ export function useAdminData({ isLoggedIn, token, onUnauthorized }: UseAdminData
     products,
     setProducts,
     stats,
+    settings,
+    setSettings,
     isLoading,
     fetchAdminData,
   };

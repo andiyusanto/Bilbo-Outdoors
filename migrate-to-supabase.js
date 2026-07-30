@@ -39,7 +39,7 @@ async function runMigration() {
     const rawData = fs.readFileSync(dbFilePath, 'utf8');
     const dbData = JSON.parse(rawData);
 
-    const { products = [], orders = [] } = dbData;
+    const { products = [], orders = [], settings } = dbData;
     console.log(`📦 Found ${products.length} products and ${orders.length} orders in server_db.json.`);
 
     // 1. Insert Products
@@ -136,6 +136,24 @@ async function runMigration() {
       } else {
         console.log(`   - Order: ${order.id} already exists in Database. Skipping.`);
       }
+    }
+
+    // 4. Insert Settings (single row, id = 1) - if the source server_db.json
+    // predates this feature and has no settings key, skip it: seedPostgresIfEmpty
+    // (db/postgres.ts) seeds the default row automatically on the app's next boot.
+    if (settings) {
+      console.log('\n📥 Migrating Settings...');
+      await client.query(
+        `INSERT INTO settings (id, late_tolerance_hours, operating_hours)
+         VALUES (1, $1, $2::jsonb)
+         ON CONFLICT (id) DO UPDATE SET
+           late_tolerance_hours = EXCLUDED.late_tolerance_hours,
+           operating_hours = EXCLUDED.operating_hours`,
+        [Number(settings.lateToleranceHours), JSON.stringify(settings.operatingHours)]
+      );
+      console.log('   - Settings migrated.');
+    } else {
+      console.log('\n⚠️  No settings found in server_db.json - defaults will be seeded on the app\'s next boot.');
     }
 
     console.log('\n🎉 Database migration complete! All products and orders successfully synced.');

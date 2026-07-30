@@ -6,16 +6,19 @@ import {
   Package,
   FileText,
   ShoppingBag,
+  Settings,
 } from 'lucide-react';
 import { THEMES } from '../themes';
 import { useAdminAuth } from '../hooks/useAdminAuth';
 import { useAdminData } from '../hooks/useAdminData';
 import { useOrderActions } from '../hooks/useOrderActions';
 import { useProductActions } from '../hooks/useProductActions';
+import { useSettingsActions } from '../hooks/useSettingsActions';
 import AdminLoginScreen from './admin/AdminLoginScreen';
 import OverviewTab from './admin/OverviewTab';
 import OrdersTab from './admin/OrdersTab';
 import InventoryTab from './admin/InventoryTab';
+import SettingsTab from './admin/SettingsTab';
 import bilboIcon from '../assets/bilbo-icon.png';
 
 interface AdminPanelProps {
@@ -47,6 +50,11 @@ export default function AdminPanel({ themeId, setThemeId }: AdminPanelProps) {
     token: auth.token,
     fetchAdminData: data.fetchAdminData,
     setProducts: data.setProducts,
+  });
+
+  const settingsActions = useSettingsActions({
+    token: auth.token,
+    setSettings: data.setSettings,
   });
 
   if (!auth.isLoggedIn) {
@@ -172,6 +180,20 @@ export default function AdminPanel({ themeId, setThemeId }: AdminPanelProps) {
             <ShoppingBag className="w-4 h-4 text-black stroke-[2.5]" />
             <span>Manajemen Stok</span>
           </NavLink>
+
+          <NavLink
+            to="/admin/settings"
+            className={({ isActive }) =>
+              `flex items-center justify-center md:justify-start space-x-2.5 px-4 py-3 border-2 transition-all cursor-pointer rounded-none grow md:grow-0 uppercase tracking-wider text-xs font-black ${
+                isActive
+                  ? 'bg-brand text-black border-black shadow-[3px_3px_0px_rgba(0,0,0,1)]'
+                  : 'bg-white text-zinc-500 hover:text-black border-zinc-200 hover:bg-zinc-50'
+              }`
+            }
+          >
+            <Settings className="w-4 h-4 text-black stroke-[2.5]" />
+            <span>Pengaturan</span>
+          </NavLink>
         </aside>
 
         {/* Workspace */}
@@ -189,6 +211,10 @@ export default function AdminPanel({ themeId, setThemeId }: AdminPanelProps) {
             <Route
               path="inventory"
               element={<InventoryTab products={data.products} productActions={productActions} />}
+            />
+            <Route
+              path="settings"
+              element={<SettingsTab settings={data.settings} settingsActions={settingsActions} />}
             />
             <Route path="*" element={<Navigate to="/admin/overview" replace />} />
           </Routes>

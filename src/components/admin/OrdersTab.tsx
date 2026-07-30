@@ -13,6 +13,8 @@ interface OrdersTabProps {
 export default function OrdersTab({ orders, orderActions }: OrdersTabProps) {
   const [orderSearch, setOrderSearch] = useState<string>('');
   const [orderStatusFilter, setOrderStatusFilter] = useState<string>('All');
+  const [orderDateFrom, setOrderDateFrom] = useState<string>('');
+  const [orderDateTo, setOrderDateTo] = useState<string>('');
 
   const {
     selectedOrder,
@@ -34,7 +36,9 @@ export default function OrdersTab({ orders, orderActions }: OrdersTabProps) {
       o.customerName.toLowerCase().includes(orderSearch.toLowerCase()) ||
       o.customerWhatsApp.includes(orderSearch);
     const matchesStatus = orderStatusFilter === 'All' || o.status === orderStatusFilter;
-    return matchesSearch && matchesStatus;
+    const matchesDateFrom = !orderDateFrom || o.startDate >= orderDateFrom;
+    const matchesDateTo = !orderDateTo || o.startDate <= orderDateTo;
+    return matchesSearch && matchesStatus && matchesDateFrom && matchesDateTo;
   });
 
   return (
@@ -70,6 +74,25 @@ export default function OrdersTab({ orders, orderActions }: OrdersTabProps) {
             <option value="Item Returned/Completed">RETURNED/COMPLETED</option>
             <option value="Expired">EXPIRED</option>
           </select>
+
+          <div className="flex items-center gap-2">
+            <label className="text-[10px] font-black text-zinc-600 uppercase tracking-wider shrink-0">Dari</label>
+            <input
+              type="date"
+              value={orderDateFrom}
+              onChange={(e) => setOrderDateFrom(e.target.value)}
+              className="bg-white border-2 border-black px-3 py-2 text-xs font-bold rounded-none focus:outline-none"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-[10px] font-black text-zinc-600 uppercase tracking-wider shrink-0">Sampai</label>
+            <input
+              type="date"
+              value={orderDateTo}
+              onChange={(e) => setOrderDateTo(e.target.value)}
+              className="bg-white border-2 border-black px-3 py-2 text-xs font-bold rounded-none focus:outline-none"
+            />
+          </div>
         </div>
       </div>
 

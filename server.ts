@@ -12,6 +12,7 @@ import { defaultJobPriceList } from './db/defaultJobPriceList';
 import { initPostgresPool, seedPostgresIfEmpty, readDBPostgres, writeDBPostgres } from './db/postgres';
 import { calculateRentalCost, calculateLegacyRentalCost } from './src/pricing';
 import { hashPassword, verifyPassword, generateSessionToken } from './src/auth';
+import { formatDateLabel } from './src/lib/date';
 
 declare global {
   namespace Express {
@@ -43,6 +44,31 @@ function isStoreOpenAt(dateTime: Date, operatingHours: StoreSettings['operatingH
   const hours = operatingHours[dayKey];
   const hhmm = `${String(dateTime.getHours()).padStart(2, '0')}:${String(dateTime.getMinutes()).padStart(2, '0')}`;
   return hhmm >= hours.open && hhmm < hours.close;
+}
+
+// ---------------- TELEGRAM BOOKING NOTIFICATIONS ----------------
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const TELEGRAM_BOOKING_CHAT_ID = process.env.TELEGRAM_BOOKING_CHAT_ID;
+if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_BOOKING_CHAT_ID) {
+  console.log('Telegram notifications disabled — set TELEGRAM_BOT_TOKEN/TELEGRAM_BOOKING_CHAT_ID to enable.');
+}
+
+// Fire-and-forget from the /api/orders call site - never blocks or delays a
+// booking. Always resolves (even the unconfigured no-op path) so `.catch()`
+// at the call site never blows up on `undefined`.
+async function sendTelegramBookingNotification(order: Order): Promise<void> {
+  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_BOOKING_CHAT_ID) return;
+  const itemLines = order.items.map(it => `- ${it.productName} (x${it.quantity})`).join('\n');
+  const text = `Booking baru masuk!\n\nNama: ${order.customerName}\nWhatsApp: ${order.customerWhatsApp}\nPeriode: ${formatDateLabel(order.startDate)} s/d ${formatDateLabel(order.endDate)} (${order.rentDuration} Hari)\n\nPeralatan:\n${itemLines}\n\nTotal: Rp ${order.totalPrice.toLocaleString('id-ID')}`;
+  const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: TELEGRAM_BOOKING_CHAT_ID, text }),
+    signal: AbortSignal.timeout(5000),
+  });
+  // fetch only rejects on network-level failure, never on HTTP error status -
+  // throw explicitly so a bad token/chat-id reaches the call site's catch.
+  if (!res.ok) throw new Error(`Telegram API responded ${res.status}: ${await res.text().catch(() => '')}`);
 }
 
 const app = express();
@@ -503,6 +529,7 @@ app.post('/api/check-availability', asyncHandler(async (req, res) => {
 
 // Submit Order (Clients)
 app.post('/api/orders', asyncHandler(async (req, res) => {
+  let createdOrder: Order | null = null;
   await withDbLock(async () => {
     const { customerName, customerWhatsApp, startDate, endDate, items, personalPhotoBase64 } = req.body;
 
@@ -574,8 +601,12 @@ app.post('/api/orders', asyncHandler(async (req, res) => {
     db.orders.unshift(newOrder); // Add to beginning
     await writeDB(db);
 
+    createdOrder = newOrder;
     res.status(201).json(newOrder);
   });
+  if (createdOrder) {
+    sendTelegramBookingNotification(createdOrder).catch(err => console.error('Telegram booking notification failed:', err));
+  }
 }));
 
 // Get Order Confirmation (Public, by unguessable token - NOT by order.id)

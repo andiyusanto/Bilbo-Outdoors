@@ -35,7 +35,7 @@ export default function OverviewTab({ stats, orders, products }: OverviewTabProp
           <h2 className="text-2xl font-display font-black text-black uppercase tracking-tight">STATISTIK PENYEWAAN</h2>
           <p className="text-xs text-zinc-600 font-semibold uppercase tracking-wider mt-1">Ringkasan transaksi dan inventaris Bilbo Outdoors saat ini.</p>
         </div>
-        <div className="text-xs text-zinc-500 font-mono font-black uppercase mt-1 sm:mt-0 bg-brand/15 px-3 py-1 border border-black">
+        <div className="text-xs text-zinc-600 font-mono font-black uppercase mt-1 sm:mt-0 bg-brand/15 px-3 py-1 border border-black">
           LIVE UPDATES
         </div>
       </div>
@@ -47,7 +47,7 @@ export default function OverviewTab({ stats, orders, products }: OverviewTabProp
             <Clock className="w-6 h-6 stroke-[2.5]" />
           </div>
           <div>
-            <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Sewa Aktif</p>
+            <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Sewa Aktif</p>
             <p className="text-2xl font-display font-black text-black mt-0.5">{stats.activeRentalsCount} Transaksi</p>
             <p className="text-[10px] text-zinc-500 font-bold uppercase mt-0.5">Approved & Picked Up</p>
           </div>
@@ -58,7 +58,7 @@ export default function OverviewTab({ stats, orders, products }: OverviewTabProp
             <DollarSign className="w-6 h-6 stroke-[2.5]" />
           </div>
           <div>
-            <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Total Omset</p>
+            <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Total Omset</p>
             <p className="text-2xl font-display font-black text-black mt-0.5">Rp {stats.totalRevenue.toLocaleString('id-ID')}</p>
             <p className="text-[10px] text-zinc-500 font-bold uppercase mt-0.5">Termasuk Denda Late-Return</p>
           </div>
@@ -70,7 +70,7 @@ export default function OverviewTab({ stats, orders, products }: OverviewTabProp
             <Calendar className="w-6 h-6 stroke-[2.5]" />
           </div>
           <div>
-            <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Jatuh Tempo Hari Ini</p>
+            <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Jatuh Tempo Hari Ini</p>
             <p className="text-2xl font-display font-black text-black mt-0.5">{stats.dueTodayCount} Barang</p>
             <p className="text-[10px] text-zinc-500 font-bold uppercase mt-0.5">Harus Dikembalikan</p>
           </div>
@@ -134,14 +134,14 @@ export default function OverviewTab({ stats, orders, products }: OverviewTabProp
           <h3 className="font-display font-black text-black text-sm mb-4 uppercase tracking-wide border-b-2 border-brand pb-2">Peralatan Terlaris Disewa</h3>
           {categoryOrderStats().length === 0 ? (
             <div className="h-40 flex flex-col items-center justify-center text-center">
-              <p className="text-xs text-zinc-400 font-bold uppercase tracking-wider">Belum ada data barang disewa.</p>
+              <p className="text-xs text-zinc-500 font-bold uppercase tracking-wider">Belum ada data barang disewa.</p>
             </div>
           ) : (
             <div className="space-y-3.5">
               {categoryOrderStats().sort((a,b) => b.value - a.value).slice(0, 4).map((cat, i) => (
                 <div key={i} className="flex items-center justify-between uppercase font-bold text-xs text-zinc-800">
                   <div className="flex items-center">
-                    <span className="text-xs font-mono font-black text-zinc-400 mr-2.5">0{i+1}</span>
+                    <span className="text-xs font-mono font-black text-zinc-500 mr-2.5">0{i+1}</span>
                     <span>{cat.name}</span>
                   </div>
                   <span className="text-xs font-black text-black bg-brand/20 border border-black px-2.5 py-0.5 rounded-none font-mono">{cat.value} Unit</span>

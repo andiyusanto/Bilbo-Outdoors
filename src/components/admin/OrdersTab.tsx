@@ -59,6 +59,7 @@ export default function OrdersTab({ orders, orderActions }: OrdersTabProps) {
           <select
             value={orderStatusFilter}
             onChange={(e) => setOrderStatusFilter(e.target.value)}
+            aria-label="Filter Status Pesanan"
             className="bg-white border-2 border-black rounded-none px-3 py-2.5 text-xs font-black uppercase tracking-wider focus:bg-brand/10 focus:outline-none cursor-pointer"
           >
             <option value="All">SEMUA STATUS</option>

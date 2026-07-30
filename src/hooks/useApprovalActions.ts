@@ -18,6 +18,16 @@ export function useApprovalActions({ token, fetchAdminData }: UseApprovalActions
     setSelectedIds((prev) => prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]);
   };
 
+  // Selects/deselects every id in the given (currently-visible/filtered) list
+  // in one go - toggles to "select all" unless they're all already selected,
+  // in which case it deselects just that set.
+  const toggleSelectAll = (ids: string[]) => {
+    setSelectedIds((prev) => {
+      const allSelected = ids.length > 0 && ids.every((id) => prev.includes(id));
+      return allSelected ? prev.filter((id) => !ids.includes(id)) : [...new Set([...prev, ...ids])];
+    });
+  };
+
   const clearSelection = () => setSelectedIds([]);
   const { withLoading } = useLoading();
   const { notifySuccess, notifyError } = useNotification();
@@ -44,6 +54,7 @@ export function useApprovalActions({ token, fetchAdminData }: UseApprovalActions
   return {
     selectedIds,
     toggleSelected,
+    toggleSelectAll,
     clearSelection,
     paymentDateInput,
     setPaymentDateInput,

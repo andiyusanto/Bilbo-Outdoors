@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import { JobEntry, JobType } from '../../types';
 import { useApprovalActions } from '../../hooks/useApprovalActions';
@@ -19,6 +19,7 @@ export default function ApprovalTab({ jobEntries, approvalActions }: ApprovalTab
   const {
     selectedIds,
     toggleSelected,
+    toggleSelectAll,
     paymentDateInput,
     setPaymentDateInput,
     handleApproveBatch,
@@ -39,6 +40,17 @@ export default function ApprovalTab({ jobEntries, approvalActions }: ApprovalTab
   const allPaidEntries = jobEntries.filter((e) => e.status === 'Paid');
   const pendingEntries = jobEntries.filter((e) => e.status === 'Pending').filter(matchesFilters);
   const paidEntries = allPaidEntries.filter(matchesFilters);
+
+  const pendingIds = pendingEntries.map((e) => e.id);
+  const allPendingSelected = pendingIds.length > 0 && pendingIds.every((id) => selectedIds.includes(id));
+  const somePendingSelected = pendingIds.some((id) => selectedIds.includes(id));
+  const selectAllRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = somePendingSelected && !allPendingSelected;
+    }
+  }, [somePendingSelected, allPendingSelected]);
 
   return (
     <div className="space-y-6">
@@ -99,7 +111,18 @@ export default function ApprovalTab({ jobEntries, approvalActions }: ApprovalTab
         <table className="w-full text-left min-w-[750px]">
           <thead className="bg-black text-white text-[10px] uppercase tracking-wider font-black">
             <tr>
-              <th className="px-4 py-3 w-10"></th>
+              <th className="px-4 py-3 w-10">
+                {pendingEntries.length > 0 && (
+                  <input
+                    ref={selectAllRef}
+                    type="checkbox"
+                    checked={allPendingSelected}
+                    onChange={() => toggleSelectAll(pendingIds)}
+                    aria-label="Pilih semua"
+                    className="w-4 h-4 cursor-pointer"
+                  />
+                )}
+              </th>
               <th className="px-4 py-3">Nama</th>
               <th className="px-4 py-3">Tanggal</th>
               <th className="px-4 py-3">Item</th>

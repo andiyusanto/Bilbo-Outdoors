@@ -15,11 +15,9 @@ import DiscountCarousel from './client/DiscountCarousel';
 
 interface ClientPortalProps {
   onAdminToggle: () => void;
-  themeId: string;
-  setThemeId: (id: string) => void;
 }
 
-export default function ClientPortal({ onAdminToggle, themeId, setThemeId }: ClientPortalProps) {
+export default function ClientPortal({ onAdminToggle }: ClientPortalProps) {
   // Products and Database State
   const { products, loadingProducts } = useProducts();
 

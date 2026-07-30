@@ -1,6 +1,5 @@
 import { Routes, Route, Navigate, NavLink, Link } from 'react-router-dom';
 import {
-  Palette,
   RefreshCw,
   LogOut,
   Package,
@@ -12,7 +11,6 @@ import {
   Users,
   KeyRound,
 } from 'lucide-react';
-import { THEMES } from '../themes';
 import { useAdminAuth } from '../hooks/useAdminAuth';
 import { useAdminData } from '../hooks/useAdminData';
 import { useOrderActions } from '../hooks/useOrderActions';
@@ -34,11 +32,6 @@ import ApprovalTab from './admin/ApprovalTab';
 import ChangePasswordModal from './admin/ChangePasswordModal';
 import bilboIcon from '../assets/bilbo-icon.png';
 
-interface AdminPanelProps {
-  themeId: string;
-  setThemeId: (id: string) => void;
-}
-
 const NAV_LINK_CLASS = ({ isActive }: { isActive: boolean }) =>
   `flex items-center justify-center md:justify-start space-x-2.5 px-4 py-3 border-2 transition-all cursor-pointer rounded-none grow md:grow-0 uppercase tracking-wider text-xs font-black ${
     isActive
@@ -46,7 +39,7 @@ const NAV_LINK_CLASS = ({ isActive }: { isActive: boolean }) =>
       : 'bg-white text-zinc-500 hover:text-black border-zinc-200 hover:bg-zinc-50'
   }`;
 
-export default function AdminPanel({ themeId, setThemeId }: AdminPanelProps) {
+export default function AdminPanel() {
   const auth = useAdminAuth();
   const isOwner = auth.role === 'owner';
   const defaultRoute = isOwner ? '/admin/overview' : '/admin/operational';
@@ -129,21 +122,6 @@ export default function AdminPanel({ themeId, setThemeId }: AdminPanelProps) {
         </div>
 
         <div className="flex items-center space-x-4">
-          {/* Theme Selector Dropdown */}
-          <div className="relative flex items-center">
-            <Palette className="w-3.5 h-3.5 text-zinc-450 absolute left-2.5 pointer-events-none stroke-[2.5]" />
-            <select
-              value={themeId}
-              onChange={(e) => setThemeId(e.target.value)}
-              className="appearance-none bg-zinc-950 text-white text-[9px] font-black uppercase tracking-widest pl-8 pr-7 py-2 border border-zinc-800 rounded-none hover:bg-zinc-900 focus:outline-none cursor-pointer transition-all"
-              title="Ganti Tema Visual (Staff)"
-            >
-              {THEMES.map(t => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
-          </div>
-
           <button
             onClick={data.fetchAdminData}
             title="Refresh Data"

@@ -166,6 +166,43 @@ CREATE TABLE IF NOT EXISTS settings (
   late_tolerance_hours INTEGER NOT NULL DEFAULT 4,
   operating_hours JSONB NOT NULL
 );
+
+-- 5. Membuat Tabel Users (akun staff - owner/master & karyawan)
+CREATE TABLE IF NOT EXISTS users (
+  id VARCHAR(255) PRIMARY KEY,
+  username VARCHAR(255) UNIQUE NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  password_salt VARCHAR(255) NOT NULL,
+  role VARCHAR(50) NOT NULL,
+  display_name VARCHAR(255) NOT NULL,
+  session_token VARCHAR(255),
+  created_at VARCHAR(255) NOT NULL
+);
+
+-- 6. Membuat Tabel Job Price List (daftar harga pekerjaan cleaning/laundry/inventaris per item)
+CREATE TABLE IF NOT EXISTS job_price_list (
+  id VARCHAR(255) PRIMARY KEY,
+  item_name VARCHAR(255) NOT NULL,
+  cleaning_price INTEGER,
+  laundry_price INTEGER,
+  inventaris_price INTEGER
+);
+
+-- 7. Membuat Tabel Job Entries (pekerjaan yang dicatat karyawan, untuk approval & pembayaran)
+CREATE TABLE IF NOT EXISTS job_entries (
+  id VARCHAR(255) PRIMARY KEY,
+  employee_user_id VARCHAR(255) NOT NULL,
+  employee_name VARCHAR(255) NOT NULL,
+  entry_date VARCHAR(255) NOT NULL,
+  item_name VARCHAR(255) NOT NULL,
+  job_type VARCHAR(50) NOT NULL,
+  unit_price INTEGER NOT NULL,
+  quantity INTEGER NOT NULL,
+  total INTEGER NOT NULL,
+  status VARCHAR(50) NOT NULL,
+  payment_date VARCHAR(255),
+  created_at VARCHAR(255) NOT NULL
+);
 ```
 
 > **Sudah pernah menjalankan Step A sebelum kolom `discount_min_days`/`discount_threshold_days` ada?** Cukup jalankan ini sekali di SQL Editor yang sama (aman dijalankan berulang, dan nilai default `5` otomatis mengisi baris yang sudah ada, sesuai dengan aturan harga yang memang berlaku sebelumnya):
@@ -218,6 +255,44 @@ CREATE TABLE IF NOT EXISTS settings (
 > );
 > ```
 > Setelah tabel dibuat, boot aplikasi berikutnya akan otomatis mengisi baris default (lihat `seedPostgresIfEmpty` di `db/postgres.ts`) - tidak perlu INSERT manual.
+
+> **Sudah pernah menjalankan Step A sebelum tabel `users`/`job_price_list`/`job_entries` ada?** Jalankan ini sekali di SQL Editor yang sama (aman dijalankan berulang), **sebelum men-deploy kode baru** - kode aplikasi mengasumsikan ketiga tabel ini sudah ada saat boot. `users` menyimpan akun staff (role `owner`/`karyawan`, password di-hash dengan scrypt - lihat `src/auth.ts`, tidak pernah disimpan plain text). `job_price_list` adalah daftar harga per item x jenis pekerjaan (Cleaning/Laundry/Inventaris), dikelola dari tab Pengaturan. `job_entries` adalah pekerjaan yang dicatat karyawan dari menu Operational, disetujui & dibayar dari menu Approval.
+> ```sql
+> CREATE TABLE IF NOT EXISTS users (
+>   id VARCHAR(255) PRIMARY KEY,
+>   username VARCHAR(255) UNIQUE NOT NULL,
+>   password_hash VARCHAR(255) NOT NULL,
+>   password_salt VARCHAR(255) NOT NULL,
+>   role VARCHAR(50) NOT NULL,
+>   display_name VARCHAR(255) NOT NULL,
+>   session_token VARCHAR(255),
+>   created_at VARCHAR(255) NOT NULL
+> );
+>
+> CREATE TABLE IF NOT EXISTS job_price_list (
+>   id VARCHAR(255) PRIMARY KEY,
+>   item_name VARCHAR(255) NOT NULL,
+>   cleaning_price INTEGER,
+>   laundry_price INTEGER,
+>   inventaris_price INTEGER
+> );
+>
+> CREATE TABLE IF NOT EXISTS job_entries (
+>   id VARCHAR(255) PRIMARY KEY,
+>   employee_user_id VARCHAR(255) NOT NULL,
+>   employee_name VARCHAR(255) NOT NULL,
+>   entry_date VARCHAR(255) NOT NULL,
+>   item_name VARCHAR(255) NOT NULL,
+>   job_type VARCHAR(50) NOT NULL,
+>   unit_price INTEGER NOT NULL,
+>   quantity INTEGER NOT NULL,
+>   total INTEGER NOT NULL,
+>   status VARCHAR(50) NOT NULL,
+>   payment_date VARCHAR(255),
+>   created_at VARCHAR(255) NOT NULL
+> );
+> ```
+> Setelah tabel dibuat, boot aplikasi berikutnya akan otomatis mengisi akun owner default (`bilboadmin` / `bilbooutdoor2026`) dan daftar harga pekerjaan default - tidak perlu INSERT manual.
 
 ### Step B: Dapatkan Connection String Supabase Anda
 1. Di dashboard Supabase Anda, buka project Anda, lalu klik tombol **Connect** (di bagian atas halaman project).

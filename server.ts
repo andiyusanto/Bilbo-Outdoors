@@ -4,13 +4,36 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { createServer as createViteServer } from 'vite';
-import { Product, Order, OrderStatus, DashboardStats, StoreSettings } from './src/types';
+import { Product, Order, OrderStatus, DashboardStats, StoreSettings, AppUser, PublicUser, UserRole, JobPriceListItem, JobEntry, JobType } from './src/types';
 import { defaultProducts } from './db/defaultProducts';
 import { defaultSettings } from './db/defaultSettings';
+import { defaultUsers } from './db/defaultUsers';
+import { defaultJobPriceList } from './db/defaultJobPriceList';
 import { initPostgresPool, seedPostgresIfEmpty, readDBPostgres, writeDBPostgres } from './db/postgres';
 import { calculateRentalCost, calculateLegacyRentalCost } from './src/pricing';
+import { hashPassword, verifyPassword, generateSessionToken } from './src/auth';
+
+declare global {
+  namespace Express {
+    interface Request {
+      currentUser?: AppUser;
+    }
+  }
+}
 
 const WEEKDAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
+
+function getJobPrice(item: JobPriceListItem, jobType: JobType): number | undefined {
+  if (jobType === 'CLEANING') return item.cleaningPrice;
+  if (jobType === 'LAUNDRY') return item.laundryPrice;
+  if (jobType === 'INVENTARIS') return item.inventarisPrice;
+  return undefined;
+}
+
+function toPublicUser(user: AppUser): PublicUser {
+  const { passwordHash, passwordSalt, sessionToken, ...publicUser } = user;
+  return publicUser;
+}
 
 // Whether the store is physically open at the given moment, per its own
 // weekday's operating hours (which may differ from the order's endDate weekday
@@ -34,15 +57,27 @@ app.use(express.json({ limit: '10mb' }));
 // Otherwise, falls back to the local server_db.json file (unchanged from before).
 // This is an exclusive boot-time branch, never both at once.
 
-let readDB: () => Promise<{ products: Product[]; orders: Order[]; settings: StoreSettings }>;
-let writeDB: (data: { products: Product[]; orders: Order[]; settings: StoreSettings }) => Promise<void>;
+type DbShape = {
+  products: Product[];
+  orders: Order[];
+  settings: StoreSettings;
+  users: AppUser[];
+  jobPriceList: JobPriceListItem[];
+  jobEntries: JobEntry[];
+};
+
+let readDB: () => Promise<DbShape>;
+let writeDB: (data: DbShape) => Promise<void>;
 
 function seedJsonFileIfMissing(): void {
   if (!fs.existsSync(DB_FILE)) {
-    const dbData = {
+    const dbData: DbShape = {
       products: defaultProducts,
       orders: [] as Order[],
       settings: defaultSettings,
+      users: defaultUsers,
+      jobPriceList: defaultJobPriceList,
+      jobEntries: [] as JobEntry[],
     };
     fs.writeFileSync(DB_FILE, JSON.stringify(dbData, null, 2), 'utf-8');
     console.log('Database seeded successfully at', DB_FILE);
@@ -64,9 +99,12 @@ async function initDatabase(): Promise<void> {
       try {
         const data = fs.readFileSync(DB_FILE, 'utf-8');
         const parsed = JSON.parse(data);
-        // Old server_db.json files predate the settings feature - never crash on a
+        // Old server_db.json files predate later features - never crash on a
         // missing key, just fall back to defaults until the next write persists them.
         if (!parsed.settings) parsed.settings = defaultSettings;
+        if (!parsed.users) parsed.users = defaultUsers;
+        if (!parsed.jobPriceList) parsed.jobPriceList = defaultJobPriceList;
+        if (!parsed.jobEntries) parsed.jobEntries = [];
         return parsed;
       } catch (error) {
         console.error('Error reading database file, re-initializing...', error);
@@ -105,29 +143,127 @@ function asyncHandler(
   };
 }
 
-// Auth Helper Middleware
-function authenticateAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
+// Auth Helper Middleware - resolves the bearer token to a real user (any
+// logged-in role). Async because it needs a DB lookup, unlike the old
+// constant-comparison check, so it's wrapped the same way asyncHandler routes
+// forward rejections to Express's error handling.
+function authenticateUser(req: express.Request, res: express.Response, next: express.NextFunction) {
   const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.split(' ')[1];
-    if (token === 'bilbo-outdoors-admin-token-2026') {
-      return next();
-    }
+  const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+  if (!token) {
+    return res.status(401).json({ error: 'Unauthorized. Please log in.' });
   }
-  res.status(401).json({ error: 'Unauthorized. Admin credentials required.' });
+  readDB().then((db) => {
+    const user = db.users.find((u: AppUser) => u.sessionToken === token);
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized. Session invalid or expired.' });
+    }
+    req.currentUser = user;
+    next();
+  }).catch(next);
+}
+
+// Stacks after authenticateUser - only lets the 'owner' role through.
+function requireOwner(req: express.Request, res: express.Response, next: express.NextFunction) {
+  if (req.currentUser?.role !== 'owner') {
+    return res.status(403).json({ error: 'Forbidden. Owner access required.' });
+  }
+  next();
 }
 
 // ---------------- API ENDPOINTS ----------------
 
 // Staff Login
-app.post('/api/auth/login', (req, res) => {
-  const { username, password } = req.body;
-  if (username === 'admin' && password === 'bilbooutdoor2026') {
-    res.json({ token: 'bilbo-outdoors-admin-token-2026', username: 'Admin Staff' });
-  } else {
-    res.status(401).json({ error: 'Invalid username or password. Use: admin / bilbooutdoor2026' });
-  }
-});
+app.post('/api/auth/login', asyncHandler(async (req, res) => {
+  await withDbLock(async () => {
+    const { username, password } = req.body;
+    const db = await readDB();
+    const user = db.users.find((u: AppUser) => u.username === username);
+    if (!user || !verifyPassword(password, user.passwordSalt, user.passwordHash)) {
+      return res.status(401).json({ error: 'Username atau password salah.' });
+    }
+    user.sessionToken = generateSessionToken();
+    await writeDB(db);
+    res.json({ token: user.sessionToken, role: user.role, displayName: user.displayName });
+  });
+}));
+
+// Staff Logout - invalidates the session token server-side
+app.post('/api/auth/logout', authenticateUser, asyncHandler(async (req, res) => {
+  await withDbLock(async () => {
+    const db = await readDB();
+    const user = db.users.find((u: AppUser) => u.id === req.currentUser!.id);
+    if (user) user.sessionToken = undefined;
+    await writeDB(db);
+    res.json({ message: 'Logged out.' });
+  });
+}));
+
+// Self-service password change (any role)
+app.post('/api/auth/change-password', authenticateUser, asyncHandler(async (req, res) => {
+  await withDbLock(async () => {
+    const { currentPassword, newPassword } = req.body;
+    if (!newPassword || String(newPassword).length < 6) {
+      return res.status(400).json({ error: 'Password baru minimal 6 karakter.' });
+    }
+    const db = await readDB();
+    const user = db.users.find((u: AppUser) => u.id === req.currentUser!.id);
+    if (!user || !verifyPassword(currentPassword, user.passwordSalt, user.passwordHash)) {
+      return res.status(401).json({ error: 'Password saat ini salah.' });
+    }
+    const { hash, salt } = hashPassword(newPassword);
+    user.passwordHash = hash;
+    user.passwordSalt = salt;
+    // Rotate the session token too - an attacker holding a previously-leaked
+    // token for this account (the scenario a password change is meant to
+    // recover from) must not stay authenticated after it. Mirrors how logout
+    // clears sessionToken; here we issue a fresh one so this same request's
+    // caller doesn't get logged out by their own password change.
+    user.sessionToken = generateSessionToken();
+    await writeDB(db);
+    res.json({ message: 'Password berhasil diubah.', token: user.sessionToken });
+  });
+}));
+
+// Owner-only: list users (public-safe projection, never sends hashes/tokens)
+app.get('/api/users', authenticateUser, requireOwner, asyncHandler(async (req, res) => {
+  const db = await readDB();
+  res.json(db.users.map(toPublicUser));
+}));
+
+// Owner-only: create a new user (owner or karyawan)
+app.post('/api/users', authenticateUser, requireOwner, asyncHandler(async (req, res) => {
+  await withDbLock(async () => {
+    const { username, password, role, displayName } = req.body;
+    if (!username || !password || !role || !displayName) {
+      return res.status(400).json({ error: 'Missing required user fields.' });
+    }
+    const validRoles: UserRole[] = ['owner', 'karyawan'];
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({ error: 'Invalid role.' });
+    }
+    if (String(password).length < 6) {
+      return res.status(400).json({ error: 'Password minimal 6 karakter.' });
+    }
+    const db = await readDB();
+    if (db.users.some((u: AppUser) => u.username === username)) {
+      return res.status(400).json({ error: 'Username sudah digunakan.' });
+    }
+    const { hash, salt } = hashPassword(password);
+    const newUser: AppUser = {
+      id: `user-${Date.now()}`,
+      username,
+      passwordHash: hash,
+      passwordSalt: salt,
+      role,
+      displayName,
+      createdAt: new Date().toISOString(),
+    };
+    db.users.push(newUser);
+    await writeDB(db);
+    res.status(201).json(toPublicUser(newUser));
+  });
+}));
 
 // Get Products (available to both clients and admins)
 app.get('/api/products', asyncHandler(async (req, res) => {
@@ -136,7 +272,7 @@ app.get('/api/products', asyncHandler(async (req, res) => {
 }));
 
 // Admin CRUD: Create Product
-app.post('/api/products', authenticateAdmin, asyncHandler(async (req, res) => {
+app.post('/api/products', authenticateUser, asyncHandler(async (req, res) => {
   await withDbLock(async () => {
     const { name, category, rates, readinessHours, stock, description, image } = req.body;
     if (!name || !category || !rates || stock === undefined) {
@@ -169,7 +305,7 @@ app.post('/api/products', authenticateAdmin, asyncHandler(async (req, res) => {
 }));
 
 // Admin CRUD: Update Product
-app.put('/api/products/:id', authenticateAdmin, asyncHandler(async (req, res) => {
+app.put('/api/products/:id', authenticateUser, asyncHandler(async (req, res) => {
   await withDbLock(async () => {
     const { id } = req.params;
     const { name, category, rates, readinessHours, stock, description, image } = req.body;
@@ -204,7 +340,7 @@ app.put('/api/products/:id', authenticateAdmin, asyncHandler(async (req, res) =>
 }));
 
 // Admin CRUD: Delete Product
-app.delete('/api/products/:id', authenticateAdmin, asyncHandler(async (req, res) => {
+app.delete('/api/products/:id', authenticateUser, asyncHandler(async (req, res) => {
   await withDbLock(async () => {
     const { id } = req.params;
     const db = await readDB();
@@ -419,13 +555,13 @@ app.get('/api/orders/confirm/:token', asyncHandler(async (req, res) => {
 }));
 
 // Admin: Get all orders
-app.get('/api/orders', authenticateAdmin, asyncHandler(async (req, res) => {
+app.get('/api/orders', authenticateUser, asyncHandler(async (req, res) => {
   const db = await readDB();
   res.json(db.orders);
 }));
 
 // Admin: Update order status
-app.put('/api/orders/:id/status', authenticateAdmin, asyncHandler(async (req, res) => {
+app.put('/api/orders/:id/status', authenticateUser, asyncHandler(async (req, res) => {
   await withDbLock(async () => {
     const { id } = req.params;
     const { status, pickupIdType } = req.body;
@@ -459,7 +595,7 @@ app.put('/api/orders/:id/status', authenticateAdmin, asyncHandler(async (req, re
 }));
 
 // Admin: Calculate late returns and penalty fees
-app.post('/api/orders/:id/calculate-late', authenticateAdmin, asyncHandler(async (req, res) => {
+app.post('/api/orders/:id/calculate-late', authenticateUser, asyncHandler(async (req, res) => {
   await withDbLock(async () => {
     const { id } = req.params;
     const { returnDateTime } = req.body; // "YYYY-MM-DDTHH:mm" local string (defaults to now if not provided)
@@ -563,12 +699,12 @@ app.post('/api/orders/:id/calculate-late', authenticateAdmin, asyncHandler(async
 }));
 
 // Admin: Get/Update store settings (late-return tolerance + weekly operating hours)
-app.get('/api/settings', authenticateAdmin, asyncHandler(async (req, res) => {
+app.get('/api/settings', authenticateUser, requireOwner, asyncHandler(async (req, res) => {
   const db = await readDB();
   res.json(db.settings);
 }));
 
-app.put('/api/settings', authenticateAdmin, asyncHandler(async (req, res) => {
+app.put('/api/settings', authenticateUser, requireOwner, asyncHandler(async (req, res) => {
   await withDbLock(async () => {
     const { lateToleranceHours, operatingHours } = req.body;
     const db = await readDB();
@@ -579,7 +715,7 @@ app.put('/api/settings', authenticateAdmin, asyncHandler(async (req, res) => {
 }));
 
 // Admin: Get Dashboard Stats
-app.get('/api/stats', authenticateAdmin, asyncHandler(async (req, res) => {
+app.get('/api/stats', authenticateUser, requireOwner, asyncHandler(async (req, res) => {
   const db = await readDB();
   const orders: Order[] = db.orders;
 
@@ -603,6 +739,175 @@ app.get('/api/stats', authenticateAdmin, asyncHandler(async (req, res) => {
     activeRentalsCount,
     totalRevenue,
     dueTodayCount
+  });
+}));
+
+// Job price list: any logged-in user can read it (karyawan needs it to fill
+// the Operational form); only owner manages it (from the Pengaturan tab).
+app.get('/api/job-prices', authenticateUser, asyncHandler(async (req, res) => {
+  const db = await readDB();
+  res.json(db.jobPriceList);
+}));
+
+app.post('/api/job-prices', authenticateUser, requireOwner, asyncHandler(async (req, res) => {
+  await withDbLock(async () => {
+    const { itemName, cleaningPrice, laundryPrice, inventarisPrice } = req.body;
+    if (!itemName) {
+      return res.status(400).json({ error: 'Missing item name.' });
+    }
+    const db = await readDB();
+    const newItem: JobPriceListItem = {
+      id: `job-price-${Date.now()}`,
+      itemName,
+      cleaningPrice: cleaningPrice !== undefined && cleaningPrice !== '' ? Number(cleaningPrice) : undefined,
+      laundryPrice: laundryPrice !== undefined && laundryPrice !== '' ? Number(laundryPrice) : undefined,
+      inventarisPrice: inventarisPrice !== undefined && inventarisPrice !== '' ? Number(inventarisPrice) : undefined,
+    };
+    db.jobPriceList.push(newItem);
+    await writeDB(db);
+    res.status(201).json(newItem);
+  });
+}));
+
+app.put('/api/job-prices/:id', authenticateUser, requireOwner, asyncHandler(async (req, res) => {
+  await withDbLock(async () => {
+    const { id } = req.params;
+    const { itemName, cleaningPrice, laundryPrice, inventarisPrice } = req.body;
+    const db = await readDB();
+    const idx = db.jobPriceList.findIndex((j: JobPriceListItem) => j.id === id);
+    if (idx === -1) {
+      return res.status(404).json({ error: 'Item not found.' });
+    }
+    const existing = db.jobPriceList[idx];
+    db.jobPriceList[idx] = {
+      ...existing,
+      itemName: itemName !== undefined ? itemName : existing.itemName,
+      cleaningPrice: cleaningPrice !== undefined ? (cleaningPrice === '' ? undefined : Number(cleaningPrice)) : existing.cleaningPrice,
+      laundryPrice: laundryPrice !== undefined ? (laundryPrice === '' ? undefined : Number(laundryPrice)) : existing.laundryPrice,
+      inventarisPrice: inventarisPrice !== undefined ? (inventarisPrice === '' ? undefined : Number(inventarisPrice)) : existing.inventarisPrice,
+    };
+    await writeDB(db);
+    res.json(db.jobPriceList[idx]);
+  });
+}));
+
+app.delete('/api/job-prices/:id', authenticateUser, requireOwner, asyncHandler(async (req, res) => {
+  await withDbLock(async () => {
+    const { id } = req.params;
+    const db = await readDB();
+    const initialCount = db.jobPriceList.length;
+    db.jobPriceList = db.jobPriceList.filter((j: JobPriceListItem) => j.id !== id);
+    if (db.jobPriceList.length === initialCount) {
+      return res.status(404).json({ error: 'Item not found.' });
+    }
+    await writeDB(db);
+    res.json({ message: 'Item deleted successfully.' });
+  });
+}));
+
+// Job entries: owner sees everyone's, karyawan sees only their own.
+app.get('/api/job-entries', authenticateUser, asyncHandler(async (req, res) => {
+  const db = await readDB();
+  const entries = req.currentUser!.role === 'owner'
+    ? db.jobEntries
+    : db.jobEntries.filter((e: JobEntry) => e.employeeUserId === req.currentUser!.id);
+  res.json(entries);
+}));
+
+app.post('/api/job-entries', authenticateUser, asyncHandler(async (req, res) => {
+  await withDbLock(async () => {
+    const { entryDate, itemName, jobType, quantity } = req.body;
+    const validJobTypes: JobType[] = ['CLEANING', 'LAUNDRY', 'INVENTARIS'];
+    if (!entryDate || !itemName || !validJobTypes.includes(jobType) || !quantity) {
+      return res.status(400).json({ error: 'Missing or invalid required job entry fields.' });
+    }
+    const db = await readDB();
+    const priceItem = db.jobPriceList.find((j: JobPriceListItem) => j.itemName === itemName);
+    const unitPrice = priceItem ? getJobPrice(priceItem, jobType) : undefined;
+    if (unitPrice === undefined) {
+      return res.status(400).json({ error: 'Jenis pekerjaan ini tidak berlaku untuk item tersebut.' });
+    }
+    const qty = Number(quantity);
+    const newEntry: JobEntry = {
+      id: `job-entry-${Date.now()}`,
+      employeeUserId: req.currentUser!.id,
+      employeeName: req.currentUser!.displayName,
+      entryDate,
+      itemName,
+      jobType,
+      unitPrice,
+      quantity: qty,
+      total: unitPrice * qty,
+      status: 'Pending',
+      createdAt: new Date().toISOString(),
+    };
+    db.jobEntries.unshift(newEntry);
+    await writeDB(db);
+    res.status(201).json(newEntry);
+  });
+}));
+
+// Bulk approve+pay - registered BEFORE the /:id route below so this literal
+// path isn't swallowed by the :id wildcard.
+app.put('/api/job-entries/approve-batch', authenticateUser, requireOwner, asyncHandler(async (req, res) => {
+  await withDbLock(async () => {
+    const { ids, paymentDate } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0 || !paymentDate) {
+      return res.status(400).json({ error: 'Missing ids or payment date.' });
+    }
+    const db = await readDB();
+    const idSet = new Set(ids);
+    let updatedCount = 0;
+    db.jobEntries = db.jobEntries.map((e: JobEntry) => {
+      if (idSet.has(e.id) && e.status === 'Pending') {
+        updatedCount++;
+        return { ...e, status: 'Paid' as const, paymentDate };
+      }
+      return e;
+    });
+    await writeDB(db);
+    res.json({ updatedCount });
+  });
+}));
+
+// Edit own Pending job entry (input mistakes only - once Paid, immutable)
+app.put('/api/job-entries/:id', authenticateUser, asyncHandler(async (req, res) => {
+  await withDbLock(async () => {
+    const { id } = req.params;
+    const { entryDate, itemName, jobType, quantity } = req.body;
+    const db = await readDB();
+    const idx = db.jobEntries.findIndex((e: JobEntry) => e.id === id);
+    if (idx === -1) {
+      return res.status(404).json({ error: 'Job entry not found.' });
+    }
+    const entry = db.jobEntries[idx];
+    if (entry.employeeUserId !== req.currentUser!.id) {
+      return res.status(403).json({ error: 'Anda hanya bisa mengubah pekerjaan milik sendiri.' });
+    }
+    if (entry.status !== 'Pending') {
+      return res.status(403).json({ error: 'Pekerjaan yang sudah dibayar tidak bisa diubah.' });
+    }
+
+    const nextItemName = itemName !== undefined ? itemName : entry.itemName;
+    const nextJobType = jobType !== undefined ? jobType : entry.jobType;
+    const priceItem = db.jobPriceList.find((j: JobPriceListItem) => j.itemName === nextItemName);
+    const unitPrice = priceItem ? getJobPrice(priceItem, nextJobType) : undefined;
+    if (unitPrice === undefined) {
+      return res.status(400).json({ error: 'Jenis pekerjaan ini tidak berlaku untuk item tersebut.' });
+    }
+    const qty = quantity !== undefined ? Number(quantity) : entry.quantity;
+
+    db.jobEntries[idx] = {
+      ...entry,
+      entryDate: entryDate !== undefined ? entryDate : entry.entryDate,
+      itemName: nextItemName,
+      jobType: nextJobType,
+      unitPrice,
+      quantity: qty,
+      total: unitPrice * qty,
+    };
+    await writeDB(db);
+    res.json(db.jobEntries[idx]);
   });
 }));
 

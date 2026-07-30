@@ -86,6 +86,47 @@ export interface StoreSettings {
   operatingHours: WeeklyHours;
 }
 
+export type UserRole = 'owner' | 'karyawan';
+
+export interface AppUser {
+  id: string;
+  username: string;
+  passwordHash: string; // scrypt digest, hex - see src/auth.ts
+  passwordSalt: string; // per-user random salt, hex
+  role: UserRole;
+  displayName: string;
+  sessionToken?: string; // current active session token; absent when logged out
+  createdAt: string;
+}
+
+// Public-safe projection of AppUser - never send hash/salt/token to the client.
+export type PublicUser = Omit<AppUser, 'passwordHash' | 'passwordSalt' | 'sessionToken'>;
+
+export interface JobPriceListItem {
+  id: string;
+  itemName: string;
+  cleaningPrice?: number; // undefined where this service doesn't apply to this item
+  laundryPrice?: number;
+  inventarisPrice?: number;
+}
+
+export type JobType = 'CLEANING' | 'LAUNDRY' | 'INVENTARIS';
+
+export interface JobEntry {
+  id: string;
+  employeeUserId: string;
+  employeeName: string; // snapshot of AppUser.displayName at entry time, same reasoning as OrderItem.productName
+  entryDate: string; // YYYY-MM-DD
+  itemName: string; // snapshot of JobPriceListItem.itemName, not a live FK
+  jobType: JobType;
+  unitPrice: number; // snapshot of the matching price at entry time
+  quantity: number;
+  total: number; // unitPrice * quantity
+  status: 'Pending' | 'Paid';
+  paymentDate?: string; // owner-entered, set on the Paid transition
+  createdAt: string;
+}
+
 export interface Theme {
   id: string;
   name: string;

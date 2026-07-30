@@ -1,8 +1,10 @@
 import pg from 'pg';
 import dns from 'dns';
-import { Product, Order, OrderItem, StoreSettings } from '../src/types';
+import { Product, Order, OrderItem, StoreSettings, AppUser, JobPriceListItem, JobEntry } from '../src/types';
 import { defaultProducts } from './defaultProducts';
 import { defaultSettings } from './defaultSettings';
+import { defaultUsers } from './defaultUsers';
+import { defaultJobPriceList } from './defaultJobPriceList';
 
 let pool: pg.Pool;
 
@@ -72,6 +74,39 @@ export async function seedPostgresIfEmpty(): Promise<void> {
       [defaultSettings.lateToleranceHours, JSON.stringify(defaultSettings.operatingHours)]
     );
     console.log('Postgres seeded successfully with default store settings.');
+  }
+
+  // Same independence: seed the default owner account once, whenever the
+  // users table is first found empty (fresh deploy or post-migration).
+  const usersCountRes = await pool.query('SELECT COUNT(*)::int AS count FROM users');
+  if (usersCountRes.rows[0].count === 0) {
+    const params: any[] = [];
+    defaultUsers.forEach((u) => {
+      params.push(u.id, u.username, u.passwordHash, u.passwordSalt, u.role, u.displayName, u.sessionToken ?? null, u.createdAt);
+    });
+    await pool.query(
+      `INSERT INTO users (id, username, password_hash, password_salt, role, display_name, session_token, created_at)
+       VALUES ${buildValuesClause(defaultUsers.length, 8)}
+       ON CONFLICT (id) DO NOTHING`,
+      params
+    );
+    console.log('Postgres seeded successfully with default owner account.');
+  }
+
+  // Job price list: same independence, seeded once from the owner's master sheet.
+  const jobPricesCountRes = await pool.query('SELECT COUNT(*)::int AS count FROM job_price_list');
+  if (jobPricesCountRes.rows[0].count === 0) {
+    const params: any[] = [];
+    defaultJobPriceList.forEach((j) => {
+      params.push(j.id, j.itemName, j.cleaningPrice ?? null, j.laundryPrice ?? null, j.inventarisPrice ?? null);
+    });
+    await pool.query(
+      `INSERT INTO job_price_list (id, item_name, cleaning_price, laundry_price, inventaris_price)
+       VALUES ${buildValuesClause(defaultJobPriceList.length, 5)}
+       ON CONFLICT (id) DO NOTHING`,
+      params
+    );
+    console.log('Postgres seeded successfully with default job price list.');
   }
 }
 
@@ -153,7 +188,47 @@ function rowToSettings(row: any): StoreSettings {
   };
 }
 
-export async function readDBPostgres(): Promise<{ products: Product[]; orders: Order[]; settings: StoreSettings }> {
+function rowToUser(row: any): AppUser {
+  return {
+    id: row.id,
+    username: row.username,
+    passwordHash: row.password_hash,
+    passwordSalt: row.password_salt,
+    role: row.role,
+    displayName: row.display_name,
+    sessionToken: row.session_token ?? undefined,
+    createdAt: row.created_at,
+  };
+}
+
+function rowToJobPriceItem(row: any): JobPriceListItem {
+  return {
+    id: row.id,
+    itemName: row.item_name,
+    cleaningPrice: row.cleaning_price !== null && row.cleaning_price !== undefined ? Number(row.cleaning_price) : undefined,
+    laundryPrice: row.laundry_price !== null && row.laundry_price !== undefined ? Number(row.laundry_price) : undefined,
+    inventarisPrice: row.inventaris_price !== null && row.inventaris_price !== undefined ? Number(row.inventaris_price) : undefined,
+  };
+}
+
+function rowToJobEntry(row: any): JobEntry {
+  return {
+    id: row.id,
+    employeeUserId: row.employee_user_id,
+    employeeName: row.employee_name,
+    entryDate: row.entry_date,
+    itemName: row.item_name,
+    jobType: row.job_type,
+    unitPrice: Number(row.unit_price),
+    quantity: Number(row.quantity),
+    total: Number(row.total),
+    status: row.status,
+    paymentDate: row.payment_date ?? undefined,
+    createdAt: row.created_at,
+  };
+}
+
+export async function readDBPostgres(): Promise<{ products: Product[]; orders: Order[]; settings: StoreSettings; users: AppUser[]; jobPriceList: JobPriceListItem[]; jobEntries: JobEntry[] }> {
   const productsRes = await pool.query('SELECT * FROM products ORDER BY category ASC, id ASC');
   const products = productsRes.rows.map(rowToProduct);
 
@@ -175,7 +250,16 @@ export async function readDBPostgres(): Promise<{ products: Product[]; orders: O
   // old server_db.json predating this feature.
   const settings = settingsRes.rows[0] ? rowToSettings(settingsRes.rows[0]) : defaultSettings;
 
-  return { products, orders, settings };
+  const usersRes = await pool.query('SELECT * FROM users ORDER BY created_at ASC');
+  const users = usersRes.rows.length > 0 ? usersRes.rows.map(rowToUser) : defaultUsers;
+
+  const jobPriceListRes = await pool.query('SELECT * FROM job_price_list ORDER BY item_name ASC');
+  const jobPriceList = jobPriceListRes.rows.length > 0 ? jobPriceListRes.rows.map(rowToJobPriceItem) : defaultJobPriceList;
+
+  const jobEntriesRes = await pool.query('SELECT * FROM job_entries ORDER BY created_at DESC');
+  const jobEntries = jobEntriesRes.rows.map(rowToJobEntry);
+
+  return { products, orders, settings, users, jobPriceList, jobEntries };
 }
 
 // Builds a `VALUES ($1,$2,...),($n+1,$n+2,...),...` clause plus the flattened
@@ -195,7 +279,7 @@ function buildValuesClause(rowCount: number, colsPerRow: number): string {
   return rows.join(', ');
 }
 
-export async function writeDBPostgres(data: { products: Product[]; orders: Order[]; settings: StoreSettings }): Promise<void> {
+export async function writeDBPostgres(data: { products: Product[]; orders: Order[]; settings: StoreSettings; users: AppUser[]; jobPriceList: JobPriceListItem[]; jobEntries: JobEntry[] }): Promise<void> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -208,6 +292,88 @@ export async function writeDBPostgres(data: { products: Product[]; orders: Order
          late_tolerance_hours = EXCLUDED.late_tolerance_hours,
          operating_hours = EXCLUDED.operating_hours`,
       [Number(data.settings.lateToleranceHours), JSON.stringify(data.settings.operatingHours)]
+    );
+
+    // Users: batched upsert of everything present, then prune anything removed -
+    // same list convention as products/orders. In practice users are only ever
+    // added or have sessionToken/password fields updated, never pruned by a
+    // normal write, but the prune keeps this consistent with the rest of the app.
+    if (data.users.length > 0) {
+      const params: any[] = [];
+      data.users.forEach((u) => {
+        params.push(u.id, u.username, u.passwordHash, u.passwordSalt, u.role, u.displayName, u.sessionToken ?? null, u.createdAt);
+      });
+      await client.query(
+        `INSERT INTO users (id, username, password_hash, password_salt, role, display_name, session_token, created_at)
+         VALUES ${buildValuesClause(data.users.length, 8)}
+         ON CONFLICT (id) DO UPDATE SET
+           username = EXCLUDED.username,
+           password_hash = EXCLUDED.password_hash,
+           password_salt = EXCLUDED.password_salt,
+           role = EXCLUDED.role,
+           display_name = EXCLUDED.display_name,
+           session_token = EXCLUDED.session_token,
+           created_at = EXCLUDED.created_at`,
+        params
+      );
+    }
+    const userIds = data.users.map((u) => u.id);
+    await client.query(
+      userIds.length > 0 ? 'DELETE FROM users WHERE id <> ALL($1::varchar[])' : 'DELETE FROM users',
+      userIds.length > 0 ? [userIds] : []
+    );
+
+    // Job price list: same batched upsert+prune list convention.
+    if (data.jobPriceList.length > 0) {
+      const params: any[] = [];
+      data.jobPriceList.forEach((j) => {
+        params.push(j.id, j.itemName, j.cleaningPrice ?? null, j.laundryPrice ?? null, j.inventarisPrice ?? null);
+      });
+      await client.query(
+        `INSERT INTO job_price_list (id, item_name, cleaning_price, laundry_price, inventaris_price)
+         VALUES ${buildValuesClause(data.jobPriceList.length, 5)}
+         ON CONFLICT (id) DO UPDATE SET
+           item_name = EXCLUDED.item_name,
+           cleaning_price = EXCLUDED.cleaning_price,
+           laundry_price = EXCLUDED.laundry_price,
+           inventaris_price = EXCLUDED.inventaris_price`,
+        params
+      );
+    }
+    const jobPriceIds = data.jobPriceList.map((j) => j.id);
+    await client.query(
+      jobPriceIds.length > 0 ? 'DELETE FROM job_price_list WHERE id <> ALL($1::varchar[])' : 'DELETE FROM job_price_list',
+      jobPriceIds.length > 0 ? [jobPriceIds] : []
+    );
+
+    // Job entries: same batched upsert+prune list convention.
+    if (data.jobEntries.length > 0) {
+      const params: any[] = [];
+      data.jobEntries.forEach((e) => {
+        params.push(e.id, e.employeeUserId, e.employeeName, e.entryDate, e.itemName, e.jobType, Number(e.unitPrice), Number(e.quantity), Number(e.total), e.status, e.paymentDate ?? null, e.createdAt);
+      });
+      await client.query(
+        `INSERT INTO job_entries (id, employee_user_id, employee_name, entry_date, item_name, job_type, unit_price, quantity, total, status, payment_date, created_at)
+         VALUES ${buildValuesClause(data.jobEntries.length, 12)}
+         ON CONFLICT (id) DO UPDATE SET
+           employee_user_id = EXCLUDED.employee_user_id,
+           employee_name = EXCLUDED.employee_name,
+           entry_date = EXCLUDED.entry_date,
+           item_name = EXCLUDED.item_name,
+           job_type = EXCLUDED.job_type,
+           unit_price = EXCLUDED.unit_price,
+           quantity = EXCLUDED.quantity,
+           total = EXCLUDED.total,
+           status = EXCLUDED.status,
+           payment_date = EXCLUDED.payment_date,
+           created_at = EXCLUDED.created_at`,
+        params
+      );
+    }
+    const jobEntryIds = data.jobEntries.map((e) => e.id);
+    await client.query(
+      jobEntryIds.length > 0 ? 'DELETE FROM job_entries WHERE id <> ALL($1::varchar[])' : 'DELETE FROM job_entries',
+      jobEntryIds.length > 0 ? [jobEntryIds] : []
     );
 
     // Products: batched upsert of everything present, then prune anything removed

@@ -39,7 +39,7 @@ async function runMigration() {
     const rawData = fs.readFileSync(dbFilePath, 'utf8');
     const dbData = JSON.parse(rawData);
 
-    const { products = [], orders = [], settings } = dbData;
+    const { products = [], orders = [], settings, users, jobPriceList, jobEntries = [] } = dbData;
     console.log(`📦 Found ${products.length} products and ${orders.length} orders in server_db.json.`);
 
     // 1. Insert Products
@@ -154,6 +154,79 @@ async function runMigration() {
       console.log('   - Settings migrated.');
     } else {
       console.log('\n⚠️  No settings found in server_db.json - defaults will be seeded on the app\'s next boot.');
+    }
+
+    // 5. Insert Users - if missing (predates this feature), skip: seedPostgresIfEmpty
+    // seeds the default owner account automatically on the app's next boot.
+    if (users) {
+      console.log('\n📥 Migrating Users...');
+      for (const user of users) {
+        await client.query(
+          `INSERT INTO users (id, username, password_hash, password_salt, role, display_name, session_token, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           ON CONFLICT (id) DO UPDATE SET
+             username = EXCLUDED.username,
+             password_hash = EXCLUDED.password_hash,
+             password_salt = EXCLUDED.password_salt,
+             role = EXCLUDED.role,
+             display_name = EXCLUDED.display_name,
+             session_token = EXCLUDED.session_token,
+             created_at = EXCLUDED.created_at`,
+          [user.id, user.username, user.passwordHash, user.passwordSalt, user.role, user.displayName, user.sessionToken ?? null, user.createdAt]
+        );
+        console.log(`   - User: ${user.username} (${user.role}) migrated.`);
+      }
+    } else {
+      console.log('\n⚠️  No users found in server_db.json - the default owner account will be seeded on the app\'s next boot.');
+    }
+
+    // 6. Insert Job Price List - if missing, skip: seeded automatically on next boot.
+    if (jobPriceList) {
+      console.log('\n📥 Migrating Job Price List...');
+      for (const item of jobPriceList) {
+        await client.query(
+          `INSERT INTO job_price_list (id, item_name, cleaning_price, laundry_price, inventaris_price)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (id) DO UPDATE SET
+             item_name = EXCLUDED.item_name,
+             cleaning_price = EXCLUDED.cleaning_price,
+             laundry_price = EXCLUDED.laundry_price,
+             inventaris_price = EXCLUDED.inventaris_price`,
+          [item.id, item.itemName, item.cleaningPrice ?? null, item.laundryPrice ?? null, item.inventarisPrice ?? null]
+        );
+      }
+      console.log(`   - ${jobPriceList.length} job price list items migrated.`);
+    } else {
+      console.log('\n⚠️  No job price list found in server_db.json - defaults will be seeded on the app\'s next boot.');
+    }
+
+    // 7. Insert Job Entries
+    if (jobEntries.length > 0) {
+      console.log('\n📥 Migrating Job Entries...');
+      for (const entry of jobEntries) {
+        const existing = await client.query('SELECT id FROM job_entries WHERE id = $1', [entry.id]);
+        if (existing.rows.length === 0) {
+          await client.query(
+            `INSERT INTO job_entries (id, employee_user_id, employee_name, entry_date, item_name, job_type, unit_price, quantity, total, status, payment_date, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+            [
+              entry.id,
+              entry.employeeUserId,
+              entry.employeeName,
+              entry.entryDate,
+              entry.itemName,
+              entry.jobType,
+              Number(entry.unitPrice),
+              Number(entry.quantity),
+              Number(entry.total),
+              entry.status,
+              entry.paymentDate ?? null,
+              entry.createdAt
+            ]
+          );
+        }
+      }
+      console.log(`   - ${jobEntries.length} job entries migrated.`);
     }
 
     console.log('\n🎉 Database migration complete! All products and orders successfully synced.');

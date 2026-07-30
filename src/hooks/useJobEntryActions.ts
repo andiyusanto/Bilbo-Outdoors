@@ -1,0 +1,70 @@
+import { useState, FormEvent } from 'react';
+import { JobEntry, JobType } from '../types';
+import { jsonAuthHeaders, parseJsonOrThrow } from '../lib/api';
+
+interface UseJobEntryActionsParams {
+  token: string;
+  fetchAdminData: () => Promise<void>;
+}
+
+const DEFAULT_ENTRY_FORM = {
+  entryDate: new Date().toISOString().split('T')[0],
+  itemName: '',
+  jobType: '' as JobType | '',
+  quantity: 1,
+};
+
+export function useJobEntryActions({ token, fetchAdminData }: UseJobEntryActionsParams) {
+  const [showEntryModal, setShowEntryModal] = useState<boolean>(false);
+  const [editingEntry, setEditingEntry] = useState<JobEntry | null>(null);
+  const [entryFormData, setEntryFormData] = useState(DEFAULT_ENTRY_FORM);
+
+  const handleSaveEntry = async (e: FormEvent) => {
+    e.preventDefault();
+    try {
+      const method = editingEntry ? 'PUT' : 'POST';
+      const url = editingEntry ? `/api/job-entries/${editingEntry.id}` : '/api/job-entries';
+      const res = await fetch(url, {
+        method,
+        headers: jsonAuthHeaders(token),
+        body: JSON.stringify(entryFormData)
+      });
+      await parseJsonOrThrow(res);
+      alert(editingEntry ? 'Pekerjaan berhasil diperbarui!' : 'Pekerjaan berhasil dicatat!');
+      setShowEntryModal(false);
+      setEditingEntry(null);
+      setEntryFormData(DEFAULT_ENTRY_FORM);
+      fetchAdminData();
+    } catch (err: any) {
+      alert(`Gagal menyimpan pekerjaan: ${err.message}`);
+    }
+  };
+
+  const openAddEntryModal = () => {
+    setEditingEntry(null);
+    setEntryFormData(DEFAULT_ENTRY_FORM);
+    setShowEntryModal(true);
+  };
+
+  const openEditEntryModal = (entry: JobEntry) => {
+    setEditingEntry(entry);
+    setEntryFormData({
+      entryDate: entry.entryDate,
+      itemName: entry.itemName,
+      jobType: entry.jobType,
+      quantity: entry.quantity,
+    });
+    setShowEntryModal(true);
+  };
+
+  return {
+    showEntryModal,
+    setShowEntryModal,
+    editingEntry,
+    entryFormData,
+    setEntryFormData,
+    handleSaveEntry,
+    openAddEntryModal,
+    openEditEntryModal,
+  };
+}

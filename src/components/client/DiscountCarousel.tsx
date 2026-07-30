@@ -107,12 +107,14 @@ export default function DiscountCarousel({ products, categoryOrder }: DiscountCa
                           <img
                             src={item.image}
                             alt={item.name}
+                            width={24}
+                            height={24}
                             className="w-6 h-6 object-cover border border-black"
                           />
                         </button>
                       ) : (
                         <div className="w-6 h-6 border border-black/40 bg-white shrink-0 flex items-center justify-center">
-                          <img src={bilboIcon} alt="" className="w-4 h-4 opacity-40" />
+                          <img src={bilboIcon} alt="" width={16} height={16} className="w-4 h-4 opacity-40" />
                         </div>
                       )}
                       <span className="flex-1 min-w-0 text-[11px] font-bold uppercase truncate">

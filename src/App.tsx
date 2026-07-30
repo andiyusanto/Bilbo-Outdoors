@@ -37,7 +37,7 @@ export default function App() {
             
             {/* Logo */}
             <div className="flex items-center space-x-3">
-              <img src={bilboLogoWide} alt="Bilbo Outdoors" className="h-9 sm:h-11 w-auto" />
+              <img src={bilboLogoWide} alt="Bilbo Outdoors" width={800} height={437} className="h-9 sm:h-11 w-auto" />
               <p className="text-[9px] text-zinc-500 font-mono tracking-widest font-black uppercase border-l-2 border-black pl-3">CAMPING EQUIPMENT<br/>RENTAL • SURABAYA, IDN</p>
             </div>
 
@@ -106,7 +106,7 @@ export default function App() {
             {/* Branding & Contact */}
             <div className="space-y-4">
               <div className="flex items-center space-x-3">
-                <img src={bilboIcon} alt="" className="h-9 w-9" />
+                <img src={bilboIcon} alt="" width={36} height={36} loading="lazy" className="h-9 w-9" />
                 <h3 className="font-display font-black tracking-tighter text-xl uppercase text-brand">BILBO OUTDOORS</h3>
               </div>
               <p className="text-xs text-zinc-400 leading-relaxed max-w-sm">

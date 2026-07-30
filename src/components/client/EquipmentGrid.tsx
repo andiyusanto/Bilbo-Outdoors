@@ -71,14 +71,14 @@ export default function EquipmentGrid({
                   className="group relative w-full h-full cursor-pointer"
                   aria-label={`Lihat foto ${prod.name}`}
                 >
-                  <img src={prod.image} alt={prod.name} className="w-full h-full object-cover" />
+                  <img src={prod.image} alt={prod.name} width={400} height={144} loading="lazy" className="w-full h-full object-cover" />
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
                     <ZoomIn className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity stroke-[2.5]" />
                   </div>
                 </button>
               ) : (
                 <div className="w-full h-full bg-brand/5 flex items-center justify-center">
-                  <img src={bilboIcon} alt="" className="w-14 h-14 opacity-25" />
+                  <img src={bilboIcon} alt="" width={56} height={56} loading="lazy" className="w-14 h-14 opacity-25" />
                 </div>
               )}
             </div>

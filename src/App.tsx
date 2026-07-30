@@ -138,13 +138,13 @@ export default function App() {
                   <Instagram className="w-4 h-4 mr-2 text-brand" />
                   @bilbooutdoors (INSTAGRAM)
                 </a>
-                <p className="text-[10px] text-zinc-500 font-mono uppercase font-bold">Narahubung Cepat WA: 0811-370-6666</p>
+                <p className="text-[10px] text-zinc-400 font-mono uppercase font-bold">Narahubung Cepat WA: 0811-370-6666</p>
               </div>
             </div>
 
           </div>
 
-          <div className="max-w-7xl mx-auto border-t border-zinc-900 mt-12 pt-8 text-center text-[10px] text-zinc-500 font-mono uppercase tracking-widest leading-relaxed">
+          <div className="max-w-7xl mx-auto border-t border-zinc-900 mt-12 pt-8 text-center text-[10px] text-zinc-400 font-mono uppercase tracking-widest leading-relaxed">
             <p>© 2026 Bilbo Outdoors Surabaya. All rights reserved. Hubungi kami untuk petualangan seru Anda!</p>
           </div>
         </footer>

@@ -18,13 +18,13 @@ export default function CartSummary({
 }: CartSummaryProps) {
   return (
     <div className="bg-white border-2 border-black rounded-none shadow-[4px_4px_0px_rgba(0,0,0,1)] p-6 space-y-5">
-      <h3 className="font-display font-black text-black text-lg flex items-center uppercase tracking-tight border-b-4 border-brand pb-2">
+      <h2 className="font-display font-black text-black text-lg flex items-center uppercase tracking-tight border-b-4 border-brand pb-2">
         <ShoppingBag className="w-5 h-5 mr-2 text-black stroke-[3]" />
         CURRENT SELECTION
-      </h3>
+      </h2>
 
       {Object.keys(cart).length === 0 ? (
-        <div className="py-10 text-center text-xs text-zinc-400 font-bold uppercase tracking-wider">
+        <div className="py-10 text-center text-xs text-zinc-500 font-bold uppercase tracking-wider">
           Belum ada alat camping dipilih. Pilih di katalog sebelah kiri.
         </div>
       ) : (

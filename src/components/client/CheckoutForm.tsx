@@ -30,10 +30,10 @@ export default function CheckoutForm({
 }: CheckoutFormProps) {
   return (
     <div className="bg-white border-2 border-black rounded-none shadow-[4px_4px_0px_rgba(0,0,0,1)] p-6 space-y-5">
-      <h3 className="font-display font-black text-black text-lg flex items-center uppercase tracking-tight border-b-4 border-brand pb-2">
+      <h2 className="font-display font-black text-black text-lg flex items-center uppercase tracking-tight border-b-4 border-brand pb-2">
         <FileText className="w-5 h-5 mr-2 text-black stroke-[3]" />
         FORMULIR PENYEWA
-      </h3>
+      </h2>
 
       {checkoutError && (
         <div className="bg-red-50 border-2 border-red-500 text-red-800 text-xs p-3 rounded-none flex items-start font-bold uppercase">
@@ -44,8 +44,9 @@ export default function CheckoutForm({
 
       <form onSubmit={onSubmit} className="space-y-4">
         <div>
-          <label className="block text-[10px] font-black text-black uppercase tracking-wider">Nama Lengkap Anda</label>
+          <label htmlFor="customerName" className="block text-[10px] font-black text-black uppercase tracking-wider">Nama Lengkap Anda</label>
           <input
+            id="customerName"
             type="text"
             required
             value={customerName}
@@ -56,8 +57,9 @@ export default function CheckoutForm({
         </div>
 
         <div>
-          <label className="block text-[10px] font-black text-black uppercase tracking-wider">No. WhatsApp Aktif</label>
+          <label htmlFor="customerWhatsApp" className="block text-[10px] font-black text-black uppercase tracking-wider">No. WhatsApp Aktif</label>
           <input
+            id="customerWhatsApp"
             type="tel"
             required
             value={customerWhatsApp}
@@ -69,12 +71,13 @@ export default function CheckoutForm({
 
         {/* Personal photo uploader */}
         <div className="space-y-1.5">
-          <label className="block text-[10px] font-black text-black uppercase tracking-wider">
+          <label htmlFor="personalPhoto" className="block text-[10px] font-black text-black uppercase tracking-wider">
             Upload Foto Diri (Setengah/Seluruh Badan)
           </label>
 
           <div className="border-2 border-dashed border-black rounded-none hover:bg-brand/5 transition-all bg-zinc-50 relative overflow-hidden">
             <input
+              id="personalPhoto"
               type="file"
               accept="image/*"
               capture="user"

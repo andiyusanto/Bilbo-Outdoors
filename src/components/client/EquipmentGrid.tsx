@@ -103,7 +103,7 @@ export default function EquipmentGrid({
                   )}
                 </div>
 
-                <h4 className="font-display font-black text-base text-black mt-3 uppercase tracking-tight">{prod.name}</h4>
+                <h3 className="font-display font-black text-base text-black mt-3 uppercase tracking-tight">{prod.name}</h3>
                 {prod.description && (
                   <p className="text-[11px] text-zinc-600 mt-1 line-clamp-3 uppercase font-semibold leading-relaxed">{prod.description}</p>
                 )}
@@ -119,7 +119,7 @@ export default function EquipmentGrid({
                     </span>
                   </div>
                   {calculateSavingsFor5Days(prod.rates) > 0 && (
-                    <p className="text-[9px] text-emerald-600 font-black mt-1 uppercase">
+                    <p className="text-[9px] text-emerald-700 font-black mt-1 uppercase">
                       {`HEMAT ${Math.round(calculateSavingsFor5Days(prod.rates)/1000)}K UNTUK 5 HARI`}
                     </p>
                   )}

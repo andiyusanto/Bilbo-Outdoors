@@ -139,10 +139,14 @@ export default function DiscountCarousel({ products, categoryOrder }: DiscountCa
               onClick={() => setSlideIndex(i)}
               aria-label={`Slide ${i + 1} dari ${slides.length}`}
               aria-current={i === slideIndex}
-              className={`w-2 h-2 rounded-full border border-black transition-colors cursor-pointer ${
-                i === slideIndex ? 'bg-black' : 'bg-white'
-              }`}
-            />
+              className="p-2.5 flex items-center justify-center cursor-pointer"
+            >
+              <span
+                className={`block w-2 h-2 rounded-full border border-black transition-colors ${
+                  i === slideIndex ? 'bg-black' : 'bg-white'
+                }`}
+              />
+            </button>
           ))}
         </div>
       )}

@@ -17,15 +17,16 @@ export default function DateRangePicker({
 }: DateRangePickerProps) {
   return (
     <div className="bg-white border-2 border-black p-6 rounded-none shadow-[4px_4px_0px_rgba(0,0,0,1)] space-y-4">
-      <h3 className="font-display font-black text-black text-lg flex items-center uppercase tracking-tight">
+      <h2 className="font-display font-black text-black text-lg flex items-center uppercase tracking-tight">
         <Calendar className="w-5 h-5 mr-2 text-black stroke-[3]" />
         PILIH TANGGAL PENYEWAAN
-      </h3>
+      </h2>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label className="block text-[10px] font-black text-black uppercase tracking-wider">Tanggal Mulai Sewa</label>
+          <label htmlFor="startDate" className="block text-[10px] font-black text-black uppercase tracking-wider">Tanggal Mulai Sewa</label>
           <input
+            id="startDate"
             type="date"
             required
             min={new Date().toISOString().split('T')[0]}
@@ -36,8 +37,9 @@ export default function DateRangePicker({
         </div>
 
         <div>
-          <label className="block text-[10px] font-black text-black uppercase tracking-wider">Tanggal Selesai Sewa</label>
+          <label htmlFor="endDate" className="block text-[10px] font-black text-black uppercase tracking-wider">Tanggal Selesai Sewa</label>
           <input
+            id="endDate"
             type="date"
             required
             min={startDate || new Date().toISOString().split('T')[0]}
@@ -54,7 +56,7 @@ export default function DateRangePicker({
           <span className="text-black bg-brand px-3 py-1 font-black text-sm border border-black">{rentDuration} HARI</span>
         </div>
       ) : (
-        <p className="text-xs text-amber-600 font-bold uppercase tracking-wide">🚨 SILAKAN PILIH RENTANG TANGGAL SEWA UNTUK MELIHAT KETERSEDIAAN STOK AKTUAL DAN MULAI MEMESAN.</p>
+        <p className="text-xs text-amber-700 font-bold uppercase tracking-wide">🚨 SILAKAN PILIH RENTANG TANGGAL SEWA UNTUK MELIHAT KETERSEDIAAN STOK AKTUAL DAN MULAI MEMESAN.</p>
       )}
     </div>
   );

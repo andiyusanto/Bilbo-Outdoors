@@ -35,7 +35,12 @@ export default function NotificationModal({ variant, message, onClose, onConfirm
   const { title, Icon, headerClass, iconClass } = VARIANT_CONFIG[variant];
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+    // z-[110] > LoadingOverlay's z-[100] - the two toggle off at nearly the
+    // same instant (a success/error notify fires right as isLoading clears),
+    // and LoadingOverlay's exit fade lingers in the DOM briefly after that;
+    // this must stay on top of it or the fading overlay visibly covers the
+    // result the user is meant to read.
+    <div className="fixed inset-0 bg-black/60 z-[110] flex items-center justify-center p-4">
       <div className="bg-white w-full max-w-sm rounded-none shadow-[8px_8px_0px_rgba(0,0,0,1)] border-4 border-black overflow-hidden">
         <div className={`px-5 py-4 flex justify-between items-center border-b-2 border-black ${headerClass}`}>
           <h3 className="font-display font-black text-sm uppercase tracking-wider flex items-center gap-2">

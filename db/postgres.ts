@@ -231,11 +231,22 @@ function rowToJobEntry(row: any): JobEntry {
 }
 
 export async function readDBPostgres(): Promise<{ products: Product[]; orders: Order[]; settings: StoreSettings; users: AppUser[]; jobPriceList: JobPriceListItem[]; jobEntries: JobEntry[] }> {
-  const productsRes = await pool.query('SELECT * FROM products ORDER BY category ASC, id ASC');
-  const products = productsRes.rows.map(rowToProduct);
+  // These 7 queries don't depend on each other - run them concurrently rather
+  // than sequentially. Each pool.query() round trip to the Supabase pooler
+  // measured ~0.6-0.7s in this environment (see buildValuesClause below), so
+  // awaiting them one at a time was paying that cost 7x on every single
+  // readDB() call (e.g. GET /api/products, which only needs `products`).
+  const [productsRes, ordersRes, itemsRes, settingsRes, usersRes, jobPriceListRes, jobEntriesRes] = await Promise.all([
+    pool.query('SELECT * FROM products ORDER BY category ASC, id ASC'),
+    pool.query('SELECT * FROM orders ORDER BY created_at DESC'),
+    pool.query('SELECT * FROM order_items'),
+    pool.query('SELECT * FROM settings WHERE id = 1'),
+    pool.query('SELECT * FROM users ORDER BY created_at ASC'),
+    pool.query('SELECT * FROM job_price_list ORDER BY item_name ASC'),
+    pool.query('SELECT * FROM job_entries ORDER BY created_at DESC'),
+  ]);
 
-  const ordersRes = await pool.query('SELECT * FROM orders ORDER BY created_at DESC');
-  const itemsRes = await pool.query('SELECT * FROM order_items');
+  const products = productsRes.rows.map(rowToProduct);
 
   const itemsByOrderId = new Map<string, OrderItem[]>();
   for (const itemRow of itemsRes.rows) {
@@ -246,19 +257,15 @@ export async function readDBPostgres(): Promise<{ products: Product[]; orders: O
 
   const orders = ordersRes.rows.map((row) => rowToOrder(row, itemsByOrderId.get(row.id) || []));
 
-  const settingsRes = await pool.query('SELECT * FROM settings WHERE id = 1');
   // Defensive fallback (never crash) if the settings row hasn't been seeded yet on
   // this connection - mirrors the same fallback the JSON-file mode does for an
   // old server_db.json predating this feature.
   const settings = settingsRes.rows[0] ? rowToSettings(settingsRes.rows[0]) : defaultSettings;
 
-  const usersRes = await pool.query('SELECT * FROM users ORDER BY created_at ASC');
   const users = usersRes.rows.length > 0 ? usersRes.rows.map(rowToUser) : defaultUsers;
 
-  const jobPriceListRes = await pool.query('SELECT * FROM job_price_list ORDER BY item_name ASC');
   const jobPriceList = jobPriceListRes.rows.length > 0 ? jobPriceListRes.rows.map(rowToJobPriceItem) : defaultJobPriceList;
 
-  const jobEntriesRes = await pool.query('SELECT * FROM job_entries ORDER BY created_at DESC');
   const jobEntries = jobEntriesRes.rows.map(rowToJobEntry);
 
   return { products, orders, settings, users, jobPriceList, jobEntries };

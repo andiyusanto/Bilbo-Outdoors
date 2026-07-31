@@ -1,8 +1,7 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, Suspense, lazy } from 'react';
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import { Shield, Compass, Instagram, MapPin } from 'lucide-react';
 import ClientPortal from './components/ClientPortal';
-import AdminPanel from './components/AdminPanel';
 import OrderConfirmationPage from './components/client/OrderConfirmationPage';
 import { THEMES } from './themes';
 import { Theme } from './types';
@@ -10,6 +9,11 @@ import bilboLogoWide from './assets/bilbo-logo-wide.png';
 import bilboIcon from './assets/bilbo-icon.png';
 import { LoadingProvider } from './contexts/LoadingContext';
 import { NotificationProvider } from './contexts/NotificationContext';
+import LoadingOverlay from './components/LoadingOverlay';
+
+// Lazy-loaded: the admin dashboard (all its tabs/hooks) has no reason to be
+// in the bundle every client visitor downloads on first paint.
+const AdminPanel = lazy(() => import('./components/AdminPanel'));
 
 export default function App() {
   const { pathname } = useLocation();
@@ -36,7 +40,7 @@ export default function App() {
             
             {/* Logo */}
             <div className="flex items-center space-x-3">
-              <img src={bilboLogoWide} alt="Bilbo Outdoors" width={800} height={437} className="h-9 sm:h-11 w-auto" />
+              <img src={bilboLogoWide} alt="Bilbo Outdoors" width={240} height={131} className="h-9 sm:h-11 w-auto" />
               <p className="text-[9px] text-zinc-500 font-mono tracking-widest font-black uppercase border-l-2 border-black pl-3">CAMPING EQUIPMENT<br/>RENTAL • SURABAYA, IDN</p>
             </div>
 
@@ -71,7 +75,11 @@ export default function App() {
           <Route path="/pesanan/:token" element={<OrderConfirmationPage />} />
           <Route
             path="/admin/*"
-            element={<AdminPanel />}
+            element={
+              <Suspense fallback={<LoadingOverlay show={true} />}>
+                <AdminPanel />
+              </Suspense>
+            }
           />
         </Routes>
       </div>

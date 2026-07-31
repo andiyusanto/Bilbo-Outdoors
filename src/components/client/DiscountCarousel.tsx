@@ -96,7 +96,7 @@ export default function DiscountCarousel({ products, categoryOrder }: DiscountCa
             >
               {currentSlide.kind === 'static' ? (
                 <div className="h-full flex flex-col items-center justify-center text-center gap-3 text-xs text-black">
-                  <img src={bilboLogoWide} alt="Bilbo Outdoors" width={800} height={437} className="h-8 w-auto" />
+                  <img src={bilboLogoWide} alt="Bilbo Outdoors" width={240} height={131} className="h-8 w-auto" />
                   <div className="flex items-start space-x-3 text-left">
                     <Info className="w-4.5 h-4.5 text-black shrink-0 mt-0.5 stroke-[3]" />
                     <p className="leading-normal font-bold uppercase tracking-wide text-[11px]">

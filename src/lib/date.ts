@@ -19,3 +19,19 @@ export function formatDateTimeLabel(date: Date | string): string {
   const time = d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
   return `${dd}-${mm}-${d.getFullYear()}, ${time}`;
 }
+
+// "Today" as YYYY-MM-DD - same UTC-based convention already used ad hoc for
+// this across the app (server.ts's GET /api/stats, OverviewTab.tsx,
+// useJobEntryActions.ts's default entryDate), centralized here since the
+// default date-filter range below needs to build on the exact same value.
+export function getTodayDateString(): string {
+  return new Date().toISOString().split('T')[0];
+}
+
+// Default range for every admin date-range filter: first day of the current
+// month through today (both inclusive) - e.g. on 2026-07-31 this is
+// 2026-07-01..2026-07-31; on 2026-08-03 it's 2026-08-01..2026-08-03.
+export function getDefaultDateRange(): { from: string; to: string } {
+  const today = getTodayDateString();
+  return { from: `${today.slice(0, 7)}-01`, to: today };
+}

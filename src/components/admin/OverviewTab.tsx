@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Clock, DollarSign, Calendar } from 'lucide-react';
 import { Order, Product, DashboardStats } from '../../types';
+import { getDefaultDateRange } from '../../lib/date';
 
 interface OverviewTabProps {
   stats: DashboardStats;
@@ -9,8 +10,8 @@ interface OverviewTabProps {
 }
 
 export default function OverviewTab({ orders, products }: OverviewTabProps) {
-  const [overviewDateFrom, setOverviewDateFrom] = useState<string>('');
-  const [overviewDateTo, setOverviewDateTo] = useState<string>('');
+  const [overviewDateFrom, setOverviewDateFrom] = useState<string>(() => getDefaultDateRange().from);
+  const [overviewDateTo, setOverviewDateTo] = useState<string>(() => getDefaultDateRange().to);
 
   // Every KPI/chart below is derived from this, not the raw `orders` prop, so
   // the Dari/Sampai range (by order.startDate) governs everything on this tab.

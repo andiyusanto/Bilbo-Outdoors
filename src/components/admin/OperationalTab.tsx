@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Plus } from 'lucide-react';
 import { JobEntry, JobPriceListItem, JobType } from '../../types';
 import { useJobEntryActions } from '../../hooks/useJobEntryActions';
-import { formatDateLabel } from '../../lib/date';
+import { formatDateLabel, getDefaultDateRange } from '../../lib/date';
 
 interface OperationalTabProps {
   jobEntries: JobEntry[];
@@ -35,8 +35,8 @@ export default function OperationalTab({ jobEntries, jobPriceList, jobEntryActio
     openEditEntryModal,
   } = jobEntryActions;
 
-  const [operationalDateFrom, setOperationalDateFrom] = useState<string>('');
-  const [operationalDateTo, setOperationalDateTo] = useState<string>('');
+  const [operationalDateFrom, setOperationalDateFrom] = useState<string>(() => getDefaultDateRange().from);
+  const [operationalDateTo, setOperationalDateTo] = useState<string>(() => getDefaultDateRange().to);
 
   const filteredJobEntries = jobEntries.filter((entry) => {
     const matchesFrom = !operationalDateFrom || entry.entryDate >= operationalDateFrom;
@@ -44,6 +44,7 @@ export default function OperationalTab({ jobEntries, jobPriceList, jobEntryActio
     return matchesFrom && matchesTo;
   });
   const hasActiveFilter = Boolean(operationalDateFrom || operationalDateTo);
+  const filteredTotal = filteredJobEntries.reduce((sum, entry) => sum + entry.total, 0);
 
   // Inactive items are hidden from new entries, but a Pending entry already
   // referencing a since-deactivated item must keep showing it while being
@@ -145,6 +146,13 @@ export default function OperationalTab({ jobEntries, jobPriceList, jobEntryActio
                   </td>
                 </tr>
               ))
+            )}
+            {filteredJobEntries.length > 0 && (
+              <tr className="text-xs font-black bg-zinc-50 border-t-2 border-black">
+                <td colSpan={5} className="px-4 py-3 text-right uppercase">Total</td>
+                <td className="px-4 py-3 font-mono">Rp {filteredTotal.toLocaleString('id-ID')}</td>
+                <td colSpan={2} className="px-4 py-3"></td>
+              </tr>
             )}
           </tbody>
         </table>

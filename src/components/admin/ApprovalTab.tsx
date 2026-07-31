@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import { JobEntry, JobType } from '../../types';
 import { useApprovalActions } from '../../hooks/useApprovalActions';
-import { formatDateLabel } from '../../lib/date';
+import { formatDateLabel, getDefaultDateRange } from '../../lib/date';
 
 interface ApprovalTabProps {
   jobEntries: JobEntry[];
@@ -26,8 +26,8 @@ export default function ApprovalTab({ jobEntries, approvalActions }: ApprovalTab
   } = approvalActions;
 
   const [approvalSearch, setApprovalSearch] = useState<string>('');
-  const [approvalDateFrom, setApprovalDateFrom] = useState<string>('');
-  const [approvalDateTo, setApprovalDateTo] = useState<string>('');
+  const [approvalDateFrom, setApprovalDateFrom] = useState<string>(() => getDefaultDateRange().from);
+  const [approvalDateTo, setApprovalDateTo] = useState<string>(() => getDefaultDateRange().to);
 
   const matchesFilters = (entry: JobEntry) => {
     const matchesSearch = entry.employeeName.toLowerCase().includes(approvalSearch.toLowerCase());
@@ -40,6 +40,9 @@ export default function ApprovalTab({ jobEntries, approvalActions }: ApprovalTab
   const allPaidEntries = jobEntries.filter((e) => e.status === 'Paid');
   const pendingEntries = jobEntries.filter((e) => e.status === 'Pending').filter(matchesFilters);
   const paidEntries = allPaidEntries.filter(matchesFilters);
+
+  const pendingTotal = pendingEntries.reduce((sum, e) => sum + e.total, 0);
+  const paidTotal = paidEntries.reduce((sum, e) => sum + e.total, 0);
 
   const pendingIds = pendingEntries.map((e) => e.id);
   const allPendingSelected = pendingIds.length > 0 && pendingIds.every((id) => selectedIds.includes(id));
@@ -158,6 +161,12 @@ export default function ApprovalTab({ jobEntries, approvalActions }: ApprovalTab
                 </tr>
               ))
             )}
+            {pendingEntries.length > 0 && (
+              <tr className="text-xs font-black bg-zinc-50 border-t-2 border-black">
+                <td colSpan={6} className="px-4 py-3 text-right uppercase">Total</td>
+                <td className="px-4 py-3 font-mono">Rp {pendingTotal.toLocaleString('id-ID')}</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -193,6 +202,13 @@ export default function ApprovalTab({ jobEntries, approvalActions }: ApprovalTab
                       <td className="px-4 py-3 font-mono text-emerald-700">{entry.paymentDate ? formatDateLabel(entry.paymentDate) : '-'}</td>
                     </tr>
                   ))
+                )}
+                {paidEntries.length > 0 && (
+                  <tr className="text-xs font-black bg-zinc-50 border-t-2 border-black">
+                    <td colSpan={3} className="px-4 py-3 text-right uppercase">Total</td>
+                    <td className="px-4 py-3 font-mono">Rp {paidTotal.toLocaleString('id-ID')}</td>
+                    <td className="px-4 py-3"></td>
+                  </tr>
                 )}
               </tbody>
             </table>

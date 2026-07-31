@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Search, ChevronRight, FileSpreadsheet } from 'lucide-react';
 import { Order } from '../../types';
 import { useOrderActions } from '../../hooks/useOrderActions';
-import { formatDateLabel } from '../../lib/date';
+import { formatDateLabel, getDefaultDateRange } from '../../lib/date';
 import OrderDetailPanel from './OrderDetailPanel';
 
 const CSV_COLUMNS = ['Nama Penyewa', 'WhatsApp', 'Tanggal Mulai', 'Tanggal Selesai', 'Durasi (Hari)', 'Total Biaya (Rp)', 'Denda (Rp)', 'Hari Terlambat', 'Status'] as const;
@@ -40,8 +40,8 @@ interface OrdersTabProps {
 export default function OrdersTab({ orders, orderActions }: OrdersTabProps) {
   const [orderSearch, setOrderSearch] = useState<string>('');
   const [orderStatusFilter, setOrderStatusFilter] = useState<string>('All');
-  const [orderDateFrom, setOrderDateFrom] = useState<string>('');
-  const [orderDateTo, setOrderDateTo] = useState<string>('');
+  const [orderDateFrom, setOrderDateFrom] = useState<string>(() => getDefaultDateRange().from);
+  const [orderDateTo, setOrderDateTo] = useState<string>(() => getDefaultDateRange().to);
 
   const {
     selectedOrder,

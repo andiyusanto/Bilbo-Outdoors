@@ -1,9 +1,36 @@
 import { useState } from 'react';
-import { Search, ChevronRight } from 'lucide-react';
+import { Search, ChevronRight, FileSpreadsheet } from 'lucide-react';
 import { Order } from '../../types';
 import { useOrderActions } from '../../hooks/useOrderActions';
 import { formatDateLabel } from '../../lib/date';
 import OrderDetailPanel from './OrderDetailPanel';
+
+const CSV_COLUMNS = ['Nama Penyewa', 'WhatsApp', 'Tanggal Mulai', 'Tanggal Selesai', 'Durasi (Hari)', 'Total Biaya (Rp)', 'Denda (Rp)', 'Hari Terlambat', 'Status'] as const;
+
+// Excel/CSV requires quoting any field containing a comma, quote, or newline -
+// and doubling internal quotes - or the file silently misparses into the wrong
+// number of columns.
+function csvField(value: string | number): string {
+  const str = String(value);
+  return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+}
+
+function ordersToCsv(orders: Order[]): string {
+  const rows = orders.map(o => [
+    o.customerName,
+    o.customerWhatsApp,
+    formatDateLabel(o.startDate),
+    formatDateLabel(o.endDate),
+    o.rentDuration,
+    o.totalPrice,
+    o.lateFee || 0,
+    o.lateDays || 0,
+    o.status,
+  ]);
+  // Leading BOM so Excel (especially on Windows) detects UTF-8 instead of
+  // misreading accented characters via its legacy ANSI CSV assumption.
+  return String.fromCharCode(0xFEFF) + [CSV_COLUMNS, ...rows].map(row => row.map(csvField).join(',')).join('\r\n');
+}
 
 interface OrdersTabProps {
   orders: Order[];
@@ -40,6 +67,22 @@ export default function OrdersTab({ orders, orderActions }: OrdersTabProps) {
     const matchesDateTo = !orderDateTo || o.startDate <= orderDateTo;
     return matchesSearch && matchesStatus && matchesDateFrom && matchesDateTo;
   });
+
+  // Exports exactly what's currently on screen (filteredOrders), not the full
+  // unfiltered orders list - so search/status/date filters narrow the export too.
+  const handleDownloadCsv = () => {
+    const csv = ordersToCsv(filteredOrders);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const dateSuffix = orderDateFrom || orderDateTo ? `_${orderDateFrom || 'awal'}_sd_${orderDateTo || 'akhir'}` : '';
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `pesanan-bilbo-outdoors${dateSuffix}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="space-y-6">
@@ -93,6 +136,16 @@ export default function OrdersTab({ orders, orderActions }: OrdersTabProps) {
               className="bg-white border-2 border-black px-3 py-2 text-xs font-bold rounded-none focus:outline-none"
             />
           </div>
+
+          <button
+            onClick={handleDownloadCsv}
+            disabled={filteredOrders.length === 0}
+            title="Unduh daftar pesanan yang sedang ditampilkan (sesuai filter aktif) sebagai file Excel/CSV"
+            className="bg-zinc-100 hover:bg-black hover:text-brand text-black font-black text-xs px-4 py-2.5 rounded-none border-2 border-black shadow-[2px_2px_0px_rgba(0,0,0,1)] transition-all cursor-pointer inline-flex items-center uppercase tracking-widest disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <FileSpreadsheet className="w-4 h-4 mr-2 stroke-[2.5]" />
+            Unduh Excel
+          </button>
         </div>
       </div>
 

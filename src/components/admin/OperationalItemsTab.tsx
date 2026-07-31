@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Plus, Pencil, Trash2, Tags, Power } from 'lucide-react';
+import { Plus, Pencil, Trash2, Tags, Power, Search } from 'lucide-react';
 import { JobPriceListItem, Product } from '../../types';
 import { useJobPriceActions } from '../../hooks/useJobPriceActions';
 
@@ -28,6 +28,11 @@ export default function OperationalItemsTab({ jobPriceList, jobPriceActions, pro
   // have, further checkbox clicks stop overwriting their edit. Pure UI ergonomics
   // local to this modal, not shared state.
   const [itemNameManuallyEdited, setItemNameManuallyEdited] = useState(false);
+  const [itemSearch, setItemSearch] = useState<string>('');
+
+  const filteredJobPriceList = jobPriceList.filter((item) =>
+    item.itemName.toLowerCase().includes(itemSearch.toLowerCase())
+  );
 
   const productsByCategory = useMemo(() => {
     const groups = new Map<string, Product[]>();
@@ -80,6 +85,18 @@ export default function OperationalItemsTab({ jobPriceList, jobPriceActions, pro
         <p className="text-[10px] text-zinc-500 font-semibold normal-case leading-relaxed">
           Harga per jenis pekerjaan untuk tiap item alat - dipakai pada form Operational karyawan. Kosongkan harga jika jenis pekerjaan tersebut tidak berlaku untuk item itu. Item yang dinonaktifkan tetap tersimpan di sini (bisa diaktifkan kembali kapan saja) tapi tidak lagi muncul sebagai pilihan baru di form Operational.
         </p>
+
+        <div className="relative w-full sm:w-64">
+          <Search className="w-4 h-4 text-black absolute left-3 top-3.5 stroke-[2.5]" />
+          <input
+            type="text"
+            placeholder="Cari nama item..."
+            value={itemSearch}
+            onChange={(e) => setItemSearch(e.target.value)}
+            className="pl-9 pr-4 py-2.5 text-xs bg-white border-2 border-black rounded-none focus:bg-brand/10 focus:outline-none w-full font-black tracking-wider"
+          />
+        </div>
+
         <div className="border-2 border-black rounded-none overflow-hidden overflow-x-auto">
           <table className="w-full text-left min-w-[700px]">
             <thead className="bg-black text-white text-[10px] uppercase tracking-wider font-black">
@@ -93,7 +110,14 @@ export default function OperationalItemsTab({ jobPriceList, jobPriceActions, pro
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100">
-              {jobPriceList.map((item) => {
+              {filteredJobPriceList.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-xs text-zinc-400 font-bold uppercase">
+                    {itemSearch ? 'Tidak ada item yang cocok dengan pencarian.' : 'Belum ada item operasional.'}
+                  </td>
+                </tr>
+              ) : (
+              filteredJobPriceList.map((item) => {
                 const isActive = item.active !== false;
                 return (
                   <tr key={item.id} className={`text-xs font-bold ${isActive ? '' : 'opacity-60 bg-zinc-50'}`}>
@@ -125,7 +149,8 @@ export default function OperationalItemsTab({ jobPriceList, jobPriceActions, pro
                     </td>
                   </tr>
                 );
-              })}
+              })
+              )}
             </tbody>
           </table>
         </div>

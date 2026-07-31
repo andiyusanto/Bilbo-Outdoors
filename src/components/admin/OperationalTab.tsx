@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Plus } from 'lucide-react';
 import { JobEntry, JobPriceListItem, JobType } from '../../types';
 import { useJobEntryActions } from '../../hooks/useJobEntryActions';
@@ -34,6 +35,16 @@ export default function OperationalTab({ jobEntries, jobPriceList, jobEntryActio
     openEditEntryModal,
   } = jobEntryActions;
 
+  const [operationalDateFrom, setOperationalDateFrom] = useState<string>('');
+  const [operationalDateTo, setOperationalDateTo] = useState<string>('');
+
+  const filteredJobEntries = jobEntries.filter((entry) => {
+    const matchesFrom = !operationalDateFrom || entry.entryDate >= operationalDateFrom;
+    const matchesTo = !operationalDateTo || entry.entryDate <= operationalDateTo;
+    return matchesFrom && matchesTo;
+  });
+  const hasActiveFilter = Boolean(operationalDateFrom || operationalDateTo);
+
   // Inactive items are hidden from new entries, but a Pending entry already
   // referencing a since-deactivated item must keep showing it while being
   // edited - otherwise the <select> silently desyncs from entryFormData.itemName.
@@ -64,6 +75,27 @@ export default function OperationalTab({ jobEntries, jobPriceList, jobEntryActio
         </button>
       </div>
 
+      <div className="flex flex-col sm:flex-row gap-2">
+        <div className="flex items-center gap-2">
+          <label className="text-[10px] font-black text-zinc-600 uppercase tracking-wider shrink-0">Dari</label>
+          <input
+            type="date"
+            value={operationalDateFrom}
+            onChange={(e) => setOperationalDateFrom(e.target.value)}
+            className="bg-white border-2 border-black px-3 py-2 text-xs font-bold rounded-none focus:outline-none"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-[10px] font-black text-zinc-600 uppercase tracking-wider shrink-0">Sampai</label>
+          <input
+            type="date"
+            value={operationalDateTo}
+            onChange={(e) => setOperationalDateTo(e.target.value)}
+            className="bg-white border-2 border-black px-3 py-2 text-xs font-bold rounded-none focus:outline-none"
+          />
+        </div>
+      </div>
+
       <div className="border-2 border-black rounded-none overflow-hidden shadow-[4px_4px_0px_rgba(0,0,0,1)] bg-white overflow-x-auto">
         <table className="w-full text-left min-w-[700px]">
           <thead className="bg-black text-white text-[10px] uppercase tracking-wider font-black">
@@ -79,14 +111,14 @@ export default function OperationalTab({ jobEntries, jobPriceList, jobEntryActio
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-100">
-            {jobEntries.length === 0 ? (
+            {filteredJobEntries.length === 0 ? (
               <tr>
                 <td colSpan={8} className="px-4 py-8 text-center text-xs text-zinc-400 font-bold uppercase">
-                  Belum ada pekerjaan tercatat.
+                  {hasActiveFilter ? 'Tidak ada pekerjaan yang cocok dengan filter tanggal.' : 'Belum ada pekerjaan tercatat.'}
                 </td>
               </tr>
             ) : (
-              jobEntries.map((entry) => (
+              filteredJobEntries.map((entry) => (
                 <tr key={entry.id} className="text-xs font-bold">
                   <td className="px-4 py-3 text-black uppercase">{entry.employeeName}</td>
                   <td className="px-4 py-3 font-mono text-zinc-600">{formatDateLabel(entry.entryDate)}</td>

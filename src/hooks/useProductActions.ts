@@ -1,6 +1,7 @@
 import { useState, Dispatch, SetStateAction, FormEvent } from 'react';
 import { Product } from '../types';
 import { jsonAuthHeaders, authHeaders, parseJsonOrThrow } from '../lib/api';
+import { resizeImageToDataUrl } from '../lib/imageResize';
 import { useLoading } from '../contexts/LoadingContext';
 import { useNotification } from '../contexts/NotificationContext';
 
@@ -24,6 +25,7 @@ export function useProductActions({ token, fetchAdminData, setProducts }: UsePro
   const [showProductModal, setShowProductModal] = useState<boolean>(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [productFormData, setProductFormData] = useState(DEFAULT_PRODUCT_FORM);
+  const [uploadingImage, setUploadingImage] = useState<boolean>(false);
   const { withLoading } = useLoading();
   const { notifySuccess, notifyError, confirmAction } = useNotification();
 
@@ -51,6 +53,24 @@ export function useProductActions({ token, fetchAdminData, setProducts }: UsePro
         notifyError(`Gagal menyimpan produk: ${err.message}`);
       }
     });
+  };
+
+  const handleUploadProductImage = async (file: File) => {
+    setUploadingImage(true);
+    try {
+      const dataUrl = await resizeImageToDataUrl(file);
+      const res = await fetch('/api/products/upload-image', {
+        method: 'POST',
+        headers: jsonAuthHeaders(token),
+        body: JSON.stringify({ image: dataUrl })
+      });
+      const { url } = await parseJsonOrThrow(res);
+      setProductFormData(prev => ({ ...prev, image: url }));
+    } catch (err: any) {
+      notifyError(`Gagal mengunggah gambar: ${err.message}`);
+    } finally {
+      setUploadingImage(false);
+    }
   };
 
   const handleDeleteProduct = async (id: string) => {
@@ -113,6 +133,8 @@ export function useProductActions({ token, fetchAdminData, setProducts }: UsePro
     editingProduct,
     productFormData,
     setProductFormData,
+    uploadingImage,
+    handleUploadProductImage,
     handleSaveProduct,
     handleDeleteProduct,
     handleAdjustStock,

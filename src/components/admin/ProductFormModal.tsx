@@ -17,6 +17,8 @@ interface ProductFormModalProps {
   productFormData: ProductFormData;
   setProductFormData: (data: ProductFormData) => void;
   categories: string[];
+  uploadingImage: boolean;
+  onUploadImage: (file: File) => void;
   onSubmit: (e: FormEvent) => void;
   onClose: () => void;
 }
@@ -26,6 +28,8 @@ export default function ProductFormModal({
   productFormData,
   setProductFormData,
   categories,
+  uploadingImage,
+  onUploadImage,
   onSubmit,
   onClose,
 }: ProductFormModalProps) {
@@ -187,13 +191,36 @@ export default function ProductFormModal({
           </div>
 
           <div>
-            <label className="block text-xs font-black text-black uppercase">Gambar (Opsional URL)</label>
+            <label className="block text-xs font-black text-black uppercase">Gambar Produk</label>
+            <div className="mt-1 flex items-center gap-3">
+              {productFormData.image && (
+                <img
+                  src={productFormData.image}
+                  alt="Pratinjau"
+                  className="h-14 w-14 shrink-0 object-cover border-2 border-black"
+                />
+              )}
+              <label className="flex-1 flex items-center justify-center gap-2 border-2 border-black border-dashed px-3 py-2.5 text-[10px] font-black uppercase tracking-wider text-zinc-600 hover:bg-brand/10 cursor-pointer">
+                {uploadingImage ? 'Mengunggah...' : 'Upload Gambar'}
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled={uploadingImage}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) onUploadImage(file);
+                    e.target.value = '';
+                  }}
+                  className="hidden"
+                />
+              </label>
+            </div>
             <input
               type="text"
               value={productFormData.image}
               onChange={(e) => setProductFormData({...productFormData, image: e.target.value})}
-              placeholder="https://..."
-              className="mt-1 block w-full rounded-none border-2 border-black px-3 py-2.5 text-xs font-black focus:bg-brand/10 focus:outline-none"
+              placeholder="atau tempel URL gambar di sini..."
+              className="mt-2 block w-full rounded-none border-2 border-black px-3 py-2.5 text-xs font-black focus:bg-brand/10 focus:outline-none"
             />
           </div>
 

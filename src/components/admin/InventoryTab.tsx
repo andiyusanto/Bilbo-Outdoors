@@ -20,6 +20,8 @@ export default function InventoryTab({ products, productActions }: InventoryTabP
     editingProduct,
     productFormData,
     setProductFormData,
+    uploadingImage,
+    handleUploadProductImage,
     handleSaveProduct,
     handleDeleteProduct,
     handleAdjustStock,
@@ -183,6 +185,8 @@ export default function InventoryTab({ products, productActions }: InventoryTabP
           productFormData={productFormData}
           setProductFormData={setProductFormData}
           categories={getDistinctCategories(products)}
+          uploadingImage={uploadingImage}
+          onUploadImage={handleUploadProductImage}
           onSubmit={handleSaveProduct}
           onClose={() => setShowProductModal(false)}
         />

@@ -71,6 +71,15 @@ async function sendTelegramBookingNotification(order: Order): Promise<void> {
   if (!res.ok) throw new Error(`Telegram API responded ${res.status}: ${await res.text().catch(() => '')}`);
 }
 
+// ---------------- PRODUCT IMAGE UPLOAD (SUPABASE STORAGE) ----------------
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const PRODUCT_IMAGE_BUCKET = 'product-images';
+const MAX_PRODUCT_IMAGE_BYTES = 2 * 1024 * 1024;
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+  console.log('Product image upload disabled — set SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY to enable.');
+}
+
 const app = express();
 const PORT = 3000;
 const DB_FILE = path.join(process.cwd(), 'server_db.json');
@@ -380,6 +389,50 @@ app.delete('/api/products/:id', authenticateUser, asyncHandler(async (req, res) 
     await writeDB(db);
     res.json({ message: 'Product deleted successfully.' });
   });
+}));
+
+// Uploads a product photo to Supabase Storage and returns its public URL, for
+// ProductFormModal's image field to auto-fill. Never touches readDB/writeDB -
+// this is a pure pass-through to Storage, entirely outside the persistence seam.
+app.post('/api/products/upload-image', authenticateUser, asyncHandler(async (req, res) => {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    return res.status(501).json({ error: 'Upload gambar belum dikonfigurasi. Gunakan URL manual.' });
+  }
+
+  // Client-side always requests WebP, but Safari's canvas can't encode WebP -
+  // it silently substitutes PNG instead of throwing (per spec), so both are
+  // accepted here rather than assuming every browser produced WebP.
+  const { image } = req.body;
+  const match = typeof image === 'string' && image.match(/^data:(image\/webp|image\/png);base64,(.+)$/);
+  if (!match) {
+    return res.status(400).json({ error: 'Format gambar tidak valid.' });
+  }
+  const [, mimeType, base64Data] = match;
+  const extension = mimeType === 'image/webp' ? 'webp' : 'png';
+
+  const buffer = Buffer.from(base64Data, 'base64');
+  if (buffer.length > MAX_PRODUCT_IMAGE_BYTES) {
+    return res.status(413).json({ error: 'Ukuran gambar terlalu besar.' });
+  }
+
+  // Unique path per upload - sidesteps Storage's upsert semantics and the ~60s
+  // Smart CDN cache-invalidation delay entirely, since every URL is brand new.
+  const objectPath = `products/${crypto.randomUUID()}.${extension}`;
+  const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/${PRODUCT_IMAGE_BUCKET}/${objectPath}`, {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      'Content-Type': mimeType,
+    },
+    body: buffer,
+  });
+
+  if (!uploadRes.ok) {
+    throw new Error(`Supabase Storage upload failed (${uploadRes.status}): ${await uploadRes.text().catch(() => '')}`);
+  }
+
+  res.status(201).json({ url: `${SUPABASE_URL}/storage/v1/object/public/${PRODUCT_IMAGE_BUCKET}/${objectPath}` });
 }));
 
 // Helper function to calculate overlapping stock usage for products

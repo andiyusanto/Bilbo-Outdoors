@@ -69,6 +69,12 @@ Auth is intentionally minimal: `POST /api/auth/login` checks a **hardcoded** use
 
 ---
 
+## 🧪 Required Skill Usage
+- **Run `/run` after implementing any feature, before considering it done** — exercise the actual change end-to-end (start the dev server, drive the real flow), not just `npm run lint`. This project has a track record of subtle runtime-only bugs that type-checking alone doesn't catch (timezone/date-parsing quirks in Postgres mode, a React Router relative-path redirect loop, race conditions from converting sync `fs` I/O to async DB I/O).
+- **Run `/security-review` before any change touching payments, auth, or customer-uploaded documents (KTP/SIM)** — e.g. before implementing the planned payment gateway integration, or any change to the admin auth flow or the public order-confirmation endpoint.
+
+---
+
 ## ✅ Before Modifying Code, Check
 - **`server.ts`**: All API logic (`/api/products`, `/api/orders`, `/api/check-availability`, `/api/stats`, late-fee calc) lives in this one file. Persistence is dual-mode (`db/postgres.ts` or `server_db.json`, see ⚠️ Database Architecture above) behind the `readDB()`/`writeDB()` seam — don't add a second abstraction layer on top; extend the existing one.
 - **Route handlers are `async` and wrapped in `asyncHandler`**; the 6 that call `writeDB` are also wrapped in `withDbLock`. Keep new endpoints consistent with this pattern, or an unhandled rejection can hang a request or crash the process.

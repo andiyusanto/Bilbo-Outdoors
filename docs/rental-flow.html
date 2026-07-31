@@ -1,0 +1,690 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alur Sewa Bilbo Outdoors</title>
+<style>
+  :root {
+    --paper: #FFFFFF;
+    --paper-warm: #FAF6EC;
+    --ink: #111111;
+    --ink-soft: #4A4640;
+    --line: #111111;
+    --brand: #FFB800;
+    --brand-deep: #E5A500;
+    --brand-ink: #2B1F00;
+    --status-pending: #FBBF24;
+    --status-approved: #FFB800;
+    --status-pickedup: #111111;
+    --status-pickedup-ink: #FFFFFF;
+    --status-completed: #0F9D68;
+    --status-late: #DC2626;
+    --shadow-ink: rgba(17, 17, 17, 1);
+    --shadow-soft: rgba(17, 17, 17, 0.14);
+
+    --font-display: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    --font-body: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Consolas, "Liberation Mono", monospace;
+  }
+
+  :root[data-theme="dark"] {
+    --paper: #17140D;
+    --paper-warm: #1F1B12;
+    --ink: #F5F1E8;
+    --ink-soft: #C9C2B4;
+    --line: #F5F1E8;
+    --brand: #FFC933;
+    --brand-deep: #FFB800;
+    --brand-ink: #1A1300;
+    --status-pending: #FBBF24;
+    --status-approved: #FFC933;
+    --status-pickedup: #F5F1E8;
+    --status-pickedup-ink: #17140D;
+    --status-completed: #34D399;
+    --status-late: #F87171;
+    --shadow-ink: rgba(0, 0, 0, 0.9);
+    --shadow-soft: rgba(0, 0, 0, 0.5);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #17140D;
+      --paper-warm: #1F1B12;
+      --ink: #F5F1E8;
+      --ink-soft: #C9C2B4;
+      --line: #F5F1E8;
+      --brand: #FFC933;
+      --brand-deep: #FFB800;
+      --brand-ink: #1A1300;
+      --status-pending: #FBBF24;
+      --status-approved: #FFC933;
+      --status-pickedup: #F5F1E8;
+      --status-pickedup-ink: #17140D;
+      --status-completed: #34D399;
+      --status-late: #F87171;
+      --shadow-ink: rgba(0, 0, 0, 0.9);
+      --shadow-soft: rgba(0, 0, 0, 0.5);
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper-warm);
+    color: var(--ink);
+    font-family: var(--font-body);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 56px 24px 96px;
+  }
+
+  /* ---------- Header ---------- */
+
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    background: var(--paper);
+    border: 2px solid var(--line);
+    padding: 6px 12px;
+  }
+
+  .eyebrow::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    background: var(--brand);
+    border: 1.5px solid var(--line);
+    border-radius: 1px;
+    flex-shrink: 0;
+  }
+
+  h1 {
+    font-family: var(--font-display);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    text-transform: uppercase;
+    font-size: clamp(30px, 5vw, 46px);
+    line-height: 1.02;
+    margin: 20px 0 14px;
+    text-wrap: balance;
+  }
+
+  .lede {
+    max-width: 62ch;
+    font-size: 16px;
+    color: var(--ink-soft);
+    margin: 0 0 8px;
+  }
+
+  .lede strong { color: var(--ink); font-weight: 700; }
+
+  /* ---------- Legend ---------- */
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 18px;
+    margin: 28px 0 44px;
+    padding: 14px 16px;
+    background: var(--paper);
+    border: 2px solid var(--line);
+    box-shadow: 4px 4px 0 var(--shadow-ink);
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+
+  .swatch {
+    width: 11px;
+    height: 11px;
+    border: 1.5px solid var(--line);
+    flex-shrink: 0;
+  }
+
+  /* ---------- Track section ---------- */
+
+  .track {
+    position: relative;
+  }
+
+  .track-head {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    margin: 56px 0 26px;
+  }
+
+  .track:first-of-type .track-head { margin-top: 0; }
+
+  .track-index {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--paper);
+    background: var(--ink);
+    padding: 3px 8px;
+    letter-spacing: 0.02em;
+  }
+
+  .track-title {
+    font-family: var(--font-display);
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: -0.01em;
+    font-size: 22px;
+  }
+
+  .track-sub {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-soft);
+    letter-spacing: 0.03em;
+  }
+
+  /* ---------- Step spine ---------- */
+
+  .spine {
+    position: relative;
+    padding-left: 34px;
+  }
+
+  .spine::before {
+    content: "";
+    position: absolute;
+    left: 9px;
+    top: 6px;
+    bottom: 6px;
+    width: 2px;
+    background: repeating-linear-gradient(
+      to bottom,
+      var(--line) 0,
+      var(--line) 6px,
+      transparent 6px,
+      transparent 11px
+    );
+  }
+
+  .step {
+    position: relative;
+    margin-bottom: 18px;
+  }
+
+  .step:last-child { margin-bottom: 0; }
+
+  .step::before {
+    content: attr(data-n);
+    position: absolute;
+    left: -34px;
+    top: 14px;
+    width: 20px;
+    height: 20px;
+    background: var(--paper);
+    border: 2px solid var(--line);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    z-index: 2;
+  }
+
+  .card {
+    background: var(--paper);
+    border: 2px solid var(--line);
+    box-shadow: 5px 5px 0 var(--shadow-ink);
+    padding: 16px 20px 18px;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .card:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 7px 7px 0 var(--shadow-ink);
+  }
+
+  .card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .card-title {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 16.5px;
+    letter-spacing: -0.005em;
+  }
+
+  .card p {
+    margin: 8px 0 0;
+    font-size: 14px;
+    color: var(--ink-soft);
+    max-width: 60ch;
+  }
+
+  .tag {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--ink);
+    background: var(--paper-warm);
+    border: 1.5px solid var(--line);
+    padding: 3px 7px;
+    white-space: nowrap;
+  }
+
+  .pill {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border: 1.5px solid var(--line);
+    flex-shrink: 0;
+  }
+
+  .pill-pending { background: var(--status-pending); color: var(--brand-ink); }
+  .pill-approved { background: var(--status-approved); color: var(--brand-ink); }
+  .pill-pickedup { background: var(--status-pickedup); color: var(--status-pickedup-ink); }
+  .pill-completed { background: var(--status-completed); color: #fff; }
+  .pill-late { background: var(--status-late); color: #fff; }
+
+  /* ---------- Bridge (handoff) ---------- */
+
+  .bridge {
+    margin: 34px 0;
+    padding: 20px 22px;
+    background: var(--brand);
+    border: 2px solid var(--line);
+    box-shadow: 5px 5px 0 var(--shadow-ink);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    color: var(--brand-ink);
+  }
+
+  .bridge-icon {
+    font-family: var(--font-mono);
+    font-size: 20px;
+    font-weight: 800;
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    border: 2px solid var(--brand-ink);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--paper);
+  }
+
+  .bridge-title {
+    font-family: var(--font-display);
+    font-weight: 800;
+    text-transform: uppercase;
+    font-size: 15px;
+    letter-spacing: 0.01em;
+  }
+
+  .bridge p {
+    margin: 4px 0 0;
+    font-size: 13px;
+    font-family: var(--font-mono);
+    opacity: 0.85;
+  }
+
+  /* ---------- Branch (return path split) ---------- */
+
+  .branch-wrap {
+    padding-left: 34px;
+    margin-bottom: 18px;
+  }
+
+  .branch-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin-bottom: 10px;
+  }
+
+  .branch-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+
+  @media (max-width: 640px) {
+    .branch-grid { grid-template-columns: 1fr; }
+  }
+
+  .branch-card {
+    border: 2px solid var(--line);
+    background: var(--paper);
+    padding: 14px 16px;
+    box-shadow: 4px 4px 0 var(--shadow-ink);
+  }
+
+  .branch-card.on-time { border-left: 6px solid var(--status-completed); }
+  .branch-card.late { border-left: 6px solid var(--status-late); }
+
+  .branch-card h4 {
+    margin: 0 0 6px;
+    font-family: var(--font-display);
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.01em;
+  }
+
+  .branch-card p {
+    margin: 0;
+    font-size: 13px;
+    color: var(--ink-soft);
+  }
+
+  .branch-card .tag { margin-top: 8px; display: inline-block; }
+
+  /* ---------- Formula callout ---------- */
+
+  .formula {
+    padding-left: 34px;
+    margin: -4px 0 30px;
+  }
+
+  .formula-box {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    background: var(--paper-warm);
+    border: 1.5px dashed var(--line);
+    padding: 10px 14px;
+    color: var(--ink-soft);
+  }
+
+  .formula-box b { color: var(--ink); }
+
+  /* ---------- Destination ---------- */
+
+  .destination {
+    padding-left: 34px;
+  }
+
+  .destination .card {
+    background: var(--ink);
+    color: var(--paper);
+    box-shadow: 5px 5px 0 var(--brand);
+  }
+
+  .destination .card-title { color: var(--paper); }
+  .destination .card p { color: var(--paper-warm); opacity: 0.8; }
+  .destination .tag { background: transparent; border-color: var(--paper); color: var(--paper); }
+
+  /* ---------- Footer ---------- */
+
+  .foot {
+    margin-top: 64px;
+    padding-top: 20px;
+    border-top: 2px solid var(--line);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-soft);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .card { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <span class="eyebrow">Bilbo Outdoors &middot; Alur Operasional</span>
+  <h1>Dari Pilih Tanggal<br>Sampai Alat Kembali</h1>
+  <p class="lede">
+    Peta lengkap perjalanan satu pesanan sewa: dari <strong>pelanggan</strong> memilih tanggal
+    dan alat di portal klien, sampai <strong>staf admin</strong> mengonfirmasi pembayaran,
+    menyerahkan barang, dan menyelesaikan pengembalian — termasuk jalur jika alat kembali
+    terlambat.
+  </p>
+
+  <div class="legend">
+    <span class="legend-item"><span class="swatch" style="background:var(--status-pending)"></span>Pending</span>
+    <span class="legend-item"><span class="swatch" style="background:var(--status-approved)"></span>Approved / Paid</span>
+    <span class="legend-item"><span class="swatch" style="background:var(--status-pickedup)"></span>Item Picked Up</span>
+    <span class="legend-item"><span class="swatch" style="background:var(--status-completed)"></span>Returned / Completed</span>
+    <span class="legend-item"><span class="swatch" style="background:var(--status-late)"></span>Denda Keterlambatan</span>
+  </div>
+
+  <!-- TRACK 1: CUSTOMER -->
+  <div class="track">
+    <div class="track-head">
+      <span class="track-index">01</span>
+      <div>
+        <div class="track-title">Alur Pelanggan</div>
+        <div class="track-sub">portal-klien.bilbo-outdoors &middot; tanpa login</div>
+      </div>
+    </div>
+
+    <div class="spine">
+      <div class="step" data-n="1">
+        <div class="card">
+          <div class="card-top">
+            <span class="card-title">Buka Katalog</span>
+            <span class="tag">GET /api/products</span>
+          </div>
+          <p>Pelanggan membuka portal dan langsung melihat katalog lengkap: tenda, sleeping
+            system, carrier, alat masak, penerangan, hiking essentials, dan camp support —
+            dikelompokkan per kategori.</p>
+        </div>
+      </div>
+
+      <div class="step" data-n="2">
+        <div class="card">
+          <div class="card-top">
+            <span class="card-title">Pilih Tanggal Sewa</span>
+            <span class="tag">POST /api/check-availability</span>
+          </div>
+          <p>Begitu tanggal mulai &amp; selesai dipilih, sistem otomatis mengecek sisa stok
+            <em>real-time</em> tiap alat khusus untuk rentang tanggal tersebut — bukan stok
+            keseluruhan, tapi yang benar-benar kosong di periode itu.</p>
+        </div>
+      </div>
+
+      <div class="step" data-n="3">
+        <div class="card">
+          <div class="card-top">
+            <span class="card-title">Pilih &amp; Sesuaikan Alat</span>
+          </div>
+          <p>Saring katalog per kategori, lalu tambahkan alat ke keranjang dengan tombol
+            +/&minus;. Jumlah otomatis dibatasi sesuai sisa stok pada tanggal yang dipilih —
+            tidak bisa memesan melebihi yang tersedia.</p>
+        </div>
+      </div>
+
+      <div class="step" data-n="4">
+        <div class="card">
+          <div class="card-top">
+            <span class="card-title">Isi Data Penyewa</span>
+          </div>
+          <p>Nama lengkap, nomor WhatsApp aktif, dan unggah foto KTP/SIM sebagai jaminan
+            fisik rental — tersimpan bersama pesanan untuk diperiksa admin.</p>
+        </div>
+      </div>
+
+      <div class="step" data-n="5">
+        <div class="card">
+          <div class="card-top">
+            <span class="card-title">Kirim Pesanan</span>
+            <span class="tag">POST /api/orders</span>
+          </div>
+          <p>Server memvalidasi ulang ketersediaan stok (jaga-jaga bila ada pesanan lain yang
+            masuk bersamaan), menghitung total biaya, lalu membuat pesanan baru berstatus
+            <span class="pill pill-pending">Pending</span>.</p>
+        </div>
+      </div>
+
+      <div class="step" data-n="6">
+        <div class="card">
+          <div class="card-top">
+            <span class="card-title">Bayar &amp; Konfirmasi</span>
+          </div>
+          <p>Layar sukses menampilkan kode QRIS, rincian transfer bank, dan ringkasan invoice.
+            Setelah transfer, pelanggan menekan satu tombol untuk mengirim rincian pesanan
+            siap-pakai ke WhatsApp admin.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BRIDGE -->
+  <div class="bridge">
+    <div class="bridge-icon">&#8631;</div>
+    <div>
+      <div class="bridge-title">Pesanan Masuk ke Meja Admin</div>
+      <p>Status <strong>Pending</strong> &middot; muncul di dashboard Manajemen Order &middot; bukti transfer menyusul lewat WhatsApp</p>
+    </div>
+  </div>
+
+  <!-- TRACK 2: ADMIN -->
+  <div class="track">
+    <div class="track-head">
+      <span class="track-index">02</span>
+      <div>
+        <div class="track-title">Alur Staf Admin</div>
+        <div class="track-sub">/admin/overview &middot; /admin/orders &middot; login diperlukan</div>
+      </div>
+    </div>
+
+    <div class="spine">
+      <div class="step" data-n="7">
+        <div class="card">
+          <div class="card-top">
+            <span class="card-title">Masuk ke Panel Staf</span>
+          </div>
+          <p>Admin login di <span class="tag">/admin</span>, lalu membuka tab
+            <strong>Manajemen Order</strong> — badge merah di sidebar menunjukkan jumlah
+            pesanan yang masih Pending.</p>
+        </div>
+      </div>
+
+      <div class="step" data-n="8">
+        <div class="card">
+          <div class="card-top">
+            <span class="card-title">Periksa Detail Pesanan</span>
+          </div>
+          <p>Buka detail: data penyewa, rincian alat &amp; tanggal sewa, foto KTP/SIM, dan
+            total tagihan — sambil mencocokkan dengan bukti transfer yang masuk di WhatsApp.</p>
+        </div>
+      </div>
+
+      <div class="step" data-n="9">
+        <div class="card">
+          <div class="card-top">
+            <span class="card-title">Konfirmasi Pembayaran</span>
+            <span class="pill pill-approved">Approved / Paid</span>
+          </div>
+          <p>Setelah transfer terverifikasi, admin menekan <strong>Konfirmasi Pembayaran</strong>
+            — status pesanan berpindah dari Pending ke Approved/Paid.</p>
+        </div>
+      </div>
+
+      <div class="step" data-n="10">
+        <div class="card">
+          <div class="card-top">
+            <span class="card-title">Serahkan Alat</span>
+            <span class="pill pill-pickedup">Item Picked Up</span>
+          </div>
+          <p>Saat pelanggan mengambil alat di lokasi, admin menekan <strong>Barang
+            Diambil</strong> untuk menandai alat sudah keluar dan masa sewa berjalan.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- BRANCH -->
+    <div class="branch-wrap">
+      <div class="branch-label">11 &middot; Pengembalian Alat &mdash; dua jalur</div>
+      <div class="branch-grid">
+        <div class="branch-card on-time">
+          <h4>Tepat Waktu</h4>
+          <p>Admin langsung menekan <strong>Tanpa Denda</strong> — pesanan selesai tanpa
+            biaya tambahan.</p>
+          <span class="tag">PUT /api/orders/:id/status</span>
+        </div>
+        <div class="branch-card late">
+          <h4>Terlambat <span class="pill pill-late" style="margin-left:6px">Denda</span></h4>
+          <p>Admin membuka <strong>Kalkulator Denda</strong>, memasukkan tanggal
+            pengembalian aktual, sistem menghitung denda per alat, lalu admin menekan
+            <strong>Terapkan Denda &amp; Selesaikan Sewa</strong>.</p>
+          <span class="tag">POST /api/orders/:id/calculate-late</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="formula">
+      <div class="formula-box">
+        <b>Formula harga &amp; denda (sama persis):</b> hari ke-1 sampai batas diskon (default hari
+        ke-5, bisa diatur per alat) = tarif normal /hari. Setelah batas itu = tarif normal &minus;
+        potongan harian (diskon sewa lebih lama, besarannya diatur per alat &mdash; bukan surcharge,
+        dan tidak terbatas kategori tenda/shelter). Denda dihitung dengan formula yang sama,
+        dilanjutkan dari hari terakhir masa sewa.
+      </div>
+    </div>
+
+    <!-- DESTINATION -->
+    <div class="destination">
+      <div class="card">
+        <div class="card-top">
+          <span class="card-title">Selesai &mdash; Dashboard Terupdate</span>
+          <span class="pill pill-completed">Returned / Completed</span>
+        </div>
+        <p>Kedua jalur berakhir di status yang sama. Tab Overview otomatis memperbarui
+          jumlah sewa aktif, total omset (termasuk denda jika ada), dan jumlah alat yang
+          jatuh tempo hari itu — semua dihitung ulang dari data pesanan terkini. Tab ini
+          khusus role Owner, tidak muncul untuk karyawan.</p>
+        <span class="tag" style="margin-top:10px;display:inline-block">GET /api/stats</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <span>Bilbo Outdoors &mdash; Surabaya</span>
+    <span>Portal Klien &rarr; Panel Admin &mdash; satu alur, dua sisi</span>
+  </div>
+
+</div>
+
+</body>
+</html>

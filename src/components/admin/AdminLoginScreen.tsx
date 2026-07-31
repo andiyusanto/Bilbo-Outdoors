@@ -1,7 +1,7 @@
 import { FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { Lock, ArrowLeft, AlertTriangle } from 'lucide-react';
-import bilboIcon from '../../assets/bilbo-icon.png';
+import bilboIcon from '../../assets/bilbo-icon.webp';
 
 interface AdminLoginScreenProps {
   usernameInput: string;

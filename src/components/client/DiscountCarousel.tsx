@@ -3,8 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Info, Percent } from 'lucide-react';
 import { Product } from '../../types';
 import { calculateSavingsFor5Days } from '../../pricing';
-import bilboIcon from '../../assets/bilbo-icon.png';
-import bilboLogoWide from '../../assets/bilbo-logo-wide.png';
+import bilboIcon from '../../assets/bilbo-icon.webp';
+import bilboLogoWide from '../../assets/bilbo-logo-wide.webp';
 import ImagePreviewModal from '../ImagePreviewModal';
 
 interface DiscountCarouselProps {

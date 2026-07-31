@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react';
-import bilboIcon from '../assets/bilbo-icon.png';
+import bilboIcon from '../assets/bilbo-icon.webp';
 
 interface LoadingOverlayProps {
   show: boolean;

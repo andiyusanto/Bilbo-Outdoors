@@ -6,7 +6,7 @@ import { getDistinctCategories } from '../../lib/categories';
 import ProductFormModal from './ProductFormModal';
 import ImagePreviewModal from '../ImagePreviewModal';
 import CategoryFilterTabs from '../client/CategoryFilterTabs';
-import bilboIcon from '../../assets/bilbo-icon.png';
+import bilboIcon from '../../assets/bilbo-icon.webp';
 
 interface InventoryTabProps {
   products: Product[];

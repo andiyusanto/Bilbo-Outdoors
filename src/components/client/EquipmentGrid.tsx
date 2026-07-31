@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ZoomIn } from 'lucide-react';
 import { Product } from '../../types';
 import { calculateSavingsFor5Days } from '../../pricing';
-import bilboIcon from '../../assets/bilbo-icon.png';
+import bilboIcon from '../../assets/bilbo-icon.webp';
 import ImagePreviewModal from '../ImagePreviewModal';
 
 interface StockInfo {

@@ -32,7 +32,7 @@ import OperationalTab from './admin/OperationalTab';
 import OperationalItemsTab from './admin/OperationalItemsTab';
 import ApprovalTab from './admin/ApprovalTab';
 import ChangePasswordModal from './admin/ChangePasswordModal';
-import bilboIcon from '../assets/bilbo-icon.png';
+import bilboIcon from '../assets/bilbo-icon.webp';
 
 const NAV_LINK_CLASS = ({ isActive }: { isActive: boolean }) =>
   `flex items-center justify-center md:justify-start space-x-2.5 px-4 py-3 border-2 transition-all cursor-pointer rounded-none grow md:grow-0 uppercase tracking-wider text-xs font-black ${

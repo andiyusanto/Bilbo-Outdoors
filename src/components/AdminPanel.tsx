@@ -279,7 +279,7 @@ export default function AdminPanel() {
             {isOwner && (
               <Route
                 path="users"
-                element={<UserTab users={data.users} userActions={userActions} />}
+                element={<UserTab users={data.users} userActions={userActions} currentDisplayName={auth.displayName} />}
               />
             )}
             <Route path="panduan" element={<GuideTab />} />

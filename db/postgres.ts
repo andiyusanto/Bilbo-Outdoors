@@ -82,11 +82,11 @@ export async function seedPostgresIfEmpty(): Promise<void> {
   if (usersCountRes.rows[0].count === 0) {
     const params: any[] = [];
     defaultUsers.forEach((u) => {
-      params.push(u.id, u.username, u.passwordHash, u.passwordSalt, u.role, u.displayName, u.sessionToken ?? null, u.createdAt);
+      params.push(u.id, u.username, u.passwordHash, u.passwordSalt, u.role, u.displayName, u.active ?? true, u.sessionToken ?? null, u.createdAt);
     });
     await pool.query(
-      `INSERT INTO users (id, username, password_hash, password_salt, role, display_name, session_token, created_at)
-       VALUES ${buildValuesClause(defaultUsers.length, 8)}
+      `INSERT INTO users (id, username, password_hash, password_salt, role, display_name, active, session_token, created_at)
+       VALUES ${buildValuesClause(defaultUsers.length, 9)}
        ON CONFLICT (id) DO NOTHING`,
       params
     );
@@ -196,6 +196,7 @@ function rowToUser(row: any): AppUser {
     passwordSalt: row.password_salt,
     role: row.role,
     displayName: row.display_name,
+    active: row.active !== null && row.active !== undefined ? Boolean(row.active) : true,
     sessionToken: row.session_token ?? undefined,
     createdAt: row.created_at,
   };
@@ -304,23 +305,24 @@ export async function writeDBPostgres(data: { products: Product[]; orders: Order
     );
 
     // Users: batched upsert of everything present, then prune anything removed -
-    // same list convention as products/orders. In practice users are only ever
-    // added or have sessionToken/password fields updated, never pruned by a
-    // normal write, but the prune keeps this consistent with the rest of the app.
+    // same list convention as products/orders. Users are pruned by a normal
+    // write now too, via the Manajemen User tab's delete action, not just in
+    // theory.
     if (data.users.length > 0) {
       const params: any[] = [];
       data.users.forEach((u) => {
-        params.push(u.id, u.username, u.passwordHash, u.passwordSalt, u.role, u.displayName, u.sessionToken ?? null, u.createdAt);
+        params.push(u.id, u.username, u.passwordHash, u.passwordSalt, u.role, u.displayName, u.active ?? true, u.sessionToken ?? null, u.createdAt);
       });
       await client.query(
-        `INSERT INTO users (id, username, password_hash, password_salt, role, display_name, session_token, created_at)
-         VALUES ${buildValuesClause(data.users.length, 8)}
+        `INSERT INTO users (id, username, password_hash, password_salt, role, display_name, active, session_token, created_at)
+         VALUES ${buildValuesClause(data.users.length, 9)}
          ON CONFLICT (id) DO UPDATE SET
            username = EXCLUDED.username,
            password_hash = EXCLUDED.password_hash,
            password_salt = EXCLUDED.password_salt,
            role = EXCLUDED.role,
            display_name = EXCLUDED.display_name,
+           active = EXCLUDED.active,
            session_token = EXCLUDED.session_token,
            created_at = EXCLUDED.created_at`,
         params

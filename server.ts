@@ -36,6 +36,13 @@ function toPublicUser(user: AppUser): PublicUser {
   return publicUser;
 }
 
+// True if at least one OTHER active owner besides `excludingUserId` exists -
+// used to block any action (delete, deactivate, role change) that would leave
+// the system with zero active owner accounts and nobody able to undo it.
+function hasOtherActiveOwner(db: DbShape, excludingUserId: string): boolean {
+  return db.users.some((u: AppUser) => u.id !== excludingUserId && u.role === 'owner' && u.active !== false);
+}
+
 // Whether the store is physically open at the given moment, per its own
 // weekday's operating hours (which may differ from the order's endDate weekday
 // once a late return crosses into a new calendar day).
@@ -190,7 +197,10 @@ function authenticateUser(req: express.Request, res: express.Response, next: exp
   }
   readDB().then((db) => {
     const user = db.users.find((u: AppUser) => u.sessionToken === token);
-    if (!user) {
+    // A deactivated account's still-valid session token must stop working
+    // immediately, not just block future logins - otherwise "deactivate"
+    // wouldn't actually revoke access until the token happened to change.
+    if (!user || user.active === false) {
       return res.status(401).json({ error: 'Unauthorized. Session invalid or expired.' });
     }
     req.currentUser = user;
@@ -214,7 +224,10 @@ app.post('/api/auth/login', asyncHandler(async (req, res) => {
     const { username, password } = req.body;
     const db = await readDB();
     const user = db.users.find((u: AppUser) => u.username === username);
-    if (!user || !verifyPassword(password, user.passwordSalt, user.passwordHash)) {
+    // Deliberately the same generic error for "no such user", "wrong
+    // password", and "deactivated account" - a deactivated account's status
+    // shouldn't be discoverable to whoever is attempting the login.
+    if (!user || !verifyPassword(password, user.passwordSalt, user.passwordHash) || user.active === false) {
       return res.status(401).json({ error: 'Username atau password salah.' });
     }
     user.sessionToken = generateSessionToken();
@@ -292,11 +305,95 @@ app.post('/api/users', authenticateUser, requireOwner, asyncHandler(async (req, 
       passwordSalt: salt,
       role,
       displayName,
+      active: true,
       createdAt: new Date().toISOString(),
     };
     db.users.push(newUser);
     await writeDB(db);
     res.status(201).json(toPublicUser(newUser));
+  });
+}));
+
+// Owner-only: edit name/username/role, or toggle active - never password
+// (that's exclusively self-service via /api/auth/change-password). Partial
+// update: only the fields present in the body are changed.
+app.put('/api/users/:id', authenticateUser, requireOwner, asyncHandler(async (req, res) => {
+  await withDbLock(async () => {
+    const { id } = req.params;
+    const { displayName, username, role, active } = req.body;
+    const db = await readDB();
+    const idx = db.users.findIndex((u: AppUser) => u.id === id);
+    if (idx === -1) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+    const existing = db.users[idx];
+
+    if (role !== undefined) {
+      const validRoles: UserRole[] = ['owner', 'karyawan'];
+      if (!validRoles.includes(role)) {
+        return res.status(400).json({ error: 'Invalid role.' });
+      }
+    }
+    // Every downstream check (session-clearing below, authenticateUser's own
+    // active gate) uses a strict `=== false` comparison - a non-boolean truthy
+    // value (e.g. a stray string) would silently persist without ever
+    // tripping those checks, making a deactivation attempt quietly no-op.
+    if (active !== undefined && typeof active !== 'boolean') {
+      return res.status(400).json({ error: 'Invalid active value.' });
+    }
+    if (username !== undefined && db.users.some((u: AppUser) => u.id !== id && u.username === username)) {
+      return res.status(400).json({ error: 'Username sudah digunakan.' });
+    }
+
+    const isSelf = req.currentUser!.id === id;
+    const wasActiveOwner = existing.role === 'owner' && existing.active !== false;
+    const losingOwnerStatus = wasActiveOwner && (
+      (role !== undefined && role !== 'owner') ||
+      (active !== undefined && active === false)
+    );
+    if (losingOwnerStatus) {
+      if (isSelf && active === false) {
+        return res.status(400).json({ error: 'Tidak bisa menonaktifkan akun Anda sendiri.' });
+      }
+      if (!hasOtherActiveOwner(db, id)) {
+        return res.status(400).json({ error: 'Tidak bisa menonaktifkan atau mengubah role owner terakhir yang masih aktif.' });
+      }
+    }
+
+    db.users[idx] = {
+      ...existing,
+      displayName: displayName !== undefined ? displayName : existing.displayName,
+      username: username !== undefined ? username : existing.username,
+      role: role !== undefined ? role : existing.role,
+      active: active !== undefined ? active : existing.active,
+      // Deactivating revokes any existing session immediately, same as
+      // logout/change-password - belt-and-suspenders alongside authenticateUser's
+      // own active check, which already rejects a deactivated user's token.
+      sessionToken: active === false ? undefined : existing.sessionToken,
+    };
+    await writeDB(db);
+    res.json(toPublicUser(db.users[idx]));
+  });
+}));
+
+// Owner-only: permanently remove a user account.
+app.delete('/api/users/:id', authenticateUser, requireOwner, asyncHandler(async (req, res) => {
+  await withDbLock(async () => {
+    const { id } = req.params;
+    if (req.currentUser!.id === id) {
+      return res.status(400).json({ error: 'Tidak bisa menghapus akun Anda sendiri.' });
+    }
+    const db = await readDB();
+    const target = db.users.find((u: AppUser) => u.id === id);
+    if (!target) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+    if (target.role === 'owner' && target.active !== false && !hasOtherActiveOwner(db, id)) {
+      return res.status(400).json({ error: 'Tidak bisa menghapus owner terakhir yang masih aktif.' });
+    }
+    db.users = db.users.filter((u: AppUser) => u.id !== id);
+    await writeDB(db);
+    res.json({ message: 'User deleted successfully.' });
   });
 }));
 

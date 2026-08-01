@@ -322,7 +322,17 @@ export default function GuideTab() {
             { label: 'Role', desc: 'Karyawan atau Owner/Master.' },
           ]}
         />
-        <p>Tekan <Ui>Simpan User</Ui>. Belum tersedia edit/hapus untuk akun yang sudah ada.</p>
+        <p>Tekan <Ui>Simpan User</Ui> untuk membuat akun baru.</p>
+        <p className="font-bold text-xs mt-3">Mengelola akun yang sudah ada</p>
+        <p>
+          Setiap baris punya tiga aksi: ikon daya untuk <Ui>Nonaktifkan</Ui>/<Ui>Aktifkan</Ui> (mencabut akses staf sementara tanpa menghapus akunnya &mdash; sesi login yang sedang aktif langsung terputus saat dinonaktifkan), ikon pensil untuk <Ui>Edit</Ui> (hanya Nama Lengkap, Username, dan Role &mdash; kolom password tidak muncul sama sekali di sini), dan ikon tempat sampah untuk menghapus akun secara permanen (meminta konfirmasi terlebih dahulu).
+        </p>
+        <Note label="Password Staf Tidak Bisa Diatur dari Sini">
+          Mengedit user tidak pernah menyentuh password &mdash; itu murni urusan staf yang bersangkutan lewat menu <Ui>Ganti Password</Ui> setelah mereka login sendiri (lihat 1.3).
+        </Note>
+        <Note label="Perlindungan Owner Terakhir">
+          Sistem tidak akan mengizinkan akun Anda sendiri dinonaktifkan atau dihapus lewat menu ini, dan tidak akan mengizinkan owner aktif terakhir dinonaktifkan, dihapus, atau diturunkan rolenya menjadi Karyawan &mdash; supaya tidak ada yang tiba-tiba tidak bisa mengakses sistem sama sekali.
+        </Note>
       </Section>
 
       <div className="font-mono text-[10px] uppercase tracking-wider text-amber-700 font-black pt-4">

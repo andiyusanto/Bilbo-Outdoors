@@ -273,6 +273,7 @@ CREATE TABLE IF NOT EXISTS job_entries (
 >   password_salt VARCHAR(255) NOT NULL,
 >   role VARCHAR(50) NOT NULL,
 >   display_name VARCHAR(255) NOT NULL,
+>   active BOOLEAN NOT NULL DEFAULT true,
 >   session_token VARCHAR(255),
 >   created_at VARCHAR(255) NOT NULL
 > );
@@ -303,6 +304,11 @@ CREATE TABLE IF NOT EXISTS job_entries (
 > );
 > ```
 > Setelah tabel dibuat, boot aplikasi berikutnya akan otomatis mengisi akun owner default (`bilboadmin` / `bilbooutdoor2026`) dan daftar harga pekerjaan default - tidak perlu INSERT manual.
+
+> **Sudah pernah menjalankan Step A sebelum kolom `active` di `users` ada?** Jalankan ini sekali di SQL Editor yang sama (aman dijalankan berulang) - `active` otomatis mengisi `true` untuk semua akun staff yang sudah ada saat ALTER dijalankan (tidak ada akun yang tiba-tiba jadi nonaktif). Dipakai fitur nonaktifkan/hapus/edit akun di menu "User" - lihat `hasOtherActiveOwner` di `server.ts` untuk aturan yang mencegah owner aktif terakhir dinonaktifkan/dihapus/diubah rolenya.
+> ```sql
+> ALTER TABLE users ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true;
+> ```
 
 ### Step B: Dapatkan Connection String Supabase Anda
 1. Di dashboard Supabase Anda, buka project Anda, lalu klik tombol **Connect** (di bagian atas halaman project).

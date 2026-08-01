@@ -15,6 +15,7 @@ export const defaultUsers: AppUser[] = [
     passwordSalt: salt,
     role: 'owner',
     displayName: 'Admin Staff',
+    active: true,
     createdAt: new Date().toISOString(),
   },
 ];

@@ -95,6 +95,7 @@ export interface AppUser {
   passwordSalt: string; // per-user random salt, hex
   role: UserRole;
   displayName: string;
+  active: boolean; // default true - read as `!== false` everywhere, never `!user.active`, so rows written before this field existed are never misread as inactive
   sessionToken?: string; // current active session token; absent when logged out
   createdAt: string;
 }

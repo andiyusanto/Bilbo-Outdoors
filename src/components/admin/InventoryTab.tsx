@@ -45,7 +45,7 @@ export default function InventoryTab({ products, productActions }: InventoryTabP
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-display font-black text-black uppercase tracking-tight">KELOLA ALAT CAMPING</h2>
+          <h2 className="text-2xl font-display font-black text-black uppercase tracking-tight">KELOLA BARANG SEWA</h2>
           <p className="text-xs text-zinc-600 font-semibold uppercase tracking-wider mt-1">Sesuaikan persediaan fisik, harga sewa, dan jenis peralatan outdoor.</p>
         </div>
 
@@ -66,7 +66,7 @@ export default function InventoryTab({ products, productActions }: InventoryTabP
             className="bg-black hover:bg-brand hover:text-black text-brand font-black text-xs px-5 py-3 rounded-none shadow-[4px_4px_0px_var(--brand-color)] hover:shadow-[4px_4px_0px_rgba(0,0,0,1)] border-2 border-black transition-all flex items-center self-start sm:self-auto uppercase tracking-widest cursor-pointer"
           >
             <Plus className="w-4 h-4 mr-2 stroke-[3]" />
-            Tambah Alat Camping
+            Tambah Barang Sewa
           </button>
         </div>
       </div>

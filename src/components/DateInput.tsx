@@ -37,7 +37,7 @@ const DateInput = forwardRef<HTMLInputElement, DateInputProps>(function DateInpu
         {...rest}
       />
       <span
-        className={`pointer-events-none absolute inset-y-0 ${leftPadding === 4 ? 'left-4' : 'left-3'} flex items-center text-xs font-bold uppercase text-black`}
+        className={`date-input-overlay pointer-events-none absolute inset-y-0 ${leftPadding === 4 ? 'left-4' : 'left-3'} items-center text-xs font-bold uppercase text-black`}
       >
         {display}
       </span>

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Plus, Edit3, Trash2, Search, ZoomIn } from 'lucide-react';
 import { Product } from '../../types';
 import { useProductActions } from '../../hooks/useProductActions';
-import { getDistinctCategories } from '../../lib/categories';
+import { getDistinctCategories, getDistinctValues } from '../../lib/categories';
 import ProductFormModal from './ProductFormModal';
 import ImagePreviewModal from '../ImagePreviewModal';
 import CategoryFilterTabs from '../client/CategoryFilterTabs';
@@ -81,7 +81,7 @@ export default function InventoryTab({ products, productActions }: InventoryTabP
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredProducts.length === 0 ? (
           <div className="col-span-full py-16 text-center text-xs text-zinc-400 font-bold uppercase border-2 border-black bg-zinc-50">
-            {products.length === 0 ? 'Stok alat camping kosong.' : 'Tidak ada alat camping yang cocok dengan pencarian atau kategori.'}
+            {products.length === 0 ? 'Stok barang sewa kosong.' : 'Tidak ada barang sewa yang cocok dengan pencarian atau kategori.'}
           </div>
         ) : (
           filteredProducts.map((prod) => (
@@ -185,6 +185,9 @@ export default function InventoryTab({ products, productActions }: InventoryTabP
           productFormData={productFormData}
           setProductFormData={setProductFormData}
           categories={getDistinctCategories(products)}
+          varianOptions={getDistinctValues(products, 'varian')}
+          sizeOptions={getDistinctValues(products, 'size')}
+          colorOptions={getDistinctValues(products, 'color')}
           uploadingImage={uploadingImage}
           onUploadImage={handleUploadProductImage}
           onSubmit={handleSaveProduct}

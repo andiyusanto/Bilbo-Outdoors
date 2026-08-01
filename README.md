@@ -120,7 +120,10 @@ CREATE TABLE IF NOT EXISTS products (
   readiness_hours INT NOT NULL DEFAULT 0,
   stock INT NOT NULL,
   description TEXT,
-  image TEXT
+  image TEXT,
+  varian VARCHAR(255),
+  size VARCHAR(255),
+  color VARCHAR(255)
 );
 
 -- 2. Membuat Tabel Orders
@@ -308,6 +311,13 @@ CREATE TABLE IF NOT EXISTS job_entries (
 > **Sudah pernah menjalankan Step A sebelum kolom `active` di `users` ada?** Jalankan ini sekali di SQL Editor yang sama (aman dijalankan berulang) - `active` otomatis mengisi `true` untuk semua akun staff yang sudah ada saat ALTER dijalankan (tidak ada akun yang tiba-tiba jadi nonaktif). Dipakai fitur nonaktifkan/hapus/edit akun di menu "User" - lihat `hasOtherActiveOwner` di `server.ts` untuk aturan yang mencegah owner aktif terakhir dinonaktifkan/dihapus/diubah rolenya.
 > ```sql
 > ALTER TABLE users ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true;
+> ```
+
+> **Sudah pernah menjalankan Step A sebelum kolom `varian`/`size`/`color` di `products` ada?** Jalankan ini sekali di SQL Editor yang sama (aman dijalankan berulang) - ketiganya nullable tanpa default, baris produk yang sudah ada tetap `NULL` selamanya (tidak ada regresi tampilan). Dipakai menu "Manajemen Stok" untuk atribut opsional tambahan (varian, ukuran, warna) yang tampil di halaman katalog publik hanya jika diisi.
+> ```sql
+> ALTER TABLE products ADD COLUMN IF NOT EXISTS varian VARCHAR(255);
+> ALTER TABLE products ADD COLUMN IF NOT EXISTS size VARCHAR(255);
+> ALTER TABLE products ADD COLUMN IF NOT EXISTS color VARCHAR(255);
 > ```
 
 ### Step B: Dapatkan Connection String Supabase Anda

@@ -20,6 +20,9 @@ export interface Product {
   stock: number; // Max total inventory
   description?: string;
   image?: string;
+  varian?: string;
+  size?: string;
+  color?: string;
 }
 
 export interface OrderItem {

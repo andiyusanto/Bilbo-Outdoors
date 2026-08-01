@@ -1,6 +1,6 @@
-import { FormEvent, useState } from 'react';
-import { Plus } from 'lucide-react';
+import { FormEvent } from 'react';
 import { Product, DayRateTable } from '../../types';
+import SelectOrAddField from './SelectOrAddField';
 
 interface ProductFormData {
   name: string;
@@ -10,6 +10,9 @@ interface ProductFormData {
   stock: number;
   description: string;
   image: string;
+  varian: string;
+  size: string;
+  color: string;
 }
 
 interface ProductFormModalProps {
@@ -17,6 +20,9 @@ interface ProductFormModalProps {
   productFormData: ProductFormData;
   setProductFormData: (data: ProductFormData) => void;
   categories: string[];
+  varianOptions: string[];
+  sizeOptions: string[];
+  colorOptions: string[];
   uploadingImage: boolean;
   onUploadImage: (file: File) => void;
   onSubmit: (e: FormEvent) => void;
@@ -28,35 +34,20 @@ export default function ProductFormModal({
   productFormData,
   setProductFormData,
   categories,
+  varianOptions,
+  sizeOptions,
+  colorOptions,
   uploadingImage,
   onUploadImage,
   onSubmit,
   onClose,
 }: ProductFormModalProps) {
-  const [addingCategory, setAddingCategory] = useState(false);
-  const [newCategoryInput, setNewCategoryInput] = useState('');
-
-  // Defensive union so the currently-selected category is never missing from
-  // the dropdown, even if it's not in the live product-derived list (e.g. the
-  // product being edited is the only one left in a category that has since
-  // been renamed elsewhere).
-  const categoryOptions = Array.from(new Set([...categories, productFormData.category].filter(Boolean)));
-
-  const confirmNewCategory = () => {
-    const trimmed = newCategoryInput.trim();
-    if (!trimmed) return;
-    const existingMatch = categoryOptions.find((c) => c.toLowerCase() === trimmed.toLowerCase());
-    setProductFormData({ ...productFormData, category: existingMatch ?? trimmed });
-    setAddingCategory(false);
-    setNewCategoryInput('');
-  };
-
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
       <div className="bg-white w-full max-w-md rounded-none shadow-[8px_8px_0px_rgba(0,0,0,1)] border-4 border-black overflow-hidden">
         <div className="bg-black text-white px-5 py-4 flex justify-between items-center border-b-2 border-black">
           <h3 className="font-display font-black text-sm uppercase tracking-wider">
-            {editingProduct ? 'EDIT ALAT CAMPING' : 'TAMBAH ALAT CAMPING BARU'}
+            {editingProduct ? 'EDIT BARANG SEWA' : 'TAMBAH BARANG SEWA BARU'}
           </h3>
           <button
             onClick={onClose}
@@ -79,54 +70,43 @@ export default function ProductFormModal({
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-black text-black uppercase">Kategori</label>
-            {addingCategory ? (
-              <div className="mt-1 flex gap-2">
-                <input
-                  type="text"
-                  autoFocus
-                  value={newCategoryInput}
-                  onChange={(e) => setNewCategoryInput(e.target.value)}
-                  placeholder="Contoh: Aksesoris Tambahan"
-                  className="block w-full rounded-none border-2 border-black px-3 py-2.5 text-xs font-black tracking-wider focus:bg-brand/10 focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={confirmNewCategory}
-                  className="shrink-0 px-3 bg-black hover:bg-brand hover:text-black text-brand font-black text-[10px] border-2 border-black uppercase tracking-widest cursor-pointer"
-                >
-                  Gunakan
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setAddingCategory(false); setNewCategoryInput(''); }}
-                  className="shrink-0 px-3 bg-white hover:bg-zinc-100 text-black font-black text-[10px] border-2 border-black uppercase tracking-widest cursor-pointer"
-                >
-                  Batal
-                </button>
-              </div>
-            ) : (
-              <>
-                <select
-                  value={productFormData.category}
-                  onChange={(e) => setProductFormData({...productFormData, category: e.target.value})}
-                  className="mt-1 block w-full rounded-none border-2 border-black px-3 py-2.5 text-xs font-black uppercase tracking-wider focus:bg-brand/10 focus:outline-none cursor-pointer"
-                >
-                  {categoryOptions.map((cat) => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={() => setAddingCategory(true)}
-                  className="mt-1.5 flex items-center text-[10px] font-black text-zinc-600 hover:text-black uppercase tracking-wider cursor-pointer"
-                >
-                  <Plus className="w-3 h-3 mr-1 stroke-[3]" />
-                  Tambah Kategori Baru
-                </button>
-              </>
-            )}
+          <SelectOrAddField
+            label="Kategori"
+            value={productFormData.category}
+            options={categories}
+            onChange={(category) => setProductFormData({ ...productFormData, category })}
+            addButtonLabel="Tambah Kategori Baru"
+            newInputPlaceholder="Contoh: Aksesoris Tambahan"
+          />
+
+          <div className="grid grid-cols-3 gap-3">
+            <SelectOrAddField
+              label="Varian"
+              value={productFormData.varian}
+              options={varianOptions}
+              onChange={(varian) => setProductFormData({ ...productFormData, varian })}
+              addButtonLabel="Tambah Varian Baru"
+              newInputPlaceholder="Contoh: Reguler"
+              allowEmpty
+            />
+            <SelectOrAddField
+              label="Ukuran"
+              value={productFormData.size}
+              options={sizeOptions}
+              onChange={(size) => setProductFormData({ ...productFormData, size })}
+              addButtonLabel="Tambah Ukuran Baru"
+              newInputPlaceholder="Contoh: L"
+              allowEmpty
+            />
+            <SelectOrAddField
+              label="Warna"
+              value={productFormData.color}
+              options={colorOptions}
+              onChange={(color) => setProductFormData({ ...productFormData, color })}
+              addButtonLabel="Tambah Warna Baru"
+              newInputPlaceholder="Contoh: Hijau Army"
+              allowEmpty
+            />
           </div>
 
           <div>
@@ -239,7 +219,7 @@ export default function ProductFormModal({
             type="submit"
             className="w-full py-3 bg-black hover:bg-brand hover:text-black text-brand font-black text-xs border-2 border-black rounded-none shadow-[4px_4px_0px_var(--brand-color)] hover:shadow-[4px_4px_0px_rgba(0,0,0,1)] uppercase tracking-widest transition-all mt-4 cursor-pointer"
           >
-            Simpan Alat Camping
+            Simpan Barang Sewa
           </button>
         </form>
       </div>

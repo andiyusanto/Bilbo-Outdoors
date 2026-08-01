@@ -19,6 +19,9 @@ const DEFAULT_PRODUCT_FORM = {
   stock: 5,
   description: '',
   image: '',
+  varian: '',
+  size: '',
+  color: '',
 };
 
 export function useProductActions({ token, fetchAdminData, setProducts }: UseProductActionsParams) {
@@ -74,7 +77,7 @@ export function useProductActions({ token, fetchAdminData, setProducts }: UsePro
   };
 
   const handleDeleteProduct = async (id: string) => {
-    if (!(await confirmAction('Apakah Anda yakin ingin menghapus alat camping ini?'))) return;
+    if (!(await confirmAction('Apakah Anda yakin ingin menghapus barang sewa ini?'))) return;
     await withLoading(async () => {
       try {
         const res = await fetch(`/api/products/${id}`, {
@@ -122,7 +125,10 @@ export function useProductActions({ token, fetchAdminData, setProducts }: UsePro
       readinessHours: product.readinessHours,
       stock: product.stock,
       description: product.description || '',
-      image: product.image || ''
+      image: product.image || '',
+      varian: product.varian || '',
+      size: product.size || '',
+      color: product.color || ''
     });
     setShowProductModal(true);
   };

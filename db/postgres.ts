@@ -44,11 +44,11 @@ export async function seedPostgresIfEmpty(): Promise<void> {
       await client.query('BEGIN');
       const params: any[] = [];
       defaultProducts.forEach((p) => {
-        params.push(p.id, p.name, p.category, p.rates.day1Price, p.rates.day2Price, p.rates.day3Price, p.rates.day4Price, p.rates.day5Price, p.rates.extraDayRate, p.readinessHours || 0, p.stock, p.description || '', p.image || '');
+        params.push(p.id, p.name, p.category, p.rates.day1Price, p.rates.day2Price, p.rates.day3Price, p.rates.day4Price, p.rates.day5Price, p.rates.extraDayRate, p.readinessHours || 0, p.stock, p.description || '', p.image || '', p.varian || '', p.size || '', p.color || '');
       });
       await client.query(
-        `INSERT INTO products (id, name, category, day1_price, day2_price, day3_price, day4_price, day5_price, extra_day_rate, readiness_hours, stock, description, image)
-         VALUES ${buildValuesClause(defaultProducts.length, 13)}
+        `INSERT INTO products (id, name, category, day1_price, day2_price, day3_price, day4_price, day5_price, extra_day_rate, readiness_hours, stock, description, image, varian, size, color)
+         VALUES ${buildValuesClause(defaultProducts.length, 16)}
          ON CONFLICT (id) DO NOTHING`,
         params
       );
@@ -137,6 +137,9 @@ function rowToProduct(row: any): Product {
     stock: Number(row.stock),
     description: row.description ?? '',
     image: row.image ?? '',
+    varian: row.varian ?? '',
+    size: row.size ?? '',
+    color: row.color ?? '',
   };
 }
 
@@ -393,11 +396,11 @@ export async function writeDBPostgres(data: { products: Product[]; orders: Order
     if (data.products.length > 0) {
       const params: any[] = [];
       data.products.forEach((p) => {
-        params.push(p.id, p.name, p.category, Number(p.rates.day1Price), Number(p.rates.day2Price), Number(p.rates.day3Price), Number(p.rates.day4Price), Number(p.rates.day5Price), Number(p.rates.extraDayRate), Number(p.readinessHours || 0), Number(p.stock), p.description || '', p.image || '');
+        params.push(p.id, p.name, p.category, Number(p.rates.day1Price), Number(p.rates.day2Price), Number(p.rates.day3Price), Number(p.rates.day4Price), Number(p.rates.day5Price), Number(p.rates.extraDayRate), Number(p.readinessHours || 0), Number(p.stock), p.description || '', p.image || '', p.varian || '', p.size || '', p.color || '');
       });
       await client.query(
-        `INSERT INTO products (id, name, category, day1_price, day2_price, day3_price, day4_price, day5_price, extra_day_rate, readiness_hours, stock, description, image)
-         VALUES ${buildValuesClause(data.products.length, 13)}
+        `INSERT INTO products (id, name, category, day1_price, day2_price, day3_price, day4_price, day5_price, extra_day_rate, readiness_hours, stock, description, image, varian, size, color)
+         VALUES ${buildValuesClause(data.products.length, 16)}
          ON CONFLICT (id) DO UPDATE SET
            name = EXCLUDED.name,
            category = EXCLUDED.category,
@@ -410,7 +413,10 @@ export async function writeDBPostgres(data: { products: Product[]; orders: Order
            readiness_hours = EXCLUDED.readiness_hours,
            stock = EXCLUDED.stock,
            description = EXCLUDED.description,
-           image = EXCLUDED.image`,
+           image = EXCLUDED.image,
+           varian = EXCLUDED.varian,
+           size = EXCLUDED.size,
+           color = EXCLUDED.color`,
         params
       );
     }

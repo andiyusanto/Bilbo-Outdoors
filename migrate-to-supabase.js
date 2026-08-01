@@ -46,8 +46,8 @@ async function runMigration() {
     console.log('\n📥 Migrating Products...');
     for (const prod of products) {
       await client.query(
-        `INSERT INTO products (id, name, category, day1_price, day2_price, day3_price, day4_price, day5_price, extra_day_rate, readiness_hours, stock, description, image)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        `INSERT INTO products (id, name, category, day1_price, day2_price, day3_price, day4_price, day5_price, extra_day_rate, readiness_hours, stock, description, image, varian, size, color)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
          ON CONFLICT (id) DO UPDATE SET
            name = EXCLUDED.name,
            category = EXCLUDED.category,
@@ -60,7 +60,10 @@ async function runMigration() {
            readiness_hours = EXCLUDED.readiness_hours,
            stock = EXCLUDED.stock,
            description = EXCLUDED.description,
-           image = EXCLUDED.image`,
+           image = EXCLUDED.image,
+           varian = EXCLUDED.varian,
+           size = EXCLUDED.size,
+           color = EXCLUDED.color`,
         [
           prod.id,
           prod.name,
@@ -74,7 +77,10 @@ async function runMigration() {
           Number(prod.readinessHours || 0),
           Number(prod.stock),
           prod.description || '',
-          prod.image || ''
+          prod.image || '',
+          prod.varian || '',
+          prod.size || '',
+          prod.color || ''
         ]
       );
       console.log(`   - Product: ${prod.name} (${prod.id}) migrated.`);

@@ -109,6 +109,15 @@ export default function EquipmentGrid({
                 {prod.description && (
                   <p className="text-[11px] text-zinc-600 mt-1 line-clamp-3 uppercase font-semibold leading-relaxed">{prod.description}</p>
                 )}
+                {(prod.varian || prod.size || prod.color) && (
+                  <p className="text-[10px] text-zinc-500 mt-1 uppercase font-bold tracking-wide">
+                    {[
+                      prod.varian && `Varian: ${prod.varian}`,
+                      prod.size && `Ukuran: ${prod.size}`,
+                      prod.color && `Warna: ${prod.color}`,
+                    ].filter(Boolean).join('   •   ')}
+                  </p>
+                )}
               </div>
 
               {/* Pricing and cart controller */}

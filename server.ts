@@ -406,7 +406,7 @@ app.get('/api/products', asyncHandler(async (req, res) => {
 // Admin CRUD: Create Product
 app.post('/api/products', authenticateUser, asyncHandler(async (req, res) => {
   await withDbLock(async () => {
-    const { name, category, rates, readinessHours, stock, description, image } = req.body;
+    const { name, category, rates, readinessHours, stock, description, image, varian, size, color } = req.body;
     if (!name || !category || !rates || stock === undefined) {
       return res.status(400).json({ error: 'Missing required product fields.' });
     }
@@ -427,7 +427,10 @@ app.post('/api/products', authenticateUser, asyncHandler(async (req, res) => {
       readinessHours: readinessHours !== undefined ? Number(readinessHours) : 0,
       stock: Number(stock),
       description: description || '',
-      image: image || ''
+      image: image || '',
+      varian: varian || '',
+      size: size || '',
+      color: color || ''
     };
 
     db.products.push(newProduct);
@@ -440,7 +443,7 @@ app.post('/api/products', authenticateUser, asyncHandler(async (req, res) => {
 app.put('/api/products/:id', authenticateUser, asyncHandler(async (req, res) => {
   await withDbLock(async () => {
     const { id } = req.params;
-    const { name, category, rates, readinessHours, stock, description, image } = req.body;
+    const { name, category, rates, readinessHours, stock, description, image, varian, size, color } = req.body;
 
     const db = await readDB();
     const productIndex = db.products.findIndex((p: Product) => p.id === id);
@@ -463,7 +466,10 @@ app.put('/api/products/:id', authenticateUser, asyncHandler(async (req, res) => 
       readinessHours: readinessHours !== undefined ? Number(readinessHours) : db.products[productIndex].readinessHours,
       stock: stock !== undefined ? Number(stock) : db.products[productIndex].stock,
       description: description !== undefined ? description : db.products[productIndex].description,
-      image: image !== undefined ? image : db.products[productIndex].image
+      image: image !== undefined ? image : db.products[productIndex].image,
+      varian: varian !== undefined ? varian : db.products[productIndex].varian,
+      size: size !== undefined ? size : db.products[productIndex].size,
+      color: color !== undefined ? color : db.products[productIndex].color
     };
 
     await writeDB(db);

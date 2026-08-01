@@ -22,3 +22,10 @@ export function getDistinctCategories(products: Product[]): string[] {
     .sort((a, b) => a.localeCompare(b));
   return [...known, ...extra];
 }
+
+// Distinct non-empty values for an optional catalog attribute (varian/size/color),
+// alphabetical - unlike categories, these have no canonical preset order.
+export function getDistinctValues(products: Product[], field: 'varian' | 'size' | 'color'): string[] {
+  const values = new Set(products.map((p) => p[field]).filter((v): v is string => !!v));
+  return [...values].sort((a, b) => a.localeCompare(b));
+}

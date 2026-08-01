@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ZoomIn } from 'lucide-react';
 import { Product } from '../../types';
-import { calculateSavingsFor5Days } from '../../pricing';
+import { calculateSavingsFor5Days, calculateRentalCost } from '../../pricing';
 import bilboIcon from '../../assets/bilbo-icon.webp';
 import ImagePreviewModal from '../ImagePreviewModal';
 
@@ -17,6 +17,7 @@ interface EquipmentGridProps {
   stockDetails: Record<string, StockInfo>;
   startDate: string;
   endDate: string;
+  rentDuration: number;
   onUpdateCart: (productId: string, quantity: number) => void;
 }
 
@@ -27,6 +28,7 @@ export default function EquipmentGrid({
   stockDetails,
   startDate,
   endDate,
+  rentDuration,
   onUpdateCart,
 }: EquipmentGridProps) {
   const [previewImage, setPreviewImage] = useState<{ url: string; alt: string } | null>(null);
@@ -112,10 +114,14 @@ export default function EquipmentGrid({
               {/* Pricing and cart controller */}
               <div className="border-t border-black pt-3.5 flex items-center justify-between gap-4">
                 <div>
-                  <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Sewa / Hari</p>
+                  <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">
+                    {rentDuration > 0 ? `Total ${rentDuration} Hari` : 'Sewa / Hari'}
+                  </p>
                   <div className="flex items-center gap-1.5 mt-0.5">
                     <span className="bg-brand px-2 py-0.5 text-xs font-black border border-black shadow-[1px_1px_0px_rgba(0,0,0,1)]">
-                      {Math.round(prod.rates.day1Price/1000)}K / HARI
+                      {rentDuration > 0
+                        ? `Rp ${calculateRentalCost(prod.rates, rentDuration).toLocaleString('id-ID')}`
+                        : `${Math.round(prod.rates.day1Price/1000)}K / HARI`}
                     </span>
                   </div>
                   {calculateSavingsFor5Days(prod.rates) > 0 && (

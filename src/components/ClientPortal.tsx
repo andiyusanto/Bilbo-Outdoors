@@ -185,6 +185,7 @@ export default function ClientPortal({ onAdminToggle }: ClientPortalProps) {
             stockDetails={stockDetails}
             startDate={startDate}
             endDate={endDate}
+            rentDuration={rentDuration}
             onUpdateCart={handleUpdateCart}
           />
         </div>

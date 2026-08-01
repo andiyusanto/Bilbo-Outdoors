@@ -57,36 +57,3 @@
   display: flex;
   animation: marquee 25s linear infinite;
 }
-
-/* Native <input type="date">/<input type="datetime-local"> renders its
-   segments according to the visitor's browser/OS locale, not this page's
-   lang="id" - so it can't be forced to DD-MM-YYYY via markup alone. On
-   Chromium/WebKit we hide that locale-dependent text (via the
-   ::-webkit-datetime-edit-* shadow parts below) and draw a fixed-format
-   overlay on top instead (DateInput.tsx). Firefox doesn't expose those
-   shadow parts, so the hiding rule is a no-op there - left unfixed, the
-   overlay would draw right on top of Firefox's own visible text, garbling
-   both. @supports selector() gates the overlay itself on the same feature
-   check, so unsupported browsers just fall back to the browser's own native
-   rendering (unclobbered, just not guaranteed DD-MM-YYYY) instead of a
-   double-text mess. */
-.date-input-overlay {
-  display: none;
-}
-
-@supports selector(::-webkit-datetime-edit-fields-wrapper) {
-  .date-input-overlay {
-    display: flex;
-  }
-
-  .date-input-hide-native::-webkit-datetime-edit-fields-wrapper,
-  .date-input-hide-native::-webkit-datetime-edit-text,
-  .date-input-hide-native::-webkit-datetime-edit-month-field,
-  .date-input-hide-native::-webkit-datetime-edit-day-field,
-  .date-input-hide-native::-webkit-datetime-edit-year-field,
-  .date-input-hide-native::-webkit-datetime-edit-hour-field,
-  .date-input-hide-native::-webkit-datetime-edit-minute-field,
-  .date-input-hide-native::-webkit-datetime-edit-ampm-field {
-    color: transparent;
-  }
-}

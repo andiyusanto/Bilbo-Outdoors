@@ -1,46 +1,64 @@
-import { forwardRef, InputHTMLAttributes } from 'react';
+import { forwardRef, InputHTMLAttributes, MouseEvent, useImperativeHandle, useRef } from 'react';
+import { Calendar } from 'lucide-react';
 import { formatDateLabel, formatDateTimeInputLabel } from '../lib/date';
 
-// Wraps a native <input type="date"|"datetime-local"> with a fixed DD-MM-YYYY
-// (or DD-MM-YYYY, HH:mm) overlay - the native control's own segments are
-// hidden via the `date-input-hide-native` class (src/index.css) since they
-// otherwise render in the visitor's browser/OS locale, not this app's format.
-// Every date/datetime input in the app should go through this one component
-// rather than a bare <input>, so the fix stays consistent in one place.
+// A native <input type="date"|"datetime-local"> renders its own segments in
+// the visitor's browser/OS locale (e.g. MM/DD/YYYY), not this app's
+// lang="id" - and Firefox exposes none of the shadow parts that would let a
+// stylesheet hide just that text (unlike Chromium/WebKit), so there is no
+// CSS-only fix that works in every browser. This instead makes the real
+// input fully invisible (opacity-0, stretched over the whole box) and draws
+// an entirely custom-looking box + icon in its place - identical in every
+// browser, since nothing here depends on browser-specific styling hooks.
+// The real input still receives every click (it's the positioned element,
+// so it paints - invisibly - on top) and still drives focus, keyboard entry,
+// and native required/min/max validation exactly as before.
 interface DateInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'type'> {
   type?: 'date' | 'datetime-local';
   value: string;
   onChange: (value: string) => void;
-  leftPadding?: 3 | 4;
   // Sizing classes (e.g. "flex-1", "w-full") belong here, not in `className` -
   // they need to apply to this outer wrapper div for the parent's layout
-  // (flex/grid) to size it correctly, not to the inner <input>.
+  // (flex/grid) to size it correctly, not to the visible fake box.
   wrapperClassName?: string;
 }
 
 const DateInput = forwardRef<HTMLInputElement, DateInputProps>(function DateInput(
-  { type = 'date', value, onChange, className = '', leftPadding = 3, wrapperClassName = '', ...rest },
+  { type = 'date', value, onChange, className = '', wrapperClassName = '', onClick, ...rest },
   ref
 ) {
+  const innerRef = useRef<HTMLInputElement>(null);
+  useImperativeHandle(ref, () => innerRef.current as HTMLInputElement);
+
+  const placeholder = type === 'datetime-local' ? 'DD-MM-YYYY, --:--' : 'DD-MM-YYYY';
   const display = value
     ? (type === 'datetime-local' ? formatDateTimeInputLabel(value) : formatDateLabel(value))
-    : (type === 'datetime-local' ? 'DD-MM-YYYY, --:--' : 'DD-MM-YYYY');
+    : placeholder;
+
+  // Desktop only (mouse/trackpad) - mobile already opens its own native
+  // picker on tap, calling showPicker() there too is redundant at best.
+  const handleClick = (e: MouseEvent<HTMLInputElement>) => {
+    if (window.matchMedia('(pointer: fine)').matches) {
+      innerRef.current?.showPicker?.();
+    }
+    onClick?.(e);
+  };
 
   return (
-    <div className={`relative ${wrapperClassName}`}>
+    <div className={`relative focus-within:ring-2 focus-within:ring-brand ${wrapperClassName}`}>
+      <div className={`pointer-events-none flex items-center justify-between gap-2 ${className}`}>
+        <span className={value ? '' : 'text-zinc-400'}>{display}</span>
+        <Calendar className="w-4 h-4 shrink-0 text-zinc-500 stroke-[2.5]" />
+      </div>
       <input
-        ref={ref}
+        ref={innerRef}
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className={`date-input-hide-native ${className}`}
+        onClick={handleClick}
+        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
         {...rest}
       />
-      <span
-        className={`date-input-overlay pointer-events-none absolute inset-y-0 ${leftPadding === 4 ? 'left-4' : 'left-3'} items-center text-xs font-bold uppercase text-black`}
-      >
-        {display}
-      </span>
     </div>
   );
 });

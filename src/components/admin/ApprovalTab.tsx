@@ -3,6 +3,7 @@ import { Search } from 'lucide-react';
 import { JobEntry, JobType } from '../../types';
 import { useApprovalActions } from '../../hooks/useApprovalActions';
 import { formatDateLabel, getDefaultDateRange } from '../../lib/date';
+import DateInput from '../DateInput';
 
 interface ApprovalTabProps {
   jobEntries: JobEntry[];
@@ -64,10 +65,9 @@ export default function ApprovalTab({ jobEntries, approvalActions }: ApprovalTab
 
       <div className="border-2 border-black bg-red-50 p-4 rounded-none flex flex-col sm:flex-row sm:items-center gap-3 shadow-[2px_2px_0px_rgba(0,0,0,1)]">
         <label className="text-[10px] font-black text-zinc-600 uppercase tracking-wider shrink-0">Tanggal Pembayaran</label>
-        <input
-          type="date"
+        <DateInput
           value={paymentDateInput}
-          onChange={(e) => setPaymentDateInput(e.target.value)}
+          onChange={setPaymentDateInput}
           className="bg-white border-2 border-black px-3 py-2 text-xs font-bold rounded-none focus:outline-none"
         />
         <button
@@ -92,19 +92,17 @@ export default function ApprovalTab({ jobEntries, approvalActions }: ApprovalTab
         </div>
         <div className="flex items-center gap-2">
           <label className="text-[10px] font-black text-zinc-600 uppercase tracking-wider shrink-0">Dari</label>
-          <input
-            type="date"
+          <DateInput
             value={approvalDateFrom}
-            onChange={(e) => setApprovalDateFrom(e.target.value)}
+            onChange={setApprovalDateFrom}
             className="bg-white border-2 border-black px-3 py-2 text-xs font-bold rounded-none focus:outline-none"
           />
         </div>
         <div className="flex items-center gap-2">
           <label className="text-[10px] font-black text-zinc-600 uppercase tracking-wider shrink-0">Sampai</label>
-          <input
-            type="date"
+          <DateInput
             value={approvalDateTo}
-            onChange={(e) => setApprovalDateTo(e.target.value)}
+            onChange={setApprovalDateTo}
             className="bg-white border-2 border-black px-3 py-2 text-xs font-bold rounded-none focus:outline-none"
           />
         </div>

@@ -20,6 +20,17 @@ export function formatDateTimeLabel(date: Date | string): string {
   return `${dd}-${mm}-${d.getFullYear()}, ${time}`;
 }
 
+// Raw <input type="datetime-local"> value ("YYYY-MM-DDTHH:mm", no timezone) -
+// pure string rearrangement like formatDateLabel, not a Date object, so a
+// local-time literal can never get reinterpreted through the wrong timezone
+// (same reasoning as server.ts's late-fee calc comment on this exact string
+// shape). Used only for an input's display overlay; the underlying value/state
+// stays untouched.
+export function formatDateTimeInputLabel(value: string): string {
+  const [datePart, timePart] = value.split('T');
+  return timePart ? `${formatDateLabel(datePart)}, ${timePart}` : formatDateLabel(datePart);
+}
+
 // "Today" as YYYY-MM-DD - same UTC-based convention already used ad hoc for
 // this across the app (server.ts's GET /api/stats, OverviewTab.tsx,
 // useJobEntryActions.ts's default entryDate), centralized here since the

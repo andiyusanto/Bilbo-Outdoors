@@ -3,6 +3,7 @@ import { Plus } from 'lucide-react';
 import { JobEntry, JobPriceListItem, JobType } from '../../types';
 import { useJobEntryActions } from '../../hooks/useJobEntryActions';
 import { formatDateLabel, getDefaultDateRange } from '../../lib/date';
+import DateInput from '../DateInput';
 
 interface OperationalTabProps {
   jobEntries: JobEntry[];
@@ -79,19 +80,17 @@ export default function OperationalTab({ jobEntries, jobPriceList, jobEntryActio
       <div className="flex flex-col sm:flex-row gap-2">
         <div className="flex items-center gap-2">
           <label className="text-[10px] font-black text-zinc-600 uppercase tracking-wider shrink-0">Dari</label>
-          <input
-            type="date"
+          <DateInput
             value={operationalDateFrom}
-            onChange={(e) => setOperationalDateFrom(e.target.value)}
+            onChange={setOperationalDateFrom}
             className="bg-white border-2 border-black px-3 py-2 text-xs font-bold rounded-none focus:outline-none"
           />
         </div>
         <div className="flex items-center gap-2">
           <label className="text-[10px] font-black text-zinc-600 uppercase tracking-wider shrink-0">Sampai</label>
-          <input
-            type="date"
+          <DateInput
             value={operationalDateTo}
-            onChange={(e) => setOperationalDateTo(e.target.value)}
+            onChange={setOperationalDateTo}
             className="bg-white border-2 border-black px-3 py-2 text-xs font-bold rounded-none focus:outline-none"
           />
         </div>
@@ -176,13 +175,14 @@ export default function OperationalTab({ jobEntries, jobPriceList, jobEntryActio
             <form onSubmit={handleSaveEntry} className="p-5 space-y-4 bg-white text-black">
               <div>
                 <label className="block text-xs font-black text-black uppercase">Tanggal</label>
-                <input
-                  type="date"
-                  required
-                  value={entryFormData.entryDate}
-                  onChange={(e) => setEntryFormData({ ...entryFormData, entryDate: e.target.value })}
-                  className="mt-1 block w-full rounded-none border-2 border-black px-3 py-2.5 text-xs font-black font-mono focus:bg-brand/10 focus:outline-none"
-                />
+                <div className="mt-1">
+                  <DateInput
+                    required
+                    value={entryFormData.entryDate}
+                    onChange={(value) => setEntryFormData({ ...entryFormData, entryDate: value })}
+                    className="block w-full rounded-none border-2 border-black px-3 py-2.5 text-xs font-black font-mono focus:bg-brand/10 focus:outline-none"
+                  />
+                </div>
               </div>
 
               <div>

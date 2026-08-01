@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Phone, UserCheck, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
 import { Order, OrderStatus } from '../../types';
 import { formatDateLabel, formatDateTimeLabel } from '../../lib/date';
+import DateInput from '../DateInput';
 
 const PICKUP_ID_TYPE_OPTIONS = ['KTP', 'SIM', 'KTA', 'KIP', 'Kartu Pelajar', 'Lainnya'];
 
@@ -303,11 +304,12 @@ export default function OrderDetailPanel({
                   Pilih Tanggal & Jam Pengembalian Aktual
                 </label>
                 <div className="flex gap-2">
-                  <input
+                  <DateInput
                     type="datetime-local"
                     value={customReturnDateTime}
-                    onChange={(e) => onCustomReturnDateTimeChange(e.target.value)}
-                    className="bg-white border-2 border-black px-3 py-2 text-xs font-bold uppercase rounded-none focus:outline-none flex-1"
+                    onChange={onCustomReturnDateTimeChange}
+                    wrapperClassName="flex-1"
+                    className="w-full bg-white border-2 border-black px-3 py-2 text-xs font-bold uppercase rounded-none focus:outline-none"
                   />
                   <button
                     onClick={onCalculateLateFees}

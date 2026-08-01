@@ -4,6 +4,7 @@ import { Order } from '../../types';
 import { useOrderActions } from '../../hooks/useOrderActions';
 import { formatDateLabel, getDefaultDateRange } from '../../lib/date';
 import OrderDetailPanel from './OrderDetailPanel';
+import DateInput from '../DateInput';
 
 const CSV_COLUMNS = ['Nama Penyewa', 'WhatsApp', 'Tanggal Mulai', 'Tanggal Selesai', 'Durasi (Hari)', 'Total Biaya (Rp)', 'Denda (Rp)', 'Hari Terlambat', 'Status'] as const;
 
@@ -119,19 +120,17 @@ export default function OrdersTab({ orders, orderActions }: OrdersTabProps) {
 
         <div className="flex items-center gap-2">
           <label className="text-[10px] font-black text-zinc-600 uppercase tracking-wider shrink-0">Dari</label>
-          <input
-            type="date"
+          <DateInput
             value={orderDateFrom}
-            onChange={(e) => setOrderDateFrom(e.target.value)}
+            onChange={setOrderDateFrom}
             className="bg-white border-2 border-black px-3 py-2 text-xs font-bold rounded-none focus:outline-none"
           />
         </div>
         <div className="flex items-center gap-2">
           <label className="text-[10px] font-black text-zinc-600 uppercase tracking-wider shrink-0">Sampai</label>
-          <input
-            type="date"
+          <DateInput
             value={orderDateTo}
-            onChange={(e) => setOrderDateTo(e.target.value)}
+            onChange={setOrderDateTo}
             className="bg-white border-2 border-black px-3 py-2 text-xs font-bold rounded-none focus:outline-none"
           />
         </div>

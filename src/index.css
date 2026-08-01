@@ -57,3 +57,23 @@
   display: flex;
   animation: marquee 25s linear infinite;
 }
+
+/* Native <input type="date">/<input type="datetime-local"> renders its
+   segments according to the visitor's browser/OS locale, not this page's
+   lang="id" - so it can't be forced to DD-MM-YYYY via markup alone. This
+   hides that locale-dependent text (Chromium/WebKit only - Firefox doesn't
+   expose these shadow parts, so this rule is a no-op there) so a
+   fixed-format overlay can be drawn on top of every date/datetime input in
+   the app, while leaving the picker icon/button untouched. The hour/minute/
+   ampm selectors only ever match on a datetime-local input - harmless no-ops
+   on a plain date input, so one shared rule covers both types. */
+.date-input-hide-native::-webkit-datetime-edit-fields-wrapper,
+.date-input-hide-native::-webkit-datetime-edit-text,
+.date-input-hide-native::-webkit-datetime-edit-month-field,
+.date-input-hide-native::-webkit-datetime-edit-day-field,
+.date-input-hide-native::-webkit-datetime-edit-year-field,
+.date-input-hide-native::-webkit-datetime-edit-hour-field,
+.date-input-hide-native::-webkit-datetime-edit-minute-field,
+.date-input-hide-native::-webkit-datetime-edit-ampm-field {
+  color: transparent;
+}

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Clock, DollarSign, Calendar } from 'lucide-react';
 import { Order, Product, DashboardStats } from '../../types';
 import { getDefaultDateRange } from '../../lib/date';
+import DateInput from '../DateInput';
 
 interface OverviewTabProps {
   stats: DashboardStats;
@@ -60,19 +61,17 @@ export default function OverviewTab({ orders, products }: OverviewTabProps) {
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 mt-2 sm:mt-0">
           <div className="flex items-center gap-2">
             <label className="text-[10px] font-black text-zinc-600 uppercase tracking-wider shrink-0">Dari</label>
-            <input
-              type="date"
+            <DateInput
               value={overviewDateFrom}
-              onChange={(e) => setOverviewDateFrom(e.target.value)}
+              onChange={setOverviewDateFrom}
               className="bg-white border-2 border-black px-3 py-2 text-xs font-bold rounded-none focus:outline-none"
             />
           </div>
           <div className="flex items-center gap-2">
             <label className="text-[10px] font-black text-zinc-600 uppercase tracking-wider shrink-0">Sampai</label>
-            <input
-              type="date"
+            <DateInput
               value={overviewDateTo}
-              onChange={(e) => setOverviewDateTo(e.target.value)}
+              onChange={setOverviewDateTo}
               className="bg-white border-2 border-black px-3 py-2 text-xs font-bold rounded-none focus:outline-none"
             />
           </div>

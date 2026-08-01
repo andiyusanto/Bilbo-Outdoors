@@ -616,7 +616,10 @@ app.post('/api/orders', asyncHandler(async (req, res) => {
     const start = new Date(startDate);
     const end = new Date(endDate);
     const diffTime = Math.abs(end.getTime() - start.getTime());
-    const rentDuration = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // inclusive rent days
+    // Non-inclusive ("nights") day count: 16th -> 17th is 1 day, not 2. Floored
+    // at 1 so a same-day pickup/return (startDate === endDate) still bills as a
+    // minimum 1-day rental instead of 0.
+    const rentDuration = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
 
     // 3. Calculate Item Costs and Total Price
     let totalPrice = 0;

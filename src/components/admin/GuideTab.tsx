@@ -141,7 +141,7 @@ export default function GuideTab() {
       <div>
         <h2 className="text-2xl font-display font-black text-black uppercase tracking-tight">Panduan Penggunaan</h2>
         <p className="text-xs text-zinc-600 font-semibold uppercase tracking-wider mt-1">
-          Versi web dari panduan admin &amp; pelanggan Bilbo Outdoors. Versi PDF tersedia di folder docs/ repo.
+          Versi web dari panduan admin &amp; pelanggan Bilbo Outdoors.
         </p>
       </div>
 

@@ -71,7 +71,9 @@ export function useAvailability(setCart: Dispatch<SetStateAction<Record<string, 
       const end = new Date(endDate);
       if (end >= start) {
         const diffTime = Math.abs(end.getTime() - start.getTime());
-        const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // inclusive rent days
+        // Non-inclusive ("nights") day count - mirrors server.ts's order-creation
+        // formula exactly, floored at 1 for a same-day pickup/return.
+        const days = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
         setRentDuration(days);
         // Automatically check remaining inventory stock whenever date changes
         checkInventoryStock(startDate, endDate);

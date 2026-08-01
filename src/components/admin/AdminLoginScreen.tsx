@@ -94,12 +94,6 @@ export default function AdminLoginScreen({
               Masuk Sistem Admin
             </button>
           </form>
-
-          <div className="mt-6 border-t border-zinc-200 pt-4 text-center">
-            <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">
-              Credentials Default: <strong className="text-zinc-600">admin</strong> / <strong className="text-zinc-600">bilbooutdoor2026</strong>
-            </span>
-          </div>
         </div>
       </div>
     </div>

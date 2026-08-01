@@ -86,67 +86,65 @@ export default function OrdersTab({ orders, orderActions }: OrdersTabProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b-2 border-black pb-4">
-        <div>
-          <h2 className="text-2xl font-display font-black text-black uppercase tracking-tight">MANAJEMEN ORDER MASUK</h2>
-          <p className="text-xs text-zinc-600 font-semibold uppercase tracking-wider mt-1">Kelola konfirmasi pembayaran, pengambilan barang, denda keterlambatan, dan pengembalian.</p>
+      <div>
+        <h2 className="text-2xl font-display font-black text-black uppercase tracking-tight">MANAJEMEN ORDER MASUK</h2>
+        <p className="text-xs text-zinc-600 font-semibold uppercase tracking-wider mt-1">Kelola konfirmasi pembayaran, pengambilan barang, denda keterlambatan, dan pengembalian.</p>
+      </div>
+
+      <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2">
+        <div className="relative">
+          <Search className="w-4 h-4 text-black absolute left-3 top-3.5 stroke-[2.5]" />
+          <input
+            type="text"
+            placeholder="Cari nama / WhatsApp..."
+            value={orderSearch}
+            onChange={(e) => setOrderSearch(e.target.value)}
+            className="pl-9 pr-4 py-2.5 text-xs bg-white border-2 border-black rounded-none focus:bg-brand/10 focus:outline-none w-full sm:w-48 font-black tracking-wider"
+          />
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-2">
-          <div className="relative">
-            <Search className="w-4 h-4 text-black absolute left-3 top-3.5 stroke-[2.5]" />
-            <input
-              type="text"
-              placeholder="Cari nama / WhatsApp..."
-              value={orderSearch}
-              onChange={(e) => setOrderSearch(e.target.value)}
-              className="pl-9 pr-4 py-2.5 text-xs bg-white border-2 border-black rounded-none focus:bg-brand/10 focus:outline-none w-full sm:w-48 font-black tracking-wider"
-            />
-          </div>
+        <select
+          value={orderStatusFilter}
+          onChange={(e) => setOrderStatusFilter(e.target.value)}
+          aria-label="Filter Status Pesanan"
+          className="bg-white border-2 border-black rounded-none px-3 py-2.5 text-xs font-black uppercase tracking-wider focus:bg-brand/10 focus:outline-none cursor-pointer"
+        >
+          <option value="All">SEMUA STATUS</option>
+          <option value="Pending">PENDING</option>
+          <option value="Approved/Paid">APPROVED/PAID</option>
+          <option value="Item Picked Up">ITEM PICKED UP</option>
+          <option value="Item Returned/Completed">RETURNED/COMPLETED</option>
+          <option value="Expired">EXPIRED</option>
+        </select>
 
-          <select
-            value={orderStatusFilter}
-            onChange={(e) => setOrderStatusFilter(e.target.value)}
-            aria-label="Filter Status Pesanan"
-            className="bg-white border-2 border-black rounded-none px-3 py-2.5 text-xs font-black uppercase tracking-wider focus:bg-brand/10 focus:outline-none cursor-pointer"
-          >
-            <option value="All">SEMUA STATUS</option>
-            <option value="Pending">PENDING</option>
-            <option value="Approved/Paid">APPROVED/PAID</option>
-            <option value="Item Picked Up">ITEM PICKED UP</option>
-            <option value="Item Returned/Completed">RETURNED/COMPLETED</option>
-            <option value="Expired">EXPIRED</option>
-          </select>
-
-          <div className="flex items-center gap-2">
-            <label className="text-[10px] font-black text-zinc-600 uppercase tracking-wider shrink-0">Dari</label>
-            <input
-              type="date"
-              value={orderDateFrom}
-              onChange={(e) => setOrderDateFrom(e.target.value)}
-              className="bg-white border-2 border-black px-3 py-2 text-xs font-bold rounded-none focus:outline-none"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="text-[10px] font-black text-zinc-600 uppercase tracking-wider shrink-0">Sampai</label>
-            <input
-              type="date"
-              value={orderDateTo}
-              onChange={(e) => setOrderDateTo(e.target.value)}
-              className="bg-white border-2 border-black px-3 py-2 text-xs font-bold rounded-none focus:outline-none"
-            />
-          </div>
-
-          <button
-            onClick={handleDownloadCsv}
-            disabled={filteredOrders.length === 0}
-            title="Unduh daftar pesanan yang sedang ditampilkan (sesuai filter aktif) sebagai file Excel/CSV"
-            className="bg-zinc-100 hover:bg-black hover:text-brand text-black font-black text-xs px-4 py-2.5 rounded-none border-2 border-black shadow-[2px_2px_0px_rgba(0,0,0,1)] transition-all cursor-pointer inline-flex items-center uppercase tracking-widest disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <FileSpreadsheet className="w-4 h-4 mr-2 stroke-[2.5]" />
-            Unduh Excel
-          </button>
+        <div className="flex items-center gap-2">
+          <label className="text-[10px] font-black text-zinc-600 uppercase tracking-wider shrink-0">Dari</label>
+          <input
+            type="date"
+            value={orderDateFrom}
+            onChange={(e) => setOrderDateFrom(e.target.value)}
+            className="bg-white border-2 border-black px-3 py-2 text-xs font-bold rounded-none focus:outline-none"
+          />
         </div>
+        <div className="flex items-center gap-2">
+          <label className="text-[10px] font-black text-zinc-600 uppercase tracking-wider shrink-0">Sampai</label>
+          <input
+            type="date"
+            value={orderDateTo}
+            onChange={(e) => setOrderDateTo(e.target.value)}
+            className="bg-white border-2 border-black px-3 py-2 text-xs font-bold rounded-none focus:outline-none"
+          />
+        </div>
+
+        <button
+          onClick={handleDownloadCsv}
+          disabled={filteredOrders.length === 0}
+          title="Unduh daftar pesanan yang sedang ditampilkan (sesuai filter aktif) sebagai file Excel/CSV"
+          className="sm:ml-auto bg-zinc-100 hover:bg-black hover:text-brand text-black font-black text-xs px-4 py-2.5 rounded-none border-2 border-black shadow-[2px_2px_0px_rgba(0,0,0,1)] transition-all cursor-pointer inline-flex items-center justify-center uppercase tracking-widest disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <FileSpreadsheet className="w-4 h-4 mr-2 stroke-[2.5]" />
+          Unduh Excel
+        </button>
       </div>
 
       {/* Order List Table */}

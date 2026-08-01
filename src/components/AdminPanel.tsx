@@ -11,6 +11,7 @@ import {
   Users,
   KeyRound,
   Tags,
+  BookOpen,
 } from 'lucide-react';
 import { useAdminAuth } from '../hooks/useAdminAuth';
 import { useAdminData } from '../hooks/useAdminData';
@@ -31,6 +32,7 @@ import UserTab from './admin/UserTab';
 import OperationalTab from './admin/OperationalTab';
 import OperationalItemsTab from './admin/OperationalItemsTab';
 import ApprovalTab from './admin/ApprovalTab';
+import GuideTab from './admin/GuideTab';
 import ChangePasswordModal from './admin/ChangePasswordModal';
 import bilboIcon from '../assets/bilbo-icon.webp';
 
@@ -227,6 +229,11 @@ export default function AdminPanel() {
               <span>User</span>
             </NavLink>
           )}
+
+          <NavLink to="/admin/panduan" className={NAV_LINK_CLASS}>
+            <BookOpen className="w-4 h-4 text-black stroke-[2.5]" />
+            <span>Panduan</span>
+          </NavLink>
         </aside>
 
         {/* Workspace */}
@@ -275,6 +282,7 @@ export default function AdminPanel() {
                 element={<UserTab users={data.users} userActions={userActions} />}
               />
             )}
+            <Route path="panduan" element={<GuideTab />} />
             <Route path="*" element={<Navigate to={defaultRoute} replace />} />
           </Routes>
         </main>

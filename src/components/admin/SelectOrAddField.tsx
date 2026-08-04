@@ -39,7 +39,10 @@ export default function SelectOrAddField({
   };
 
   return (
-    <div>
+    // sm:col-span-3 lets this field temporarily take over the whole Varian/Ukuran/Warna
+    // grid row while "adding" - a single grid column (~1/3 of the box width) is too
+    // narrow to fit "input + Gunakan + Batal" without them overlapping the next field.
+    <div className={adding ? 'sm:col-span-3' : undefined}>
       <label className="block text-xs font-black text-black uppercase">{label}</label>
       {adding ? (
         <div className="mt-1 flex gap-2">

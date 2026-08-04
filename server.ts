@@ -81,7 +81,7 @@ async function sendTelegramBookingNotification(order: Order): Promise<void> {
 // ---------------- PRODUCT IMAGE UPLOAD (SUPABASE STORAGE) ----------------
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const PRODUCT_IMAGE_BUCKET = 'product-images';
+const PRODUCT_IMAGE_BUCKET = 'bilbo-product-images';
 const MAX_PRODUCT_IMAGE_BYTES = 2 * 1024 * 1024;
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   console.log('Product image upload disabled — set SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY to enable.');

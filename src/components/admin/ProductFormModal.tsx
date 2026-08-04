@@ -44,7 +44,7 @@ export default function ProductFormModal({
 }: ProductFormModalProps) {
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-md lg:max-w-2xl max-h-[90vh] rounded-none shadow-[8px_8px_0px_rgba(0,0,0,1)] border-4 border-black overflow-hidden flex flex-col">
+      <div className="bg-white w-full max-w-md lg:max-w-4xl max-h-[90vh] rounded-none shadow-[8px_8px_0px_rgba(0,0,0,1)] border-4 border-black overflow-hidden flex flex-col">
         <div className="bg-black text-white px-5 py-4 flex justify-between items-center border-b-2 border-black shrink-0">
           <h3 className="font-display font-black text-sm uppercase tracking-wider">
             {editingProduct ? 'EDIT BARANG SEWA' : 'TAMBAH BARANG SEWA BARU'}

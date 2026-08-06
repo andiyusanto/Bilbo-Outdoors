@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { MapPin, Instagram, Phone } from 'lucide-react';
 import { Product } from '../types';
 import { calculateRentalCost, calculateSavingsFor5Days } from '../pricing';
@@ -17,9 +17,46 @@ import DiscountCarousel from './client/DiscountCarousel';
 
 interface ClientPortalProps {
   onAdminToggle: () => void;
+  runningText?: string[];
 }
 
-export default function ClientPortal({ onAdminToggle }: ClientPortalProps) {
+// Fallback if the parent's /api/store-info fetch hasn't resolved yet (or ever failed) -
+// matches the marquee's original hardcoded phrases.
+const DEFAULT_RUNNING_TEXT = [
+  'Tent & Shelter', 'Sleeping Systems', 'Carrier & Backpack', 'Cooking Gear',
+  'Lighting & Power', 'Hiking Essentials', 'Camp Support', 'Apparel & Personal Gear',
+];
+
+// Comfortable constant reading speed, in pixels/second, regardless of how much
+// runningText content there is - a short category-word list and one long promo
+// sentence should both scroll at the same pace, just take proportionally
+// different amounts of time per loop. Without this, a fixed-duration CSS
+// animation makes long text fly past unreadably fast (or short text crawl).
+const MARQUEE_PIXELS_PER_SECOND = 70;
+
+export default function ClientPortal({ onAdminToggle, runningText }: ClientPortalProps) {
+  const marqueeItems = runningText && runningText.length > 0 ? runningText : DEFAULT_RUNNING_TEXT;
+
+  // Measures one copy of the marquee content so its scroll animation duration
+  // can be set to a constant px/sec speed instead of a fixed duration - see
+  // MARQUEE_PIXELS_PER_SECOND above.
+  const marqueeContentRef = useRef<HTMLDivElement>(null);
+  const [marqueeDuration, setMarqueeDuration] = useState<number>(25);
+
+  useEffect(() => {
+    const el = marqueeContentRef.current;
+    if (!el) return;
+    const measure = () => {
+      // el's own scrollWidth is the single (non-duplicated) copy's rendered width.
+      const width = el.scrollWidth;
+      if (width > 0) setMarqueeDuration(width / MARQUEE_PIXELS_PER_SECOND);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [marqueeItems]);
+
   // Products and Database State
   const { products, loadingProducts } = useProducts();
 
@@ -218,23 +255,25 @@ export default function ClientPortal({ onAdminToggle }: ClientPortalProps) {
 
       {/* Fixed Bottom Decorative Marquee Ticker Bar */}
       <div className="fixed bottom-0 left-0 right-0 h-12 bg-brand border-t-2 border-black flex items-center px-10 overflow-hidden whitespace-nowrap z-30 shadow-[0_-2px_8px_rgba(0,0,0,0.15)]">
-        <div className="flex gap-20 text-[11px] font-black uppercase tracking-[0.2em] animate-marquee text-black">
-          <span>Tent & Shelter</span>
-          <span>Sleeping Systems</span>
-          <span>Carrier & Backpack</span>
-          <span>Cooking Gear</span>
-          <span>Lighting & Power</span>
-          <span>Hiking Essentials</span>
-          <span>Camp Support</span>
-          <span>Apparel & Personal Gear</span>
-          <span>Tent & Shelter</span>
-          <span>Sleeping Systems</span>
-          <span>Carrier & Backpack</span>
-          <span>Cooking Gear</span>
-          <span>Lighting & Power</span>
-          <span>Hiking Essentials</span>
-          <span>Camp Support</span>
-          <span>Apparel & Personal Gear</span>
+        {/* Hidden, unduplicated copy used only to measure one loop's real
+            rendered width (font/tracking/gap must match the visible copy
+            exactly) - drives marqueeDuration so scroll speed stays constant
+            regardless of how much runningText content there is. */}
+        <div
+          ref={marqueeContentRef}
+          aria-hidden="true"
+          className="flex gap-20 text-[11px] font-black uppercase tracking-[0.2em] absolute opacity-0 pointer-events-none"
+        >
+          {marqueeItems.map((text, i) => <span key={i}>{text}</span>)}
+        </div>
+
+        <div
+          className="flex gap-20 text-[11px] font-black uppercase tracking-[0.2em] animate-marquee text-black"
+          style={{ animationDuration: `${marqueeDuration}s` }}
+        >
+          {[...marqueeItems, ...marqueeItems].map((text, i) => (
+            <span key={i}>{text}</span>
+          ))}
         </div>
       </div>
 

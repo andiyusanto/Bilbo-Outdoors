@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Clock, Save } from 'lucide-react';
+import { Clock, Save, Megaphone } from 'lucide-react';
 import { StoreSettings, WeeklyHours } from '../../types';
 import { useSettingsActions } from '../../hooks/useSettingsActions';
 
@@ -90,8 +90,96 @@ export default function SettingsTab({ settings, settingsActions }: SettingsTabPr
         </div>
       </div>
 
+      <div className="bg-white border-2 border-black rounded-none shadow-[4px_4px_0px_rgba(0,0,0,1)] p-5 space-y-4 max-w-xl">
+        <h3 className="text-xs font-black text-black uppercase tracking-wider flex items-center">
+          <Megaphone className="w-4 h-4 mr-2 text-black stroke-[2.5]" />
+          Footer &amp; Teks Berjalan
+        </h3>
+        <p className="text-[10px] text-zinc-500 font-semibold normal-case leading-relaxed -mt-2">
+          Teks yang tampil di footer dan bar teks berjalan (marquee) di halaman publik.
+        </p>
+
+        <div>
+          <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-wider">Deskripsi</label>
+          <textarea
+            rows={3}
+            value={formState.footer.description}
+            onChange={(e) => setFormState(prev => ({ ...prev, footer: { ...prev.footer, description: e.target.value } }))}
+            className="mt-1 block w-full bg-white border-2 border-black px-3 py-2 text-xs font-bold rounded-none focus:outline-none"
+          />
+        </div>
+
+        <div>
+          <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-wider">Alamat</label>
+          <textarea
+            rows={2}
+            value={formState.footer.address}
+            onChange={(e) => setFormState(prev => ({ ...prev, footer: { ...prev.footer, address: e.target.value } }))}
+            className="mt-1 block w-full bg-white border-2 border-black px-3 py-2 text-xs font-bold rounded-none focus:outline-none"
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-wider">Instagram (Teks Tampilan)</label>
+            <input
+              type="text"
+              value={formState.footer.instagramHandle}
+              onChange={(e) => setFormState(prev => ({ ...prev, footer: { ...prev.footer, instagramHandle: e.target.value } }))}
+              className="mt-1 block w-full bg-white border-2 border-black px-3 py-2 text-xs font-bold rounded-none focus:outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-wider">Instagram (URL)</label>
+            <input
+              type="text"
+              value={formState.footer.instagramUrl}
+              onChange={(e) => setFormState(prev => ({ ...prev, footer: { ...prev.footer, instagramUrl: e.target.value } }))}
+              className="mt-1 block w-full bg-white border-2 border-black px-3 py-2 text-xs font-bold rounded-none focus:outline-none"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-wider">Teks WhatsApp</label>
+          <input
+            type="text"
+            value={formState.footer.whatsappText}
+            onChange={(e) => setFormState(prev => ({ ...prev, footer: { ...prev.footer, whatsappText: e.target.value } }))}
+            className="mt-1 block w-full bg-white border-2 border-black px-3 py-2 text-xs font-bold rounded-none focus:outline-none"
+          />
+        </div>
+
+        <div>
+          <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-wider">Teks Copyright</label>
+          <input
+            type="text"
+            value={formState.footer.copyrightText}
+            onChange={(e) => setFormState(prev => ({ ...prev, footer: { ...prev.footer, copyrightText: e.target.value } }))}
+            className="mt-1 block w-full bg-white border-2 border-black px-3 py-2 text-xs font-bold rounded-none focus:outline-none"
+          />
+        </div>
+
+        <div>
+          <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-wider">Teks Berjalan (Marquee)</label>
+          <textarea
+            rows={4}
+            value={formState.runningText.join('\n')}
+            onChange={(e) => setFormState(prev => ({ ...prev, runningText: e.target.value.split('\n') }))}
+            placeholder={'Tent & Shelter\nSleeping Systems\n...'}
+            className="mt-1 block w-full bg-white border-2 border-black px-3 py-2 text-xs font-bold rounded-none focus:outline-none"
+          />
+          <p className="text-[10px] text-zinc-500 font-semibold normal-case leading-relaxed mt-1">
+            Satu baris = satu teks yang tampil bergantian di bar bawah. Bisa untuk nama kategori, info diskon, atau pengumuman lain - bebas.
+          </p>
+        </div>
+      </div>
+
       <button
-        onClick={() => handleUpdateSettings(formState)}
+        onClick={() => handleUpdateSettings({
+          ...formState,
+          runningText: formState.runningText.map((line) => line.trim()).filter(Boolean),
+        })}
         disabled={isSaving}
         className="flex items-center bg-black hover:bg-brand hover:text-black text-brand font-black text-xs px-5 py-3 rounded-none shadow-[4px_4px_0px_var(--brand-color)] hover:shadow-[4px_4px_0px_rgba(0,0,0,1)] border-2 border-black transition-all uppercase tracking-widest cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
       >

@@ -167,7 +167,9 @@ CREATE TABLE IF NOT EXISTS order_items (
 CREATE TABLE IF NOT EXISTS settings (
   id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
   late_tolerance_hours INTEGER NOT NULL DEFAULT 4,
-  operating_hours JSONB NOT NULL
+  operating_hours JSONB NOT NULL,
+  footer JSONB,
+  running_text VARCHAR(255)[]
 );
 
 -- 5. Membuat Tabel Users (akun staff - owner/master & karyawan)
@@ -264,7 +266,9 @@ CREATE TABLE IF NOT EXISTS job_entries (
 > CREATE TABLE IF NOT EXISTS settings (
 >   id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
 >   late_tolerance_hours INTEGER NOT NULL DEFAULT 4,
->   operating_hours JSONB NOT NULL
+>   operating_hours JSONB NOT NULL,
+>   footer JSONB,
+>   running_text VARCHAR(255)[]
 > );
 > ```
 > Setelah tabel dibuat, boot aplikasi berikutnya akan otomatis mengisi baris default (lihat `seedPostgresIfEmpty` di `db/postgres.ts`) - tidak perlu INSERT manual.
@@ -328,6 +332,12 @@ CREATE TABLE IF NOT EXISTS job_entries (
 > ```sql
 > ALTER TABLE job_entries ADD COLUMN IF NOT EXISTS rejection_reason VARCHAR(255);
 > ALTER TABLE job_entries ADD COLUMN IF NOT EXISTS rejected_at VARCHAR(255);
+> ```
+
+> **Sudah pernah menjalankan Step A sebelum kolom `footer`/`running_text` di `settings` ada?** Jalankan ini sekali di SQL Editor yang sama (aman dijalankan berulang) - keduanya nullable tanpa default; kode aplikasi (`rowToSettings` di `db/postgres.ts`) otomatis memakai nilai default bawaan (`db/defaultSettings.ts`) selama kolom masih `NULL`, jadi tidak ada regresi tampilan sebelum baris `settings` disimpan ulang lewat menu Pengaturan. `footer` menyimpan teks footer halaman publik (deskripsi, alamat, Instagram, WhatsApp, copyright) sebagai JSONB, `running_text` menyimpan daftar teks bar berjalan (marquee) di bagian bawah halaman publik - keduanya diatur dari menu "Pengaturan".
+> ```sql
+> ALTER TABLE settings ADD COLUMN IF NOT EXISTS footer JSONB;
+> ALTER TABLE settings ADD COLUMN IF NOT EXISTS running_text VARCHAR(255)[];
 > ```
 
 ### Step B: Dapatkan Connection String Supabase Anda

@@ -144,6 +144,8 @@ async function initDatabase(): Promise<void> {
         // Old server_db.json files predate later features - never crash on a
         // missing key, just fall back to defaults until the next write persists them.
         if (!parsed.settings) parsed.settings = defaultSettings;
+        if (!parsed.settings.footer) parsed.settings.footer = defaultSettings.footer;
+        if (!parsed.settings.runningText) parsed.settings.runningText = defaultSettings.runningText;
         if (!parsed.users) parsed.users = defaultUsers;
         if (!parsed.jobPriceList) parsed.jobPriceList = defaultJobPriceList;
         if (!parsed.jobEntries) parsed.jobEntries = [];
@@ -931,7 +933,36 @@ app.post('/api/orders/:id/calculate-late', authenticateUser, asyncHandler(async 
   });
 }));
 
-// Admin: Get/Update store settings (late-return tolerance + weekly operating hours)
+// Public: store info for the public site's footer/marquee - a curated subset of
+// settings only, deliberately omitting lateToleranceHours (an internal admin
+// config value with no public use), same minimal-surface care as GET /api/products.
+//
+// Falls back to the original default wording per-field whenever the owner has
+// left something blank in Pengaturan (e.g. cleared a field by accident before
+// saving) - the public site should never show a broken-looking empty paragraph
+// or empty link text. This only affects what's served here, not what's stored:
+// GET /api/settings (the admin's own Pengaturan view) still shows the raw saved
+// value, blank or not, so the owner always sees exactly what they actually saved.
+app.get('/api/store-info', asyncHandler(async (req, res) => {
+  const db = await readDB();
+  const savedFooter = db.settings.footer || defaultSettings.footer;
+  const savedRunningText = db.settings.runningText;
+  res.json({
+    operatingHours: db.settings.operatingHours,
+    footer: {
+      description: savedFooter.description || defaultSettings.footer.description,
+      address: savedFooter.address || defaultSettings.footer.address,
+      instagramHandle: savedFooter.instagramHandle || defaultSettings.footer.instagramHandle,
+      instagramUrl: savedFooter.instagramUrl || defaultSettings.footer.instagramUrl,
+      whatsappText: savedFooter.whatsappText || defaultSettings.footer.whatsappText,
+      copyrightText: savedFooter.copyrightText || defaultSettings.footer.copyrightText,
+    },
+    runningText: savedRunningText && savedRunningText.length > 0 ? savedRunningText : defaultSettings.runningText,
+  });
+}));
+
+// Admin: Get/Update store settings (late-return tolerance, weekly operating hours,
+// public footer text, marquee running text)
 app.get('/api/settings', authenticateUser, requireOwner, asyncHandler(async (req, res) => {
   const db = await readDB();
   res.json(db.settings);
@@ -939,9 +970,9 @@ app.get('/api/settings', authenticateUser, requireOwner, asyncHandler(async (req
 
 app.put('/api/settings', authenticateUser, requireOwner, asyncHandler(async (req, res) => {
   await withDbLock(async () => {
-    const { lateToleranceHours, operatingHours } = req.body;
+    const { lateToleranceHours, operatingHours, footer, runningText } = req.body;
     const db = await readDB();
-    db.settings = { lateToleranceHours, operatingHours };
+    db.settings = { lateToleranceHours, operatingHours, footer, runningText };
     await writeDB(db);
     res.json(db.settings);
   });

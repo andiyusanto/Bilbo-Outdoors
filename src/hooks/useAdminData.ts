@@ -21,6 +21,15 @@ const DEFAULT_SETTINGS: StoreSettings = {
     saturday: { open: '09:00', close: '22:00' },
     sunday: { open: '09:00', close: '22:00' },
   },
+  footer: {
+    description: '',
+    address: '',
+    instagramHandle: '',
+    instagramUrl: '',
+    whatsappText: '',
+    copyrightText: '',
+  },
+  runningText: [],
 };
 
 export function useAdminData({ isLoggedIn, token, role, onUnauthorized }: UseAdminDataParams) {

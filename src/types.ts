@@ -84,9 +84,20 @@ export interface WeeklyHours {
   sunday: DayHours;
 }
 
+export interface FooterSettings {
+  description: string;
+  address: string;
+  instagramHandle: string; // display text, e.g. "@bilbooutdoors (Instagram)"
+  instagramUrl: string;
+  whatsappText: string; // full line, e.g. "Narahubung Cepat WA: 0811-370-6666"
+  copyrightText: string; // full bottom line
+}
+
 export interface StoreSettings {
   lateToleranceHours: number; // grace period past closing time before a late fee starts
   operatingHours: WeeklyHours;
+  footer: FooterSettings;
+  runningText: string[]; // marquee phrases, in order - free text, not limited to category names (can hold promo/discount announcements etc.)
 }
 
 export type UserRole = 'owner' | 'karyawan';

@@ -68,10 +68,10 @@ export async function seedPostgresIfEmpty(): Promise<void> {
   const settingsCountRes = await pool.query('SELECT COUNT(*)::int AS count FROM settings');
   if (settingsCountRes.rows[0].count === 0) {
     await pool.query(
-      `INSERT INTO settings (id, late_tolerance_hours, operating_hours)
-       VALUES (1, $1, $2::jsonb)
+      `INSERT INTO settings (id, late_tolerance_hours, operating_hours, footer, running_text)
+       VALUES (1, $1, $2::jsonb, $3::jsonb, $4)
        ON CONFLICT (id) DO NOTHING`,
-      [defaultSettings.lateToleranceHours, JSON.stringify(defaultSettings.operatingHours)]
+      [defaultSettings.lateToleranceHours, JSON.stringify(defaultSettings.operatingHours), JSON.stringify(defaultSettings.footer), defaultSettings.runningText]
     );
     console.log('Postgres seeded successfully with default store settings.');
   }
@@ -188,6 +188,8 @@ function rowToSettings(row: any): StoreSettings {
   return {
     lateToleranceHours: Number(row.late_tolerance_hours),
     operatingHours: row.operating_hours, // JSONB - pg already parses this into a plain object
+    footer: row.footer ?? defaultSettings.footer,
+    runningText: row.running_text ?? defaultSettings.runningText,
   };
 }
 
@@ -301,12 +303,14 @@ export async function writeDBPostgres(data: { products: Product[]; orders: Order
 
     // Settings: single-row upsert, no batching helper needed.
     await client.query(
-      `INSERT INTO settings (id, late_tolerance_hours, operating_hours)
-       VALUES (1, $1, $2::jsonb)
+      `INSERT INTO settings (id, late_tolerance_hours, operating_hours, footer, running_text)
+       VALUES (1, $1, $2::jsonb, $3::jsonb, $4)
        ON CONFLICT (id) DO UPDATE SET
          late_tolerance_hours = EXCLUDED.late_tolerance_hours,
-         operating_hours = EXCLUDED.operating_hours`,
-      [Number(data.settings.lateToleranceHours), JSON.stringify(data.settings.operatingHours)]
+         operating_hours = EXCLUDED.operating_hours,
+         footer = EXCLUDED.footer,
+         running_text = EXCLUDED.running_text`,
+      [Number(data.settings.lateToleranceHours), JSON.stringify(data.settings.operatingHours), JSON.stringify(data.settings.footer), data.settings.runningText]
     );
 
     // Users: batched upsert of everything present, then prune anything removed -

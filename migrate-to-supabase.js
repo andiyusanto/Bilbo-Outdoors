@@ -150,12 +150,14 @@ async function runMigration() {
     if (settings) {
       console.log('\n📥 Migrating Settings...');
       await client.query(
-        `INSERT INTO settings (id, late_tolerance_hours, operating_hours)
-         VALUES (1, $1, $2::jsonb)
+        `INSERT INTO settings (id, late_tolerance_hours, operating_hours, footer, running_text)
+         VALUES (1, $1, $2::jsonb, $3::jsonb, $4)
          ON CONFLICT (id) DO UPDATE SET
            late_tolerance_hours = EXCLUDED.late_tolerance_hours,
-           operating_hours = EXCLUDED.operating_hours`,
-        [Number(settings.lateToleranceHours), JSON.stringify(settings.operatingHours)]
+           operating_hours = EXCLUDED.operating_hours,
+           footer = EXCLUDED.footer,
+           running_text = EXCLUDED.running_text`,
+        [Number(settings.lateToleranceHours), JSON.stringify(settings.operatingHours), settings.footer ? JSON.stringify(settings.footer) : null, settings.runningText ?? null]
       );
       console.log('   - Settings migrated.');
     } else {

@@ -1,15 +1,43 @@
-import React, { useEffect, Suspense, lazy } from 'react';
+import React, { useEffect, useState, Suspense, lazy } from 'react';
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import { Shield, Compass, Instagram, MapPin } from 'lucide-react';
 import ClientPortal from './components/ClientPortal';
 import OrderConfirmationPage from './components/client/OrderConfirmationPage';
 import { THEMES } from './themes';
-import { Theme } from './types';
+import { Theme, FooterSettings, WeeklyHours } from './types';
+import { summarizeOperatingHours } from './lib/operatingHours';
 import bilboLogoWide from './assets/bilbo-logo-wide.webp';
 import bilboIcon from './assets/bilbo-icon.webp';
 import { LoadingProvider } from './contexts/LoadingContext';
 import { NotificationProvider } from './contexts/NotificationContext';
 import LoadingOverlay from './components/LoadingOverlay';
+
+// Matches the site's original hardcoded footer/marquee text - used as the
+// initial render before GET /api/store-info resolves (and if it ever fails),
+// so there's no flash of empty content. Mirrors db/defaultSettings.ts's
+// values without importing it directly - src/ never imports from db/, that
+// boundary is server-only code vs. the client bundle.
+const FALLBACK_FOOTER: FooterSettings = {
+  description: 'Penyedia sewa alat kemah, trekking, dan hiking terlengkap dan tepercaya di kota Surabaya. Kami memastikan petualangan Anda aman dengan alat berkualitas terbaik.',
+  address: 'Jl. Ngagel Jaya Tengah No. 12, Pucang Sewu, Kec. Gubeng, Kota Surabaya, Jawa Timur 60283',
+  instagramHandle: '@bilbooutdoors (INSTAGRAM)',
+  instagramUrl: 'https://instagram.com/bilbooutdoors',
+  whatsappText: 'Narahubung Cepat WA: 0811-370-6666',
+  copyrightText: '© 2026 Bilbo Outdoors Surabaya. All rights reserved. Hubungi kami untuk petualangan seru Anda!',
+};
+const FALLBACK_OPERATING_HOURS: WeeklyHours = {
+  monday: { open: '12:00', close: '22:00' },
+  tuesday: { open: '09:00', close: '22:00' },
+  wednesday: { open: '09:00', close: '22:00' },
+  thursday: { open: '09:00', close: '22:00' },
+  friday: { open: '09:00', close: '22:00' },
+  saturday: { open: '09:00', close: '22:00' },
+  sunday: { open: '12:00', close: '22:00' },
+};
+const FALLBACK_RUNNING_TEXT = [
+  'Tent & Shelter', 'Sleeping Systems', 'Carrier & Backpack', 'Cooking Gear',
+  'Lighting & Power', 'Hiking Essentials', 'Camp Support', 'Apparel & Personal Gear',
+];
 
 // Lazy-loaded: the admin dashboard (all its tabs/hooks) has no reason to be
 // in the bundle every client visitor downloads on first paint.
@@ -20,6 +48,25 @@ export default function App() {
   const isAdminRoute = pathname.startsWith('/admin');
   // Theme is fixed to Sunset Ochre - the theme switcher has been removed.
   const activeTheme = THEMES.find(t => t.id === 'sunset-ochre') || THEMES[0];
+
+  const [footer, setFooter] = useState<FooterSettings>(FALLBACK_FOOTER);
+  const [operatingHours, setOperatingHours] = useState<WeeklyHours>(FALLBACK_OPERATING_HOURS);
+  const [runningText, setRunningText] = useState<string[]>(FALLBACK_RUNNING_TEXT);
+
+  useEffect(() => {
+    fetch('/api/store-info')
+      .then((res) => res.ok ? res.json() : Promise.reject())
+      .then((info) => {
+        // Only override a fallback if the server actually sent that piece -
+        // guards against a settings row that predates one of these fields
+        // (shouldn't happen once server.ts's own JSON-file/Postgres fallbacks
+        // are in place, but a crash-prone footer render is worse than a stale one).
+        if (info.footer) setFooter(info.footer);
+        if (info.operatingHours) setOperatingHours(info.operatingHours);
+        if (Array.isArray(info.runningText)) setRunningText(info.runningText);
+      })
+      .catch(() => {}); // keep the fallback values - footer stays functional either way
+  }, []);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -70,7 +117,7 @@ export default function App() {
         <Routes>
           <Route
             path="/"
-            element={<ClientPortal onAdminToggle={() => {}} />}
+            element={<ClientPortal onAdminToggle={() => {}} runningText={runningText} />}
           />
           <Route path="/pesanan/:token" element={<OrderConfirmationPage />} />
           <Route
@@ -96,7 +143,7 @@ export default function App() {
                 <h3 className="font-display font-black tracking-tighter text-xl uppercase text-brand">BILBO OUTDOORS</h3>
               </div>
               <p className="text-xs text-zinc-400 leading-relaxed max-w-sm">
-                Penyedia sewa alat kemah, trekking, dan hiking terlengkap dan tepercaya di kota Surabaya. Kami memastikan petualangan Anda aman dengan alat berkualitas terbaik.
+                {footer.description}
               </p>
             </div>
 
@@ -105,9 +152,11 @@ export default function App() {
               <h4 className="font-display font-black tracking-widest text-brand uppercase text-xs border-b border-zinc-800 pb-2">Surabaya Basecamp</h4>
               <div className="space-y-2 text-zinc-300">
                 <p className="leading-relaxed">
-                  Jl. Ngagel Jaya Tengah No. 12, Pucang Sewu, Kec. Gubeng, Kota Surabaya, Jawa Timur 60283
+                  {footer.address}
                 </p>
-                <p className="font-black text-white tracking-wider font-mono">JAM OPERASIONAL: 08:00 - 22:00 WIB</p>
+                {summarizeOperatingHours(operatingHours).map((line) => (
+                  <p key={line} className="font-black text-white tracking-wider font-mono">{line}</p>
+                ))}
               </div>
             </div>
 
@@ -115,23 +164,23 @@ export default function App() {
             <div className="space-y-4 text-xs">
               <h4 className="font-display font-black tracking-widest text-brand uppercase text-xs border-b border-zinc-800 pb-2">Ikuti Kami</h4>
               <div className="space-y-2">
-                <a 
-                  href="https://instagram.com/bilbooutdoors" 
-                  target="_blank" 
+                <a
+                  href={footer.instagramUrl}
+                  target="_blank"
                   rel="referrer"
                   className="flex items-center text-zinc-300 hover:text-white transition-colors uppercase font-bold tracking-wider"
                 >
                   <Instagram className="w-4 h-4 mr-2 text-brand" />
-                  @bilbooutdoors (INSTAGRAM)
+                  {footer.instagramHandle}
                 </a>
-                <p className="text-[10px] text-zinc-400 font-mono uppercase font-bold">Narahubung Cepat WA: 0811-370-6666</p>
+                <p className="text-[10px] text-zinc-400 font-mono uppercase font-bold">{footer.whatsappText}</p>
               </div>
             </div>
 
           </div>
 
           <div className="max-w-7xl mx-auto border-t border-zinc-900 mt-12 pt-8 text-center text-[10px] text-zinc-400 font-mono uppercase tracking-widest leading-relaxed">
-            <p>© 2026 Bilbo Outdoors Surabaya. All rights reserved. Hubungi kami untuk petualangan seru Anda!</p>
+            <p>{footer.copyrightText}</p>
           </div>
         </footer>
       )}

@@ -260,6 +260,10 @@ export default function GuideTab() {
           rows={[
             { label: 'Nama Alat', desc: 'Nama produk yang tampil di katalog.' },
             { label: 'Kategori', desc: <>Pilih dari daftar, atau <Ui>Tambah Kategori Baru</Ui>.</> },
+            {
+              label: 'Varian / Ukuran / Warna',
+              desc: <>Atribut opsional tambahan, diisi dengan cara yang sama seperti Kategori (pilih dari daftar atau ketik nilai baru). Boleh dibiarkan <Ui>(Tidak Ada)</Ui>. Jika diisi, nilainya otomatis tampil di halaman katalog publik di bawah deskripsi produk.</>,
+            },
             { label: 'Tabel Harga (Rp)', desc: 'Harian, 2 Hari, 3 Hari, 4 Hari, 5 Hari, 5 Hari+ (per hari).' },
             { label: 'Waktu Kesiapan', desc: 'Jam alat perlu "istirahat" sebelum disewakan lagi.' },
             { label: 'Stok Awal', desc: 'Jumlah unit yang dimiliki.' },
@@ -280,7 +284,12 @@ export default function GuideTab() {
             <>Nominal terisi otomatis; isi <Ui>Qty</Ui>, lalu tekan <Ui>Simpan Pekerjaan</Ui>.</>,
           ]}
         />
-        <p>Entri yang masih Pending bisa di-<Ui>Edit</Ui>; yang sudah Dibayar terkunci. Tersedia filter tanggal dan baris total.</p>
+        <p>Entri yang masih Pending atau Ditolak bisa di-<Ui>Edit</Ui>; yang sudah Dibayar terkunci. Tersedia filter tanggal dan baris total.</p>
+        <Note label="Status Ditolak">
+          Jika Owner menolak sebuah entri (lihat 1.8), statusnya berubah menjadi <strong>Ditolak</strong> dan alasan penolakan
+          ditampilkan langsung di bawah nama item. Perbaiki data yang salah lalu tekan <Ui>Simpan Pekerjaan</Ui> &mdash;
+          entri otomatis kembali berstatus Pending dan masuk lagi ke antrean Approval.
+        </Note>
       </Section>
 
       <Section id="g-1-8" num="1.8" title="Approval" owner kicker="Owner meninjau, menyetujui, dan membayar pekerjaan yang dicatat karyawan.">
@@ -292,6 +301,17 @@ export default function GuideTab() {
           ]}
         />
         <p>Tabel <strong>Riwayat Dibayar</strong> di bawahnya mencatat seluruh pekerjaan yang sudah dibayar beserta tanggalnya.</p>
+
+        <p className="font-bold text-xs mt-3">Menolak entri yang salah input</p>
+        <p>
+          Setiap baris Pending juga punya tombol <Ui>Tolak</Ui> &mdash; dipakai saat karyawan salah mencatat data (item,
+          qty, atau jenis pekerjaan yang keliru). Menekan Tolak membuka jendela kecil yang meminta{' '}
+          <Ui>Alasan Penolakan</Ui> (wajib diisi), lalu tekan <Ui>Tolak Pekerjaan</Ui>.
+        </p>
+        <p>
+          Entri yang ditolak pindah ke tabel <strong>Riwayat Ditolak</strong> beserta alasannya, dan otomatis muncul di
+          menu Operational karyawan yang bersangkutan berstatus Ditolak agar bisa diperbaiki dan dicatat ulang (lihat 1.7).
+        </p>
       </Section>
 
       <Section id="g-1-9" num="1.9" title="Item Operasional" owner kicker="Daftar harga acuan tiap jenis pekerjaan per alat.">
@@ -311,6 +331,17 @@ export default function GuideTab() {
           mengembalikan dalam jam toleransi <strong>dan</strong> toko masih buka. Tabel <Ui>Jam Operasional Toko</Ui> mengatur
           jam open/close per hari (Senin&ndash;Minggu). Tekan <Ui>Simpan Pengaturan</Ui> setelah mengubah.
         </p>
+        <p className="font-bold text-xs mt-3">Footer &amp; Teks Berjalan</p>
+        <p>
+          Kartu <Ui>Footer &amp; Teks Berjalan</Ui> mengatur teks yang tampil di halaman publik: Deskripsi, Alamat,
+          Instagram (teks tampilan &amp; URL), Teks WhatsApp, dan Teks Copyright di footer, serta{' '}
+          <Ui>Teks Berjalan (Marquee)</Ui> di bar bawah halaman utama &mdash; satu baris per teks, bebas diisi nama
+          kategori, info diskon, atau pengumuman lain.
+        </p>
+        <Note label="Jam Operasional di Footer Otomatis Mengikuti Tabel di Atas">
+          Baris jam buka di footer publik dihitung otomatis dari tabel <Ui>Jam Operasional Toko</Ui> &mdash; tidak perlu
+          diisi terpisah, dan tidak akan pernah tidak sinkron dengan jadwal yang dipakai kalkulator denda.
+        </Note>
       </Section>
 
       <Section id="g-1-11" num="1.11" title="Manajemen User" owner kicker="Mengelola akun staf beserta hak aksesnya.">

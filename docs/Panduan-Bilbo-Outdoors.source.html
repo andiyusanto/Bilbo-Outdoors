@@ -459,13 +459,14 @@
   <h2 class="section-title">1.6 Manajemen Stok</h2>
   <p class="kicker">Mengelola katalog alat camping: menambah, mengedit, menghapus, mengatur harga, dan mengunggah foto produk.</p>
 
-  <p>Halaman berjudul <strong>KELOLA ALAT CAMPING</strong>, dilengkapi kotak pencarian, tombol <span class="ui">Tambah Alat Camping</span>, dan tab filter kategori. Setiap kartu alat menampilkan foto (klik untuk memperbesar), kategori, tombol Edit dan Hapus, nama, deskripsi, tabel harga per hari, waktu kesiapan alat setelah dikembalikan (jika diatur), dan pengatur stok dengan tombol <span class="ui">-</span>/<span class="ui">+</span> yang langsung menyimpan perubahan &mdash; tidak perlu membuka form edit hanya untuk menambah/mengurangi stok.</p>
+  <p>Halaman berjudul <strong>KELOLA BARANG SEWA</strong>, dilengkapi kotak pencarian, tombol <span class="ui">Tambah Barang Sewa</span>, dan tab filter kategori. Setiap kartu alat menampilkan foto (klik untuk memperbesar), kategori, tombol Edit dan Hapus, nama, deskripsi (termasuk Varian/Ukuran/Warna jika diisi), tabel harga per hari, waktu kesiapan alat setelah dikembalikan (jika diatur), dan pengatur stok dengan tombol <span class="ui">-</span>/<span class="ui">+</span> yang langsung menyimpan perubahan &mdash; tidak perlu membuka form edit hanya untuk menambah/mengurangi stok.</p>
 
-  <h3 class="sub">Menambah atau mengedit alat</h3>
+  <h3 class="sub">Menambah atau mengedit barang sewa</h3>
   <table class="fields">
     <tr><th>Kolom</th><th>Keterangan</th></tr>
     <tr><td>Nama Alat</td><td>Nama produk yang tampil di katalog.</td></tr>
     <tr><td>Kategori</td><td>Pilih dari daftar yang ada, atau gunakan <span class="ui">Tambah Kategori Baru</span> untuk mengetik kategori baru (langsung tersedia di seluruh sistem setelah disimpan).</td></tr>
+    <tr><td>Varian / Ukuran / Warna</td><td>Atribut opsional tambahan, diisi dengan cara yang sama seperti Kategori (pilih dari daftar atau ketik nilai baru, boleh dibiarkan &ldquo;(Tidak Ada)&rdquo;). Jika diisi, otomatis tampil di halaman katalog publik di bawah deskripsi produk.</td></tr>
     <tr><td>Tabel Harga Sewa (Rp)</td><td>6 kolom: Harian, 2 Hari, 3 Hari, 4 Hari, 5 Hari, dan 5 Hari+ (per hari) &mdash; tarif bisa dibuat menurun untuk sewa jangka panjang.</td></tr>
     <tr><td>Waktu Kesiapan Setelah Kembali</td><td>Jumlah jam alat perlu &ldquo;istirahat&rdquo; (dibersihkan dsb.) sebelum bisa disewakan lagi.</td></tr>
     <tr><td>Stok Awal</td><td>Jumlah unit yang dimiliki.</td></tr>
@@ -473,7 +474,7 @@
     <tr><td>Deskripsi</td><td>Keterangan singkat produk.</td></tr>
   </table>
 
-  <p>Tekan <span class="ui">Simpan Alat Camping</span> untuk menyimpan. Menghapus alat akan menampilkan konfirmasi terlebih dahulu.</p>
+  <p>Tekan <span class="ui">Simpan Barang Sewa</span> untuk menyimpan. Menghapus barang sewa akan menampilkan konfirmasi terlebih dahulu.</p>
 
   <div class="note">
     <span class="note-label">Fitur Upload Foto Produk</span>
@@ -497,7 +498,12 @@
     <li>Tekan <span class="ui">Simpan Pekerjaan</span>.</li>
   </ol>
 
-  <p>Tabel menampilkan Nama karyawan, Tanggal, Item, Jenis, Qty, Total, dan Status (Pending / Dibayar). Entri yang masih Pending dapat diklik <span class="ui">Edit</span> untuk diperbaiki; entri yang sudah Dibayar tidak dapat diubah lagi.</p>
+  <p>Tabel menampilkan Nama karyawan, Tanggal, Item, Jenis, Qty, Total, dan Status (Pending / Dibayar / Ditolak). Entri yang masih Pending atau Ditolak dapat diklik <span class="ui">Edit</span> untuk diperbaiki; entri yang sudah Dibayar tidak dapat diubah lagi.</p>
+
+  <div class="note">
+    <span class="note-label">Status Ditolak</span>
+    Jika Owner menolak sebuah entri (lihat 1.8), statusnya berubah menjadi <strong>Ditolak</strong> dan alasan penolakan ditampilkan langsung di bawah nama item. Perbaiki data yang salah lalu tekan <span class="ui">Simpan Pekerjaan</span> &mdash; entri otomatis kembali berstatus Pending dan masuk lagi ke antrean Approval.
+  </div>
 </section>
 
 <section class="chapter">
@@ -515,6 +521,10 @@
   </ol>
 
   <p>Di bawah tabel Pending terdapat tabel <strong>Riwayat Dibayar</strong> yang mencatat seluruh pekerjaan yang sudah dibayar beserta tanggal pembayarannya. Kedua tabel memiliki baris Total tersendiri.</p>
+
+  <h3 class="sub">Menolak entri yang salah input</h3>
+  <p>Setiap baris Pending juga memiliki tombol <span class="ui">Tolak</span> &mdash; dipakai saat karyawan salah mencatat data (item, qty, atau jenis pekerjaan yang keliru). Menekan Tolak membuka jendela kecil yang meminta <span class="ui">Alasan Penolakan</span> (wajib diisi), lalu tekan <span class="ui">Tolak Pekerjaan</span>.</p>
+  <p>Entri yang ditolak pindah ke tabel <strong>Riwayat Ditolak</strong> beserta alasannya, dan otomatis muncul kembali di menu Operational milik karyawan yang bersangkutan berstatus Ditolak agar bisa diperbaiki dan dicatat ulang (lihat 1.7).</p>
 </section>
 
 <section class="chapter">
@@ -541,6 +551,14 @@
 
   <h3 class="sub">Jam Operasional Toko</h3>
   <p>Tabel 7 baris (Senin&ndash;Minggu) berisi jam <span class="ui">open</span>/<span class="ui">close</span> untuk tiap hari. Setelah mengubah, tekan <span class="ui">Simpan Pengaturan</span>.</p>
+
+  <h3 class="sub">Footer &amp; Teks Berjalan</h3>
+  <p>Kartu <span class="ui">Footer &amp; Teks Berjalan</span> mengatur teks yang tampil di halaman publik: Deskripsi, Alamat, Instagram (teks tampilan &amp; URL), Teks WhatsApp, dan Teks Copyright di footer, serta <span class="ui">Teks Berjalan (Marquee)</span> di bar bawah halaman utama &mdash; satu baris per teks, bebas diisi nama kategori, info diskon, atau pengumuman lain.</p>
+
+  <div class="note">
+    <span class="note-label">Jam Operasional di Footer Otomatis Mengikuti Tabel di Atas</span>
+    Baris jam buka di footer publik dihitung otomatis dari tabel Jam Operasional Toko &mdash; tidak perlu diisi terpisah, dan tidak akan pernah tidak sinkron dengan jadwal yang dipakai kalkulator denda.
+  </div>
 </section>
 
 <section class="chapter">
@@ -687,7 +705,7 @@
     <li><strong>Foto diri pelanggan</strong> mendukung format JPG, PNG, WebP, dan HEIC (format bawaan foto iPhone) &mdash; semuanya diproses otomatis oleh sistem, staf tidak perlu mengonversi file secara manual.</li>
     <li><strong>Kode QRIS bersifat ilustratif</strong>, bukan gateway pembayaran aktif. Semua pembayaran wajib diverifikasi manual oleh staf melalui bukti yang dikirim ke WhatsApp sebelum pesanan disetujui.</li>
     <li><strong>Karyawan vs Owner</strong>: jika sebuah menu terasa hilang/tidak muncul, periksa dahulu apakah akun yang digunakan memang berperan sebagai Karyawan (lihat 1.2) &mdash; ini bukan kesalahan sistem.</li>
-    <li>Kontak resmi Bilbo Outdoors: Instagram <span class="ui">@bilbooutdoors</span>, WhatsApp <span class="ui">0811-370-6666</span>, alamat Jl. Ngagel Jaya Tengah No. 12, Surabaya, jam buka 08:00&ndash;22:00 WIB.</li>
+    <li>Kontak resmi, alamat, dan jam operasional Bilbo Outdoors ditampilkan di footer halaman utama, dan dapat diubah kapan saja dari menu Pengaturan Toko &rarr; Footer &amp; Teks Berjalan (lihat 1.10) &mdash; jadi tidak dicantumkan sebagai angka tetap di sini agar panduan ini tidak pernah tidak sinkron dengan data yang sebenarnya.</li>
   </ul>
 </section>
 

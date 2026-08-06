@@ -122,19 +122,28 @@ export default function OperationalTab({ jobEntries, jobPriceList, jobEntryActio
                 <tr key={entry.id} className="text-xs font-bold">
                   <td className="px-4 py-3 text-black uppercase">{entry.employeeName}</td>
                   <td className="px-4 py-3 font-mono text-zinc-600">{formatDateLabel(entry.entryDate)}</td>
-                  <td className="px-4 py-3 uppercase">{entry.itemName}</td>
+                  <td className="px-4 py-3 uppercase">
+                    {entry.itemName}
+                    {entry.status === 'Rejected' && entry.rejectionReason && (
+                      <p className="text-[9px] text-red-700 font-bold normal-case mt-0.5">{entry.rejectionReason}</p>
+                    )}
+                  </td>
                   <td className="px-4 py-3 uppercase">{JOB_TYPE_LABELS[entry.jobType]}</td>
                   <td className="px-4 py-3 font-mono">{entry.quantity}</td>
                   <td className="px-4 py-3 font-mono">Rp {entry.total.toLocaleString('id-ID')}</td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-0.5 border font-black uppercase text-[10px] ${
-                      entry.status === 'Paid' ? 'bg-emerald-100 border-emerald-800 text-emerald-800' : 'bg-amber-100 border-amber-800 text-amber-800'
+                      entry.status === 'Paid'
+                        ? 'bg-emerald-100 border-emerald-800 text-emerald-800'
+                        : entry.status === 'Rejected'
+                        ? 'bg-red-100 border-red-800 text-red-800'
+                        : 'bg-amber-100 border-amber-800 text-amber-800'
                     }`}>
-                      {entry.status === 'Paid' ? 'Dibayar' : 'Pending'}
+                      {entry.status === 'Paid' ? 'Dibayar' : entry.status === 'Rejected' ? 'Ditolak' : 'Pending'}
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    {entry.status === 'Pending' && (
+                    {(entry.status === 'Pending' || entry.status === 'Rejected') && (
                       <button
                         onClick={() => openEditEntryModal(entry)}
                         className="text-[10px] font-black uppercase text-black underline cursor-pointer"

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { JobEntry } from '../types';
 import { jsonAuthHeaders, parseJsonOrThrow } from '../lib/api';
 import { useLoading } from '../contexts/LoadingContext';
 import { useNotification } from '../contexts/NotificationContext';
@@ -32,6 +33,19 @@ export function useApprovalActions({ token, fetchAdminData }: UseApprovalActions
   const { withLoading } = useLoading();
   const { notifySuccess, notifyError } = useNotification();
 
+  const [rejectingEntry, setRejectingEntry] = useState<JobEntry | null>(null);
+  const [rejectReason, setRejectReason] = useState<string>('');
+
+  const openRejectModal = (entry: JobEntry) => {
+    setRejectingEntry(entry);
+    setRejectReason('');
+  };
+
+  const closeRejectModal = () => {
+    setRejectingEntry(null);
+    setRejectReason('');
+  };
+
   const handleApproveBatch = async () => {
     if (selectedIds.length === 0) return;
     await withLoading(async () => {
@@ -51,6 +65,25 @@ export function useApprovalActions({ token, fetchAdminData }: UseApprovalActions
     });
   };
 
+  const handleReject = async () => {
+    if (!rejectingEntry || !rejectReason.trim()) return;
+    await withLoading(async () => {
+      try {
+        const res = await fetch(`/api/job-entries/${rejectingEntry.id}/reject`, {
+          method: 'PUT',
+          headers: jsonAuthHeaders(token),
+          body: JSON.stringify({ reason: rejectReason.trim() })
+        });
+        await parseJsonOrThrow(res);
+        notifySuccess('Pekerjaan ditolak.');
+        closeRejectModal();
+        fetchAdminData();
+      } catch (err: any) {
+        notifyError(`Gagal menolak pekerjaan: ${err.message}`);
+      }
+    });
+  };
+
   return {
     selectedIds,
     toggleSelected,
@@ -59,5 +92,11 @@ export function useApprovalActions({ token, fetchAdminData }: UseApprovalActions
     paymentDateInput,
     setPaymentDateInput,
     handleApproveBatch,
+    rejectingEntry,
+    rejectReason,
+    setRejectReason,
+    openRejectModal,
+    closeRejectModal,
+    handleReject,
   };
 }

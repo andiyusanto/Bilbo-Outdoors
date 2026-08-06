@@ -1120,7 +1120,37 @@ app.put('/api/job-entries/approve-batch', authenticateUser, requireOwner, asyncH
   });
 }));
 
-// Edit own Pending job entry (input mistakes only - once Paid, immutable)
+// Owner rejects a Pending entry with a reason (miss-input catch) - registered
+// before the generic /:id route below, same reasoning as approve-batch.
+app.put('/api/job-entries/:id/reject', authenticateUser, requireOwner, asyncHandler(async (req, res) => {
+  await withDbLock(async () => {
+    const { id } = req.params;
+    const { reason } = req.body;
+    if (!reason || typeof reason !== 'string' || !reason.trim()) {
+      return res.status(400).json({ error: 'Alasan penolakan wajib diisi.' });
+    }
+    const db = await readDB();
+    const idx = db.jobEntries.findIndex((e: JobEntry) => e.id === id);
+    if (idx === -1) {
+      return res.status(404).json({ error: 'Job entry not found.' });
+    }
+    if (db.jobEntries[idx].status !== 'Pending') {
+      return res.status(403).json({ error: 'Hanya pekerjaan Pending yang bisa ditolak.' });
+    }
+    db.jobEntries[idx] = {
+      ...db.jobEntries[idx],
+      status: 'Rejected',
+      rejectionReason: reason.trim(),
+      rejectedAt: new Date().toISOString(),
+    };
+    await writeDB(db);
+    res.json(db.jobEntries[idx]);
+  });
+}));
+
+// Edit own Pending/Rejected job entry (input mistakes only - once Paid, immutable).
+// Editing a Rejected entry re-queues it as Pending and clears the rejection, same
+// as if it were never rejected - this is how a karyawan fixes and resubmits.
 app.put('/api/job-entries/:id', authenticateUser, asyncHandler(async (req, res) => {
   await withDbLock(async () => {
     const { id } = req.params;
@@ -1134,7 +1164,7 @@ app.put('/api/job-entries/:id', authenticateUser, asyncHandler(async (req, res) 
     if (entry.employeeUserId !== req.currentUser!.id) {
       return res.status(403).json({ error: 'Anda hanya bisa mengubah pekerjaan milik sendiri.' });
     }
-    if (entry.status !== 'Pending') {
+    if (entry.status !== 'Pending' && entry.status !== 'Rejected') {
       return res.status(403).json({ error: 'Pekerjaan yang sudah dibayar tidak bisa diubah.' });
     }
 
@@ -1155,6 +1185,9 @@ app.put('/api/job-entries/:id', authenticateUser, asyncHandler(async (req, res) 
       unitPrice,
       quantity: qty,
       total: unitPrice * qty,
+      status: 'Pending',
+      rejectionReason: undefined,
+      rejectedAt: undefined,
     };
     await writeDB(db);
     res.json(db.jobEntries[idx]);

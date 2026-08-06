@@ -230,6 +230,8 @@ function rowToJobEntry(row: any): JobEntry {
     total: Number(row.total),
     status: row.status,
     paymentDate: row.payment_date ?? undefined,
+    rejectionReason: row.rejection_reason ?? undefined,
+    rejectedAt: row.rejected_at ?? undefined,
     createdAt: row.created_at,
   };
 }
@@ -366,11 +368,11 @@ export async function writeDBPostgres(data: { products: Product[]; orders: Order
     if (data.jobEntries.length > 0) {
       const params: any[] = [];
       data.jobEntries.forEach((e) => {
-        params.push(e.id, e.employeeUserId, e.employeeName, e.entryDate, e.itemName, e.jobType, Number(e.unitPrice), Number(e.quantity), Number(e.total), e.status, e.paymentDate ?? null, e.createdAt);
+        params.push(e.id, e.employeeUserId, e.employeeName, e.entryDate, e.itemName, e.jobType, Number(e.unitPrice), Number(e.quantity), Number(e.total), e.status, e.paymentDate ?? null, e.rejectionReason ?? null, e.rejectedAt ?? null, e.createdAt);
       });
       await client.query(
-        `INSERT INTO job_entries (id, employee_user_id, employee_name, entry_date, item_name, job_type, unit_price, quantity, total, status, payment_date, created_at)
-         VALUES ${buildValuesClause(data.jobEntries.length, 12)}
+        `INSERT INTO job_entries (id, employee_user_id, employee_name, entry_date, item_name, job_type, unit_price, quantity, total, status, payment_date, rejection_reason, rejected_at, created_at)
+         VALUES ${buildValuesClause(data.jobEntries.length, 14)}
          ON CONFLICT (id) DO UPDATE SET
            employee_user_id = EXCLUDED.employee_user_id,
            employee_name = EXCLUDED.employee_name,
@@ -382,6 +384,8 @@ export async function writeDBPostgres(data: { products: Product[]; orders: Order
            total = EXCLUDED.total,
            status = EXCLUDED.status,
            payment_date = EXCLUDED.payment_date,
+           rejection_reason = EXCLUDED.rejection_reason,
+           rejected_at = EXCLUDED.rejected_at,
            created_at = EXCLUDED.created_at`,
         params
       );

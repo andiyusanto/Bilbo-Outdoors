@@ -215,8 +215,8 @@ async function runMigration() {
         const existing = await client.query('SELECT id FROM job_entries WHERE id = $1', [entry.id]);
         if (existing.rows.length === 0) {
           await client.query(
-            `INSERT INTO job_entries (id, employee_user_id, employee_name, entry_date, item_name, job_type, unit_price, quantity, total, status, payment_date, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+            `INSERT INTO job_entries (id, employee_user_id, employee_name, entry_date, item_name, job_type, unit_price, quantity, total, status, payment_date, rejection_reason, rejected_at, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
             [
               entry.id,
               entry.employeeUserId,
@@ -229,6 +229,8 @@ async function runMigration() {
               Number(entry.total),
               entry.status,
               entry.paymentDate ?? null,
+              entry.rejectionReason ?? null,
+              entry.rejectedAt ?? null,
               entry.createdAt
             ]
           );

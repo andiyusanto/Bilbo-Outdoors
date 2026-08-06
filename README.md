@@ -206,6 +206,8 @@ CREATE TABLE IF NOT EXISTS job_entries (
   total INTEGER NOT NULL,
   status VARCHAR(50) NOT NULL,
   payment_date VARCHAR(255),
+  rejection_reason VARCHAR(255),
+  rejected_at VARCHAR(255),
   created_at VARCHAR(255) NOT NULL
 );
 ```
@@ -303,6 +305,8 @@ CREATE TABLE IF NOT EXISTS job_entries (
 >   total INTEGER NOT NULL,
 >   status VARCHAR(50) NOT NULL,
 >   payment_date VARCHAR(255),
+>   rejection_reason VARCHAR(255),
+>   rejected_at VARCHAR(255),
 >   created_at VARCHAR(255) NOT NULL
 > );
 > ```
@@ -318,6 +322,12 @@ CREATE TABLE IF NOT EXISTS job_entries (
 > ALTER TABLE products ADD COLUMN IF NOT EXISTS varian VARCHAR(255);
 > ALTER TABLE products ADD COLUMN IF NOT EXISTS size VARCHAR(255);
 > ALTER TABLE products ADD COLUMN IF NOT EXISTS color VARCHAR(255);
+> ```
+
+> **Sudah pernah menjalankan Step A sebelum kolom `rejection_reason`/`rejected_at` di `job_entries` ada?** Jalankan ini sekali di SQL Editor yang sama (aman dijalankan berulang) - keduanya nullable tanpa default, baris pekerjaan yang sudah ada tetap `NULL` selamanya (tidak ada regresi). Dipakai tombol "Tolak" di menu Approval - status `Rejected` beserta alasannya, agar karyawan tahu apa yang perlu diperbaiki sebelum mencatat ulang.
+> ```sql
+> ALTER TABLE job_entries ADD COLUMN IF NOT EXISTS rejection_reason VARCHAR(255);
+> ALTER TABLE job_entries ADD COLUMN IF NOT EXISTS rejected_at VARCHAR(255);
 > ```
 
 ### Step B: Dapatkan Connection String Supabase Anda

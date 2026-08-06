@@ -128,8 +128,10 @@ export interface JobEntry {
   unitPrice: number; // snapshot of the matching price at entry time
   quantity: number;
   total: number; // unitPrice * quantity
-  status: 'Pending' | 'Paid';
+  status: 'Pending' | 'Paid' | 'Rejected';
   paymentDate?: string; // owner-entered, set on the Paid transition
+  rejectionReason?: string; // owner-entered, set on the Rejected transition
+  rejectedAt?: string; // ISO datetime, set on the Rejected transition
   createdAt: string;
 }
 

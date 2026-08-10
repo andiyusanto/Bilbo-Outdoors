@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Clock, DollarSign, Calendar } from 'lucide-react';
+import { Clock, DollarSign, Calendar, ChevronDown } from 'lucide-react';
 import { Order, Product, DashboardStats } from '../../types';
 import { getDefaultDateRange } from '../../lib/date';
 import DateInput from '../DateInput';
@@ -13,6 +13,7 @@ interface OverviewTabProps {
 export default function OverviewTab({ orders, products }: OverviewTabProps) {
   const [overviewDateFrom, setOverviewDateFrom] = useState<string>(() => getDefaultDateRange().from);
   const [overviewDateTo, setOverviewDateTo] = useState<string>(() => getDefaultDateRange().to);
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
 
   // Every KPI/chart below is derived from this, not the raw `orders` prop, so
   // the Dari/Sampai range (by order.createdAt, i.e. Tanggal Pemesanan - same
@@ -34,17 +35,27 @@ export default function OverviewTab({ orders, products }: OverviewTabProps) {
   const totalRevenue = finishedOrPaidOrders.reduce((sum, o) => sum + o.totalPrice + (o.lateFee || 0), 0);
   const dueTodayCount = dateFilteredOrders.filter(o => (o.status === 'Item Picked Up' || o.status === 'Approved/Paid') && (o.endDate <= todayStr)).length;
 
-  // Calculate some analytics values for visual dashboard charts
+  // Calculate some analytics values for visual dashboard charts - also tracks
+  // a per-product breakdown within each category, so clicking a category row
+  // can reveal exactly which items made up that count.
   const categoryOrderStats = () => {
-    const counts: Record<string, number> = {};
+    const counts: Record<string, { total: number; items: Record<string, number> }> = {};
     dateFilteredOrders.forEach(o => {
       o.items.forEach(it => {
         const prod = products.find(p => p.id === it.productId);
         const cat = prod?.category || 'CAMP SUPPORT';
-        counts[cat] = (counts[cat] || 0) + it.quantity;
+        if (!counts[cat]) counts[cat] = { total: 0, items: {} };
+        counts[cat].total += it.quantity;
+        counts[cat].items[it.productName] = (counts[cat].items[it.productName] || 0) + it.quantity;
       });
     });
-    return Object.entries(counts).map(([name, value]) => ({ name, value }));
+    return Object.entries(counts).map(([name, { total, items }]) => ({
+      name,
+      value: total,
+      items: Object.entries(items)
+        .map(([productName, quantity]) => ({ productName, quantity }))
+        .sort((a, b) => b.quantity - a.quantity),
+    }));
   };
 
   const orderStatsByStatus = {
@@ -194,16 +205,36 @@ export default function OverviewTab({ orders, products }: OverviewTabProps) {
               <p className="text-xs text-zinc-500 font-bold uppercase tracking-wider">Belum ada data barang disewa.</p>
             </div>
           ) : (
-            <div className="space-y-3.5">
-              {categoryOrderStats().sort((a,b) => b.value - a.value).slice(0, 4).map((cat, i) => (
-                <div key={i} className="flex items-center justify-between uppercase font-bold text-xs text-zinc-800">
-                  <div className="flex items-center">
-                    <span className="text-xs font-mono font-black text-zinc-500 mr-2.5">0{i+1}</span>
-                    <span>{cat.name}</span>
+            <div className="space-y-1">
+              {categoryOrderStats().sort((a,b) => b.value - a.value).slice(0, 4).map((cat, i) => {
+                const isExpanded = expandedCategory === cat.name;
+                return (
+                  <div key={i}>
+                    <button
+                      type="button"
+                      onClick={() => setExpandedCategory(isExpanded ? null : cat.name)}
+                      className="w-full flex items-center justify-between uppercase font-bold text-xs text-zinc-800 py-1.5 cursor-pointer hover:text-black"
+                    >
+                      <div className="flex items-center">
+                        <span className="text-xs font-mono font-black text-zinc-500 mr-2.5">0{i+1}</span>
+                        <span>{cat.name}</span>
+                        <ChevronDown className={`w-3.5 h-3.5 ml-1.5 text-zinc-400 stroke-[2.5] transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                      </div>
+                      <span className="text-xs font-black text-black bg-brand/20 border border-black px-2.5 py-0.5 rounded-none font-mono">{cat.value} Unit</span>
+                    </button>
+                    {isExpanded && (
+                      <div className="ml-7 mb-2 space-y-1.5 border-l-2 border-zinc-200 pl-3">
+                        {cat.items.map((item, j) => (
+                          <div key={j} className="flex items-center justify-between normal-case text-[10px] text-zinc-600 font-semibold">
+                            <span>{item.productName}</span>
+                            <span className="font-mono font-black text-zinc-800">{item.quantity} Unit</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <span className="text-xs font-black text-black bg-brand/20 border border-black px-2.5 py-0.5 rounded-none font-mono">{cat.value} Unit</span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

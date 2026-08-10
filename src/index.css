@@ -57,3 +57,22 @@
   display: flex;
   animation: marquee 25s linear infinite;
 }
+
+/* Print only #print-resi (Cetak Resi in OrderDetailPanel), nothing else on the
+   page - visibility (unlike display) is inherited but a descendant can still
+   re-declare visible even while its ancestors are hidden. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #print-resi,
+  #print-resi * {
+    visibility: visible;
+  }
+  #print-resi {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+  }
+}

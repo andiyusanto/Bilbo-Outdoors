@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Search, ChevronRight, FileSpreadsheet } from 'lucide-react';
-import { Order, Product } from '../../types';
+import { Order, Product, StoreSettings } from '../../types';
 import { useOrderActions } from '../../hooks/useOrderActions';
 import { formatDateLabel, getDefaultDateRange } from '../../lib/date';
 import OrderDetailPanel from './OrderDetailPanel';
@@ -36,10 +36,11 @@ function ordersToCsv(orders: Order[]): string {
 interface OrdersTabProps {
   orders: Order[];
   products: Product[];
+  settings: StoreSettings;
   orderActions: ReturnType<typeof useOrderActions>;
 }
 
-export default function OrdersTab({ orders, products, orderActions }: OrdersTabProps) {
+export default function OrdersTab({ orders, products, settings, orderActions }: OrdersTabProps) {
   const [orderSearch, setOrderSearch] = useState<string>('');
   const [orderStatusFilter, setOrderStatusFilter] = useState<string>('All');
   const [orderDateFrom, setOrderDateFrom] = useState<string>(() => getDefaultDateRange().from);
@@ -232,6 +233,7 @@ export default function OrdersTab({ orders, products, orderActions }: OrdersTabP
         <OrderDetailPanel
           order={selectedOrder}
           products={products}
+          settings={settings}
           onClose={closeOrderDetail}
           onUpdateStatus={handleUpdateOrderStatus}
           showLateCalc={showLateCalc}

@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Phone, UserCheck, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
-import { Order, OrderStatus, Product } from '../../types';
+import { Phone, UserCheck, AlertTriangle, CheckCircle, Clock, Printer } from 'lucide-react';
+import { Order, OrderStatus, Product, StoreSettings } from '../../types';
 import { formatDateLabel, formatDateTimeLabel } from '../../lib/date';
 import { calculateRentalCost } from '../../pricing';
 import DateInput from '../DateInput';
+import OrderResiPrint from './OrderResiPrint';
 
 const PICKUP_ID_TYPE_OPTIONS = ['KTP', 'SIM', 'KTA', 'KIP', 'Kartu Pelajar', 'Lainnya'];
 
@@ -17,6 +18,7 @@ interface LateCalculationResult {
 interface OrderDetailPanelProps {
   order: Order;
   products: Product[];
+  settings: StoreSettings;
   onClose: () => void;
   onUpdateStatus: (orderId: string, newStatus: OrderStatus, pickupIdType?: string) => void;
   showLateCalc: boolean;
@@ -31,6 +33,7 @@ interface OrderDetailPanelProps {
 export default function OrderDetailPanel({
   order,
   products,
+  settings,
   onClose,
   onUpdateStatus,
   showLateCalc,
@@ -65,12 +68,21 @@ export default function OrderDetailPanel({
             <span className="text-[9px] bg-brand text-black font-mono px-2 py-0.5 border border-black font-black uppercase tracking-wider">DETAIL PESANAN</span>
             <h3 className="font-display font-black text-lg mt-1 uppercase tracking-tight">{order.customerName}</h3>
           </div>
-          <button
-            onClick={onClose}
-            className="text-black hover:text-white bg-brand hover:bg-black text-xs font-black font-mono border-2 border-black px-4 py-2 transition-all cursor-pointer rounded-none"
-          >
-            TUTUP
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => window.print()}
+              className="flex items-center text-white hover:text-black bg-transparent hover:bg-brand text-xs font-black font-mono border-2 border-white px-4 py-2 transition-all cursor-pointer rounded-none"
+            >
+              <Printer className="w-3.5 h-3.5 mr-1.5" />
+              CETAK RESI
+            </button>
+            <button
+              onClick={onClose}
+              className="text-black hover:text-white bg-brand hover:bg-black text-xs font-black font-mono border-2 border-black px-4 py-2 transition-all cursor-pointer rounded-none"
+            >
+              TUTUP
+            </button>
+          </div>
         </div>
 
         {/* Detail Body */}
@@ -386,6 +398,8 @@ export default function OrderDetailPanel({
 
         </div>
       </div>
+
+      <OrderResiPrint order={order} products={products} storeFooter={settings.footer} />
     </div>
   );
 }

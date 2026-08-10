@@ -6,7 +6,7 @@ import { formatDateLabel, getDefaultDateRange } from '../../lib/date';
 import OrderDetailPanel from './OrderDetailPanel';
 import DateInput from '../DateInput';
 
-const CSV_COLUMNS = ['Nama Penyewa', 'WhatsApp', 'Tanggal Mulai', 'Tanggal Selesai', 'Durasi (Hari)', 'Total Biaya (Rp)', 'Denda (Rp)', 'Hari Terlambat', 'Status'] as const;
+const CSV_COLUMNS = ['Nama Penyewa', 'WhatsApp', 'Tanggal Pemesanan', 'Tanggal Mulai', 'Tanggal Selesai', 'Durasi (Hari)', 'Total Biaya (Rp)', 'Denda (Rp)', 'Hari Terlambat', 'Status'] as const;
 
 // Excel/CSV requires quoting any field containing a comma, quote, or newline -
 // and doubling internal quotes - or the file silently misparses into the wrong
@@ -20,6 +20,7 @@ function ordersToCsv(orders: Order[]): string {
   const rows = orders.map(o => [
     o.customerName,
     o.customerWhatsApp,
+    formatDateLabel(o.createdAt.split('T')[0]),
     formatDateLabel(o.startDate),
     formatDateLabel(o.endDate),
     o.rentDuration,
@@ -66,12 +67,16 @@ export default function OrdersTab({ orders, products, settings, orderActions }: 
       o.customerName.toLowerCase().includes(orderSearch.toLowerCase()) ||
       o.customerWhatsApp.includes(orderSearch);
     const matchesStatus = orderStatusFilter === 'All' || o.status === orderStatusFilter;
-    // Range-overlap, not "did this order start inside the filter window" - an
-    // order that started last month but is still ongoing today must still show
-    // up under the default "1st of this month -> today" filter, since its date
-    // range overlaps that window even though its own startDate doesn't.
-    const matchesDateFrom = !orderDateFrom || o.endDate >= orderDateFrom;
-    const matchesDateTo = !orderDateTo || o.startDate <= orderDateTo;
+    // Filters by when the order was placed (createdAt), not the rental period -
+    // matches the "Tanggal Pemesanan" column below and the same field
+    // expireStaleOrders (server.ts) uses to decide Pending -> Expired, so "orders
+    // from this month" means the same thing everywhere in the app. createdAt is
+    // a full UTC ISO datetime; take its date portion via plain string split
+    // (same convention as getTodayDateString/getDefaultDateRange in lib/date.ts),
+    // not `new Date(...)`, to avoid a local-timezone off-by-one at the day boundary.
+    const orderDate = o.createdAt.split('T')[0];
+    const matchesDateFrom = !orderDateFrom || orderDate >= orderDateFrom;
+    const matchesDateTo = !orderDateTo || orderDate <= orderDateTo;
     return matchesSearch && matchesStatus && matchesDateFrom && matchesDateTo;
   });
 
@@ -159,6 +164,7 @@ export default function OrdersTab({ orders, products, settings, orderActions }: 
             <thead>
               <tr className="bg-zinc-50 border-b-2 border-black">
                 <th className="px-5 py-3.5 text-[10px] font-black text-black uppercase tracking-wider">Penyewa / WhatsApp</th>
+                <th className="px-5 py-3.5 text-[10px] font-black text-black uppercase tracking-wider">Tanggal Pemesanan</th>
                 <th className="px-5 py-3.5 text-[10px] font-black text-black uppercase tracking-wider">Tanggal Sewa</th>
                 <th className="px-5 py-3.5 text-[10px] font-black text-black uppercase tracking-wider">Durasi</th>
                 <th className="px-5 py-3.5 text-[10px] font-black text-black uppercase tracking-wider">Total Biaya</th>
@@ -169,7 +175,7 @@ export default function OrdersTab({ orders, products, settings, orderActions }: 
             <tbody className="divide-y-2 divide-black">
               {filteredOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-5 py-12 text-center text-xs text-zinc-500 font-bold uppercase tracking-wider">
+                  <td colSpan={7} className="px-5 py-12 text-center text-xs text-zinc-500 font-bold uppercase tracking-wider">
                     Belum ada pesanan penyewaan camping yang cocok.
                   </td>
                 </tr>
@@ -179,6 +185,9 @@ export default function OrdersTab({ orders, products, settings, orderActions }: 
                     <td className="px-5 py-4">
                       <p className="font-black text-black text-xs uppercase">{order.customerName}</p>
                       <p className="text-[10px] text-zinc-500 font-mono font-bold mt-0.5">{order.customerWhatsApp}</p>
+                    </td>
+                    <td className="px-5 py-4 text-xs text-zinc-800 font-bold uppercase font-mono">
+                      {formatDateLabel(order.createdAt.split('T')[0])}
                     </td>
                     <td className="px-5 py-4">
                       <div className="text-xs text-zinc-800 font-bold uppercase">

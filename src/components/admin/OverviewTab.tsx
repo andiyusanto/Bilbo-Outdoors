@@ -15,11 +15,15 @@ export default function OverviewTab({ orders, products }: OverviewTabProps) {
   const [overviewDateTo, setOverviewDateTo] = useState<string>(() => getDefaultDateRange().to);
 
   // Every KPI/chart below is derived from this, not the raw `orders` prop, so
-  // the Dari/Sampai range (by order.startDate) governs everything on this tab.
-  const dateFilteredOrders = orders.filter(o =>
-    (!overviewDateFrom || o.startDate >= overviewDateFrom) &&
-    (!overviewDateTo || o.startDate <= overviewDateTo)
-  );
+  // the Dari/Sampai range (by order.createdAt, i.e. Tanggal Pemesanan - same
+  // field Manajemen Order filters by and expireStaleOrders in server.ts uses)
+  // governs everything on this tab. Date-portion via plain string split, not
+  // `new Date(...)`, matching lib/date.ts's getTodayDateString convention.
+  const dateFilteredOrders = orders.filter(o => {
+    const orderDate = o.createdAt.split('T')[0];
+    return (!overviewDateFrom || orderDate >= overviewDateFrom) &&
+      (!overviewDateTo || orderDate <= overviewDateTo);
+  });
 
   // Mirrors GET /api/stats' formulas (server.ts) exactly, but computed
   // client-side from dateFilteredOrders so it can respect the date range -
@@ -59,6 +63,7 @@ export default function OverviewTab({ orders, products }: OverviewTabProps) {
           <p className="text-xs text-zinc-600 font-semibold uppercase tracking-wider mt-1">Ringkasan transaksi dan inventaris Bilbo Outdoors saat ini.</p>
         </div>
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 mt-2 sm:mt-0">
+          <span className="text-[10px] font-black text-zinc-500 uppercase tracking-wider shrink-0">Filter Tanggal Pemesanan:</span>
           <div className="flex items-center gap-2">
             <label className="text-[10px] font-black text-zinc-600 uppercase tracking-wider shrink-0">Dari</label>
             <DateInput

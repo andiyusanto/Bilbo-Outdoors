@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Search, ChevronRight, FileSpreadsheet } from 'lucide-react';
-import { Order } from '../../types';
+import { Order, Product } from '../../types';
 import { useOrderActions } from '../../hooks/useOrderActions';
 import { formatDateLabel, getDefaultDateRange } from '../../lib/date';
 import OrderDetailPanel from './OrderDetailPanel';
@@ -35,10 +35,11 @@ function ordersToCsv(orders: Order[]): string {
 
 interface OrdersTabProps {
   orders: Order[];
+  products: Product[];
   orderActions: ReturnType<typeof useOrderActions>;
 }
 
-export default function OrdersTab({ orders, orderActions }: OrdersTabProps) {
+export default function OrdersTab({ orders, products, orderActions }: OrdersTabProps) {
   const [orderSearch, setOrderSearch] = useState<string>('');
   const [orderStatusFilter, setOrderStatusFilter] = useState<string>('All');
   const [orderDateFrom, setOrderDateFrom] = useState<string>(() => getDefaultDateRange().from);
@@ -64,7 +65,11 @@ export default function OrdersTab({ orders, orderActions }: OrdersTabProps) {
       o.customerName.toLowerCase().includes(orderSearch.toLowerCase()) ||
       o.customerWhatsApp.includes(orderSearch);
     const matchesStatus = orderStatusFilter === 'All' || o.status === orderStatusFilter;
-    const matchesDateFrom = !orderDateFrom || o.startDate >= orderDateFrom;
+    // Range-overlap, not "did this order start inside the filter window" - an
+    // order that started last month but is still ongoing today must still show
+    // up under the default "1st of this month -> today" filter, since its date
+    // range overlaps that window even though its own startDate doesn't.
+    const matchesDateFrom = !orderDateFrom || o.endDate >= orderDateFrom;
     const matchesDateTo = !orderDateTo || o.startDate <= orderDateTo;
     return matchesSearch && matchesStatus && matchesDateFrom && matchesDateTo;
   });
@@ -226,6 +231,7 @@ export default function OrdersTab({ orders, orderActions }: OrdersTabProps) {
       {selectedOrder && (
         <OrderDetailPanel
           order={selectedOrder}
+          products={products}
           onClose={closeOrderDetail}
           onUpdateStatus={handleUpdateOrderStatus}
           showLateCalc={showLateCalc}

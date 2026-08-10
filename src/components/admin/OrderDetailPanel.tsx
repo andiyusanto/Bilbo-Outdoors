@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Phone, UserCheck, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
-import { Order, OrderStatus } from '../../types';
+import { Order, OrderStatus, Product } from '../../types';
 import { formatDateLabel, formatDateTimeLabel } from '../../lib/date';
+import { calculateRentalCost } from '../../pricing';
 import DateInput from '../DateInput';
 
 const PICKUP_ID_TYPE_OPTIONS = ['KTP', 'SIM', 'KTA', 'KIP', 'Kartu Pelajar', 'Lainnya'];
@@ -15,6 +16,7 @@ interface LateCalculationResult {
 
 interface OrderDetailPanelProps {
   order: Order;
+  products: Product[];
   onClose: () => void;
   onUpdateStatus: (orderId: string, newStatus: OrderStatus, pickupIdType?: string) => void;
   showLateCalc: boolean;
@@ -28,6 +30,7 @@ interface OrderDetailPanelProps {
 
 export default function OrderDetailPanel({
   order,
+  products,
   onClose,
   onUpdateStatus,
   showLateCalc,
@@ -111,23 +114,39 @@ export default function OrderDetailPanel({
           <div>
             <h4 className="text-[10px] font-black uppercase text-zinc-400 tracking-wider mb-2.5">Rincian Peralatan Rented</h4>
             <div className="border-2 border-black rounded-none overflow-hidden divide-y-2 divide-black bg-white shadow-[2px_2px_0px_rgba(0,0,0,1)]">
-              {order.items.map((item, index) => (
-                <div key={index} className="p-3.5 flex items-center justify-between hover:bg-brand/5">
-                  <div>
-                    <p className="text-xs font-black text-black uppercase">{item.productName}</p>
-                    <p className="text-[10px] text-zinc-600 font-bold uppercase mt-1">
-                      {item.ratesSnapshot ? (
-                        `5 Hari: Rp ${item.ratesSnapshot.day5Price.toLocaleString('id-ID')} (+Rp ${item.ratesSnapshot.extraDayRate.toLocaleString('id-ID')}/hari setelahnya)`
-                      ) : item.legacyPricePerDay !== undefined ? (
-                        `Rp ${item.legacyPricePerDay.toLocaleString('id-ID')}/hari${(item.legacyIncrementalPrice ?? 0) > 0 ? ` (-Rp ${(item.legacyIncrementalPrice ?? 0).toLocaleString('id-ID')}/hari diskon setelah ${item.legacyDiscountThresholdDays ?? 5} hari)` : ''}`
-                      ) : null}
-                    </p>
+              {order.items.map((item, index) => {
+                // Live lookup, not snapshotted - varian/size/color are pure catalog
+                // metadata (like the product's own display on the public page),
+                // not price-relevant, so no order-time integrity concern here.
+                const product = products.find((p) => p.id === item.productId);
+                const attrLine = product && (product.varian || product.size || product.color)
+                  ? [
+                      product.varian && `Varian: ${product.varian}`,
+                      product.size && `Ukuran: ${product.size}`,
+                      product.color && `Warna: ${product.color}`,
+                    ].filter(Boolean).join('   •   ')
+                  : null;
+                return (
+                  <div key={index} className="p-3.5 flex items-center justify-between hover:bg-brand/5">
+                    <div>
+                      <p className="text-xs font-black text-black uppercase">{item.productName}</p>
+                      {attrLine && (
+                        <p className="text-[10px] text-zinc-500 font-bold uppercase mt-0.5">{attrLine}</p>
+                      )}
+                      <p className="text-[10px] text-zinc-600 font-bold uppercase mt-1">
+                        {item.ratesSnapshot ? (
+                          `${order.rentDuration} Hari: Rp ${calculateRentalCost(item.ratesSnapshot, order.rentDuration).toLocaleString('id-ID')}`
+                        ) : item.legacyPricePerDay !== undefined ? (
+                          `Rp ${item.legacyPricePerDay.toLocaleString('id-ID')}/hari${(item.legacyIncrementalPrice ?? 0) > 0 ? ` (-Rp ${(item.legacyIncrementalPrice ?? 0).toLocaleString('id-ID')}/hari diskon setelah ${item.legacyDiscountThresholdDays ?? 5} hari)` : ''}`
+                        ) : null}
+                      </p>
+                    </div>
+                    <span className="text-xs font-black bg-brand/10 border-2 border-black px-2.5 py-1 rounded-none font-mono text-black">
+                      {item.quantity} UNIT
+                    </span>
                   </div>
-                  <span className="text-xs font-black bg-brand/10 border-2 border-black px-2.5 py-1 rounded-none font-mono text-black">
-                    {item.quantity} UNIT
-                  </span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 

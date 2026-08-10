@@ -146,6 +146,7 @@ async function initDatabase(): Promise<void> {
         if (!parsed.settings) parsed.settings = defaultSettings;
         if (!parsed.settings.footer) parsed.settings.footer = defaultSettings.footer;
         if (!parsed.settings.runningText) parsed.settings.runningText = defaultSettings.runningText;
+        if (!parsed.settings.pendingExpiryHours) parsed.settings.pendingExpiryHours = defaultSettings.pendingExpiryHours;
         if (!parsed.users) parsed.users = defaultUsers;
         if (!parsed.jobPriceList) parsed.jobPriceList = defaultJobPriceList;
         if (!parsed.jobEntries) parsed.jobEntries = [];
@@ -616,24 +617,25 @@ function calculateAllocatedStock(orders: Order[], products: Product[], startDate
   return allocationMap;
 }
 
-// An order left Pending for more than 2 hours with no payment confirmation is
-// treated as abandoned - it's flipped to Expired so it stops blocking stock and
-// shows up distinctly in the admin order list. No cron/background worker exists
-// in this app (single Express process, no scheduler infra); this mirrors the
-// existing calculate-late lazy-computation pattern, but runs automatically at
-// the top of every route that reads orders, rather than behind an explicit
-// button click, so stock availability and the order list reflect expiry
-// promptly. Each order flips at most once, so repeated calls are self-limiting.
-// Staff can still manually approve payment on an Expired order afterwards (see
-// PUT /api/orders/:id/status's validStatuses) - expiring never revokes stock,
-// it just stops reserving it, and remains reversible.
-const PENDING_ORDER_EXPIRY_MS = 2 * 60 * 60 * 1000;
-
+// An order left Pending for more than settings.pendingExpiryHours (default 2,
+// editable in Pengaturan -> Toleransi Keterlambatan) with no payment
+// confirmation is treated as abandoned - it's flipped to Expired so it stops
+// blocking stock and shows up distinctly in the admin order list. No
+// cron/background worker exists in this app (single Express process, no
+// scheduler infra); this mirrors the existing calculate-late lazy-computation
+// pattern, but runs automatically at the top of every route that reads orders,
+// rather than behind an explicit button click, so stock availability and the
+// order list reflect expiry promptly. Each order flips at most once, so
+// repeated calls are self-limiting. Staff can still manually approve payment
+// on an Expired order afterwards (see PUT /api/orders/:id/status's
+// validStatuses) - expiring never revokes stock, it just stops reserving it,
+// and remains reversible.
 function expireStaleOrders(db: DbShape): boolean {
   const now = Date.now();
+  const expiryMs = (db.settings.pendingExpiryHours ?? 2) * 60 * 60 * 1000;
   let changed = false;
   for (const order of db.orders) {
-    if (order.status === 'Pending' && now - new Date(order.createdAt).getTime() > PENDING_ORDER_EXPIRY_MS) {
+    if (order.status === 'Pending' && now - new Date(order.createdAt).getTime() > expiryMs) {
       order.status = 'Expired';
       changed = true;
     }
@@ -970,9 +972,9 @@ app.get('/api/settings', authenticateUser, requireOwner, asyncHandler(async (req
 
 app.put('/api/settings', authenticateUser, requireOwner, asyncHandler(async (req, res) => {
   await withDbLock(async () => {
-    const { lateToleranceHours, operatingHours, footer, runningText } = req.body;
+    const { lateToleranceHours, pendingExpiryHours, operatingHours, footer, runningText } = req.body;
     const db = await readDB();
-    db.settings = { lateToleranceHours, operatingHours, footer, runningText };
+    db.settings = { lateToleranceHours, pendingExpiryHours, operatingHours, footer, runningText };
     await writeDB(db);
     res.json(db.settings);
   });

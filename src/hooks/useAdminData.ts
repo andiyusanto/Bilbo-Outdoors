@@ -12,6 +12,7 @@ interface UseAdminDataParams {
 
 const DEFAULT_SETTINGS: StoreSettings = {
   lateToleranceHours: 4,
+  pendingExpiryHours: 2,
   operatingHours: {
     monday: { open: '09:00', close: '22:00' },
     tuesday: { open: '09:00', close: '22:00' },

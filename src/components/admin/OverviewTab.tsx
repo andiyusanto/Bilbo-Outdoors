@@ -63,7 +63,7 @@ export default function OverviewTab({ orders, products }: OverviewTabProps) {
           <p className="text-xs text-zinc-600 font-semibold uppercase tracking-wider mt-1">Ringkasan transaksi dan inventaris Bilbo Outdoors saat ini.</p>
         </div>
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 mt-2 sm:mt-0">
-          <span className="text-[10px] font-black text-zinc-500 uppercase tracking-wider shrink-0">Filter Tanggal Pemesanan:</span>
+          <span className="text-[10px] font-black text-zinc-500 uppercase tracking-wider shrink-0">Tanggal Pemesanan:</span>
           <div className="flex items-center gap-2">
             <label className="text-[10px] font-black text-zinc-600 uppercase tracking-wider shrink-0">Dari</label>
             <DateInput

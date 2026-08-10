@@ -3,11 +3,13 @@ import { StoreSettings } from '../src/types';
 // Shared default store settings, seeded on first run in both JSON-file mode and
 // Postgres mode - matches the owner's real weekly schedule (Sun/Mon open at noon,
 // every other day 9am, all days close 10pm), the standard 4-hour late-return
-// grace period, and the public site's original hardcoded footer/marquee text
-// (so seeding this doesn't change anything visually), until the owner edits
-// any of it via the admin Pengaturan tab.
+// grace period, the original hardcoded 2-hour unpaid-order expiry window, and
+// the public site's original hardcoded footer/marquee text (so seeding this
+// doesn't change anything visually), until the owner edits any of it via the
+// admin Pengaturan tab.
 export const defaultSettings: StoreSettings = {
   lateToleranceHours: 4,
+  pendingExpiryHours: 2,
   operatingHours: {
     monday: { open: '12:00', close: '22:00' },
     tuesday: { open: '09:00', close: '22:00' },

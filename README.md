@@ -167,6 +167,7 @@ CREATE TABLE IF NOT EXISTS order_items (
 CREATE TABLE IF NOT EXISTS settings (
   id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
   late_tolerance_hours INTEGER NOT NULL DEFAULT 4,
+  pending_expiry_hours INTEGER NOT NULL DEFAULT 2,
   operating_hours JSONB NOT NULL,
   footer JSONB,
   running_text VARCHAR(255)[]
@@ -266,6 +267,7 @@ CREATE TABLE IF NOT EXISTS job_entries (
 > CREATE TABLE IF NOT EXISTS settings (
 >   id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
 >   late_tolerance_hours INTEGER NOT NULL DEFAULT 4,
+>   pending_expiry_hours INTEGER NOT NULL DEFAULT 2,
 >   operating_hours JSONB NOT NULL,
 >   footer JSONB,
 >   running_text VARCHAR(255)[]
@@ -338,6 +340,11 @@ CREATE TABLE IF NOT EXISTS job_entries (
 > ```sql
 > ALTER TABLE settings ADD COLUMN IF NOT EXISTS footer JSONB;
 > ALTER TABLE settings ADD COLUMN IF NOT EXISTS running_text VARCHAR(255)[];
+> ```
+
+> **Sudah pernah menjalankan Step A sebelum kolom `pending_expiry_hours` di `settings` ada?** Jalankan ini sekali di SQL Editor yang sama (aman dijalankan berulang) - `DEFAULT 2` otomatis mengisi baris yang sudah ada dengan nilai lama yang sebelumnya hardcode di kode (2 jam), jadi tidak ada regresi perilaku. Menentukan berapa jam pesanan Pending tanpa pembayaran dibiarkan sebelum otomatis berubah jadi Expired (lihat `expireStaleOrders` di `server.ts`), diatur dari menu "Pengaturan" -> Toleransi Keterlambatan.
+> ```sql
+> ALTER TABLE settings ADD COLUMN IF NOT EXISTS pending_expiry_hours INTEGER NOT NULL DEFAULT 2;
 > ```
 
 ### Step B: Dapatkan Connection String Supabase Anda

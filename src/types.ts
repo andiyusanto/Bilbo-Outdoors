@@ -95,6 +95,7 @@ export interface FooterSettings {
 
 export interface StoreSettings {
   lateToleranceHours: number; // grace period past closing time before a late fee starts
+  pendingExpiryHours: number; // an unpaid Pending order auto-flips to Expired after this many hours (see expireStaleOrders, server.ts)
   operatingHours: WeeklyHours;
   footer: FooterSettings;
   runningText: string[]; // marquee phrases, in order - free text, not limited to category names (can hold promo/discount announcements etc.)

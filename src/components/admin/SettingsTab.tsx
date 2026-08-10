@@ -61,6 +61,20 @@ export default function SettingsTab({ settings, settingsActions }: SettingsTabPr
         <p className="text-[10px] text-zinc-500 font-semibold normal-case leading-relaxed">
           Penyewa hanya bebas denda jika mengembalikan dalam jam toleransi ini <strong>DAN</strong> toko masih buka saat itu. Jika sudah lewat jam operasional, otomatis dianggap kembali di hari berikutnya dan tetap kena denda walau belum melewati jumlah jam toleransi.
         </p>
+
+        <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-wider pt-2 border-t border-zinc-200">
+          Batas Waktu Pembayaran Sebelum Pesanan Kedaluwarsa (Jam)
+        </label>
+        <input
+          type="number"
+          min={0}
+          value={formState.pendingExpiryHours}
+          onChange={(e) => setFormState(prev => ({ ...prev, pendingExpiryHours: Number(e.target.value) }))}
+          className="bg-white border-2 border-black px-3 py-2 text-xs font-bold rounded-none focus:outline-none w-32"
+        />
+        <p className="text-[10px] text-zinc-500 font-semibold normal-case leading-relaxed">
+          Pesanan berstatus Pending yang belum dibayar dalam jumlah jam ini otomatis berubah menjadi Expired dan berhenti menahan stok. Staf tetap bisa menyetujui pesanan Expired secara manual selama stok masih tersedia.
+        </p>
       </div>
 
       <div className="bg-white border-2 border-black rounded-none shadow-[4px_4px_0px_rgba(0,0,0,1)] p-5 space-y-4 max-w-xl">

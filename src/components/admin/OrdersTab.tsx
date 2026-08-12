@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Search, ChevronRight, FileSpreadsheet } from 'lucide-react';
 import { Order, Product, StoreSettings } from '../../types';
 import { useOrderActions } from '../../hooks/useOrderActions';
-import { formatDateLabel, getDefaultDateRange } from '../../lib/date';
+import { formatDateLabel, formatDateTimeLabel, getDefaultDateRange } from '../../lib/date';
 import { getAmountPaid, getRemainingBalance, getPenaltyTotal } from '../../pricing';
 import OrderDetailPanel from './OrderDetailPanel';
 import DateInput from '../DateInput';
@@ -176,13 +176,14 @@ export default function OrdersTab({ orders, products, settings, orderActions }: 
                 <th className="px-5 py-3.5 text-[10px] font-black text-black uppercase tracking-wider">Durasi</th>
                 <th className="px-5 py-3.5 text-[10px] font-black text-black uppercase tracking-wider">Total Biaya</th>
                 <th className="px-5 py-3.5 text-[10px] font-black text-black uppercase tracking-wider">Status</th>
+                <th className="px-5 py-3.5 text-[10px] font-black text-black uppercase tracking-wider">Diubah Terakhir Oleh</th>
                 <th className="px-5 py-3.5 text-[10px] font-black text-black uppercase tracking-wider text-right">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y-2 divide-black">
               {filteredOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-5 py-12 text-center text-xs text-zinc-500 font-bold uppercase tracking-wider">
+                  <td colSpan={8} className="px-5 py-12 text-center text-xs text-zinc-500 font-bold uppercase tracking-wider">
                     Belum ada pesanan penyewaan camping yang cocok.
                   </td>
                 </tr>
@@ -236,6 +237,20 @@ export default function OrdersTab({ orders, products, settings, orderActions }: 
                       }`}>
                         {order.status}
                       </span>
+                    </td>
+                    <td className="px-5 py-4">
+                      {order.statusHistory && order.statusHistory.length > 0 ? (
+                        <>
+                          <p className="text-xs font-black text-black uppercase">
+                            {order.statusHistory[order.statusHistory.length - 1].changedByName}
+                          </p>
+                          <p className="text-[10px] text-zinc-500 font-mono font-bold mt-0.5">
+                            {formatDateTimeLabel(order.statusHistory[order.statusHistory.length - 1].changedAt)}
+                          </p>
+                        </>
+                      ) : (
+                        <span className="text-[10px] text-zinc-400 font-bold uppercase">&mdash;</span>
+                      )}
                     </td>
                     <td className="px-5 py-4 text-right">
                       <button

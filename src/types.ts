@@ -59,6 +59,7 @@ export interface Order {
   lateFee?: number;
   amountPaid?: number; // total collected so far; undefined/0 while still Pending. remainingBalance is always derived (totalPrice + (lateFee||0)) - amountPaid, never stored.
   statusHistory?: StatusHistoryEntry[]; // audit trail of staff-driven status transitions only - order creation (initial Pending) is not an entry, since that's the customer, not staff
+  penalties?: PenaltyEntry[]; // damage/loss charges assessed at return, admin-entered per incident; folded into the invoice total alongside lateFee (see src/pricing.ts)
 }
 
 export interface StatusHistoryEntry {
@@ -68,9 +69,22 @@ export interface StatusHistoryEntry {
   changedByName: string; // snapshot of AppUser.displayName at the time, or 'Sistem (Otomatis)' for the system sentinel
 }
 
+export interface PenaltyEntry {
+  id: string;
+  type: 'Kerusakan' | 'Kehilangan';
+  productId: string;
+  productName: string; // snapshot, same reasoning as OrderItem.productName
+  description: string; // staff-entered reason, e.g. "sobek di bagian atap" - required, admin-visible only (not printed on the resi)
+  amount: number; // staff-entered Rupiah
+  createdAt: string;
+}
+
 // Public-safe projection of Order for the customer-facing confirmation page -
 // Omit-based so any future Order field is included by default unless excluded here.
-export type PublicOrder = Omit<Order, 'personalPhotoBase64'>;
+// statusHistory (staff display names) and penalties (internal damage/loss
+// notes, explicitly admin-only - see PenaltyEntry.description) must never
+// reach this unauthenticated endpoint.
+export type PublicOrder = Omit<Order, 'personalPhotoBase64' | 'statusHistory' | 'penalties'>;
 
 export interface DashboardStats {
   activeRentalsCount: number;

@@ -4,15 +4,15 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { createServer as createViteServer } from 'vite';
-import { Product, Order, OrderStatus, DashboardStats, StoreSettings, AppUser, PublicUser, UserRole, JobPriceListItem, JobEntry, JobType } from './src/types';
+import { Product, Order, OrderItem, OrderStatus, PenaltyEntry, PublicOrder, DashboardStats, StoreSettings, AppUser, PublicUser, UserRole, JobPriceListItem, JobEntry, JobType } from './src/types';
 import { defaultProducts } from './db/defaultProducts';
 import { defaultSettings } from './db/defaultSettings';
 import { defaultUsers } from './db/defaultUsers';
 import { defaultJobPriceList } from './db/defaultJobPriceList';
 import { initPostgresPool, seedPostgresIfEmpty, readDBPostgres, writeDBPostgres } from './db/postgres';
-import { calculateRentalCost, calculateLegacyRentalCost, getAmountPaid, getRemainingBalance } from './src/pricing';
+import { calculateRentalCost, calculateLegacyRentalCost, getAmountPaid, getRemainingBalance, getPenaltyTotal } from './src/pricing';
 import { hashPassword, verifyPassword, generateSessionToken } from './src/auth';
-import { formatDateLabel } from './src/lib/date';
+import { formatDateLabel, getTodayDateString } from './src/lib/date';
 
 declare global {
   namespace Express {
@@ -789,8 +789,9 @@ app.get('/api/orders/confirm/:token', asyncHandler(async (req, res) => {
     return res.status(404).json({ error: 'Pesanan tidak ditemukan.' });
   }
 
-  const { personalPhotoBase64, ...safeOrder } = order;
-  res.json(safeOrder);
+  const { personalPhotoBase64, statusHistory, penalties, ...safeOrder }: Order = order;
+  const publicOrder: PublicOrder = safeOrder;
+  res.json(publicOrder);
 }));
 
 // Admin: Get all orders
@@ -857,11 +858,12 @@ app.put('/api/orders/:id/status', authenticateUser, asyncHandler(async (req, res
     }
     // Stamp the actual return time once, on the transition into Completed - this
     // is what the readiness-time stock calculation anchors on (calculateAllocatedStock).
-    // Also auto-settles the remaining balance (including any late fee) here,
-    // matching the real-world flow: the renter pays off the rest on return.
+    // Also auto-settles the remaining balance (including any late fee and any
+    // damage/loss penalties) here, matching the real-world flow: the renter
+    // pays off the rest on return.
     if (status === 'Item Returned/Completed' && previousStatus !== 'Item Returned/Completed') {
       db.orders[orderIndex].returnedAt = new Date().toISOString();
-      db.orders[orderIndex].amountPaid = db.orders[orderIndex].totalPrice + (db.orders[orderIndex].lateFee || 0);
+      db.orders[orderIndex].amountPaid = db.orders[orderIndex].totalPrice + (db.orders[orderIndex].lateFee || 0) + getPenaltyTotal(db.orders[orderIndex]);
     }
     await writeDB(db);
     res.json(db.orders[orderIndex]);
@@ -870,7 +872,7 @@ app.put('/api/orders/:id/status', authenticateUser, asyncHandler(async (req, res
 
 // Admin: correct/top-up the amount collected on an order without changing its
 // status - e.g. a partially-paying customer tops up before pickup. Capped at
-// the current full invoice (totalPrice + lateFee, if already calculated).
+// the current full invoice (totalPrice + lateFee + any penalties, if already calculated).
 app.put('/api/orders/:id/payment', authenticateUser, asyncHandler(async (req, res) => {
   await withDbLock(async () => {
     const { id } = req.params;
@@ -881,7 +883,7 @@ app.put('/api/orders/:id/payment', authenticateUser, asyncHandler(async (req, re
       return res.status(404).json({ error: 'Order not found.' });
     }
     const order = db.orders[idx];
-    const cap = order.totalPrice + (order.lateFee || 0);
+    const cap = order.totalPrice + (order.lateFee || 0) + getPenaltyTotal(order);
     const paid = Number(amountPaid);
     if (isNaN(paid) || paid < 0 || paid > cap) {
       return res.status(400).json({ error: 'Jumlah pembayaran tidak valid.' });
@@ -889,6 +891,70 @@ app.put('/api/orders/:id/payment', authenticateUser, asyncHandler(async (req, re
     db.orders[idx].amountPaid = paid;
     await writeDB(db);
     res.json(db.orders[idx]);
+  });
+}));
+
+// Admin: add a damage/loss penalty entry to an order - only while staff still
+// has the item in front of them at return (Approved/Paid or Item Picked Up),
+// matching where Kalkulator Denda itself is shown. Once Completed, the
+// invoice is already settled (see the auto-settle above).
+app.post('/api/orders/:id/penalties', authenticateUser, asyncHandler(async (req, res) => {
+  await withDbLock(async () => {
+    const { id } = req.params;
+    const { type, productId, description, amount } = req.body;
+    const db = await readDB();
+    const order = db.orders.find((o: Order) => o.id === id);
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found.' });
+    }
+    if (order.status !== 'Approved/Paid' && order.status !== 'Item Picked Up') {
+      return res.status(400).json({ error: 'Denda hanya bisa ditambahkan sebelum pesanan diselesaikan.' });
+    }
+    if (type !== 'Kerusakan' && type !== 'Kehilangan') {
+      return res.status(400).json({ error: 'Jenis denda tidak valid.' });
+    }
+    const item = order.items.find((i: OrderItem) => i.productId === productId);
+    if (!item) {
+      return res.status(400).json({ error: 'Item tidak ditemukan pada pesanan ini.' });
+    }
+    const trimmedDescription = String(description || '').trim();
+    if (!trimmedDescription) {
+      return res.status(400).json({ error: 'Deskripsi/alasan denda wajib diisi.' });
+    }
+    const numAmount = Number(amount);
+    if (isNaN(numAmount) || numAmount < 0) {
+      return res.status(400).json({ error: 'Jumlah denda tidak valid.' });
+    }
+    order.penalties = order.penalties || [];
+    order.penalties.push({
+      id: `penalty-${Date.now()}`,
+      type,
+      productId,
+      productName: item.productName,
+      description: trimmedDescription,
+      amount: numAmount,
+      createdAt: new Date().toISOString(),
+    });
+    await writeDB(db);
+    res.json(order);
+  });
+}));
+
+// Admin: remove a mistakenly-added penalty entry, same status guard as above.
+app.delete('/api/orders/:id/penalties/:penaltyId', authenticateUser, asyncHandler(async (req, res) => {
+  await withDbLock(async () => {
+    const { id, penaltyId } = req.params;
+    const db = await readDB();
+    const order = db.orders.find((o: Order) => o.id === id);
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found.' });
+    }
+    if (order.status !== 'Approved/Paid' && order.status !== 'Item Picked Up') {
+      return res.status(400).json({ error: 'Denda hanya bisa diubah sebelum pesanan diselesaikan.' });
+    }
+    order.penalties = (order.penalties || []).filter((p: PenaltyEntry) => p.id !== penaltyId);
+    await writeDB(db);
+    res.json(order);
   });
 }));
 
@@ -1055,7 +1121,7 @@ app.get('/api/stats', authenticateUser, requireOwner, asyncHandler(async (req, r
     }
     const orders: Order[] = db.orders;
 
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getTodayDateString();
 
     // Active rentals = orders that have been approved or items picked up
     const activeRentalsCount = orders.filter(o => o.status === 'Approved/Paid' || o.status === 'Item Picked Up').length;

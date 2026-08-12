@@ -183,6 +183,7 @@ function rowToOrder(row: any, items: OrderItem[]): Order {
     lateFee: Number(row.late_fee || 0),
     amountPaid: row.amount_paid !== null && row.amount_paid !== undefined ? Number(row.amount_paid) : undefined,
     statusHistory: row.status_history ?? [],
+    penalties: row.penalties ?? [],
   };
 }
 
@@ -459,12 +460,13 @@ export async function writeDBPostgres(data: { products: Product[]; orders: Order
           o.returnedAt ?? null,
           o.pickupIdType ?? null,
           o.amountPaid ?? null,
-          JSON.stringify(o.statusHistory ?? [])
+          JSON.stringify(o.statusHistory ?? []),
+          JSON.stringify(o.penalties ?? [])
         );
       });
       await client.query(
-        `INSERT INTO orders (id, customer_name, customer_whatsapp, start_date, end_date, rent_duration, total_price, id_card_base64, status, created_at, late_days, late_fee, confirmation_token, returned_at, pickup_id_type, amount_paid, status_history)
-         VALUES ${buildValuesClause(data.orders.length, 17)}
+        `INSERT INTO orders (id, customer_name, customer_whatsapp, start_date, end_date, rent_duration, total_price, id_card_base64, status, created_at, late_days, late_fee, confirmation_token, returned_at, pickup_id_type, amount_paid, status_history, penalties)
+         VALUES ${buildValuesClause(data.orders.length, 18)}
          ON CONFLICT (id) DO UPDATE SET
            customer_name = EXCLUDED.customer_name,
            customer_whatsapp = EXCLUDED.customer_whatsapp,
@@ -481,7 +483,8 @@ export async function writeDBPostgres(data: { products: Product[]; orders: Order
            returned_at = EXCLUDED.returned_at,
            pickup_id_type = EXCLUDED.pickup_id_type,
            amount_paid = EXCLUDED.amount_paid,
-           status_history = EXCLUDED.status_history`,
+           status_history = EXCLUDED.status_history,
+           penalties = EXCLUDED.penalties`,
         params
       );
     }

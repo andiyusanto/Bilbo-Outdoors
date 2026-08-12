@@ -31,12 +31,17 @@ export function formatDateTimeInputLabel(value: string): string {
   return timePart ? `${formatDateLabel(datePart)}, ${timePart}` : formatDateLabel(datePart);
 }
 
-// "Today" as YYYY-MM-DD - same UTC-based convention already used ad hoc for
-// this across the app (server.ts's GET /api/stats, OverviewTab.tsx,
-// useJobEntryActions.ts's default entryDate), centralized here since the
-// default date-filter range below needs to build on the exact same value.
+// "Today" as YYYY-MM-DD, in the local timezone of wherever this runs - client
+// (staff's browser) or server (the deploy box, which per CLAUDE.md is set to
+// Asia/Jakarta to match the store). NOT `.toISOString().split('T')[0]`, which
+// is UTC: during WIB's UTC+7 offset (i.e. every day from local midnight until
+// ~07:00), that would silently report YESTERDAY's date - the store's own
+// calendar day has already advanced locally, but UTC hasn't caught up yet.
+// Same local-getters idiom as useOrderActions.ts's toLocalDateTimeInputValue.
 export function getTodayDateString(): string {
-  return new Date().toISOString().split('T')[0];
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
 // Default range for every admin date-range filter: first day of the current

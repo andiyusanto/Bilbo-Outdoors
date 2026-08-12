@@ -35,7 +35,14 @@ export function calculateSavingsFor5Days(rates: DayRateTable): number {
   return Math.max(0, rates.day1Price * 5 - rates.day5Price);
 }
 
-type PaymentFields = Pick<Order, 'status' | 'amountPaid' | 'totalPrice' | 'lateFee'>;
+type PaymentFields = Pick<Order, 'status' | 'amountPaid' | 'totalPrice' | 'lateFee' | 'penalties'>;
+
+// Sum of all damage/loss penalty entries assessed on this order (see
+// PenaltyEntry in src/types.ts) - folded into the invoice total everywhere
+// lateFee already is, below.
+export function getPenaltyTotal(order: Pick<Order, 'penalties'>): number {
+  return (order.penalties || []).reduce((sum, p) => sum + p.amount, 0);
+}
 
 // Orders confirmed paid before down-payment tracking shipped have
 // amountPaid === undefined forever (nullable column, never backfilled) -
@@ -45,9 +52,9 @@ type PaymentFields = Pick<Order, 'status' | 'amountPaid' | 'totalPrice' | 'lateF
 export function getAmountPaid(order: PaymentFields): number {
   if (order.amountPaid !== undefined) return order.amountPaid;
   if (order.status === 'Pending' || order.status === 'Expired') return 0;
-  return order.totalPrice + (order.lateFee || 0);
+  return order.totalPrice + (order.lateFee || 0) + getPenaltyTotal(order);
 }
 
 export function getRemainingBalance(order: PaymentFields): number {
-  return Math.max(0, order.totalPrice + (order.lateFee || 0) - getAmountPaid(order));
+  return Math.max(0, order.totalPrice + (order.lateFee || 0) + getPenaltyTotal(order) - getAmountPaid(order));
 }

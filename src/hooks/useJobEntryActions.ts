@@ -1,6 +1,7 @@
 import { useState, FormEvent } from 'react';
 import { JobEntry, JobType } from '../types';
 import { jsonAuthHeaders, parseJsonOrThrow } from '../lib/api';
+import { getTodayDateString } from '../lib/date';
 import { useLoading } from '../contexts/LoadingContext';
 import { useNotification } from '../contexts/NotificationContext';
 
@@ -10,7 +11,7 @@ interface UseJobEntryActionsParams {
 }
 
 const DEFAULT_ENTRY_FORM = {
-  entryDate: new Date().toISOString().split('T')[0],
+  entryDate: getTodayDateString(),
   itemName: '',
   jobType: '' as JobType | '',
   quantity: 1,

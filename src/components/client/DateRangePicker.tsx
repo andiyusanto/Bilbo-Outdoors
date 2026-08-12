@@ -1,5 +1,6 @@
 import { Calendar } from 'lucide-react';
 import DateInput from '../DateInput';
+import { getTodayDateString } from '../../lib/date';
 
 interface DateRangePickerProps {
   startDate: string;
@@ -30,7 +31,7 @@ export default function DateRangePicker({
             <DateInput
               id="startDate"
               required
-              min={new Date().toISOString().split('T')[0]}
+              min={getTodayDateString()}
               value={startDate}
               onChange={setStartDate}
               className="w-full rounded-none border-2 border-black px-4 py-2.5 text-xs font-bold bg-white uppercase text-black"
@@ -44,7 +45,7 @@ export default function DateRangePicker({
             <DateInput
               id="endDate"
               required
-              min={startDate || new Date().toISOString().split('T')[0]}
+              min={startDate || getTodayDateString()}
               value={endDate}
               onChange={setEndDate}
               className="w-full rounded-none border-2 border-black px-4 py-2.5 text-xs font-bold bg-white uppercase text-black"

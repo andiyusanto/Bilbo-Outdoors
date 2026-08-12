@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Clock, DollarSign, Calendar, ChevronDown } from 'lucide-react';
 import { Order, Product, DashboardStats } from '../../types';
-import { getDefaultDateRange } from '../../lib/date';
+import { getDefaultDateRange, getTodayDateString } from '../../lib/date';
 import { getAmountPaid, getRemainingBalance } from '../../pricing';
 import DateInput from '../DateInput';
 
@@ -30,7 +30,7 @@ export default function OverviewTab({ orders, products }: OverviewTabProps) {
   // Mirrors GET /api/stats' formulas (server.ts) exactly, but computed
   // client-side from dateFilteredOrders so it can respect the date range -
   // the server endpoint has no date params and stays all-time.
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getTodayDateString();
   const activeRentalsCount = dateFilteredOrders.filter(o => o.status === 'Approved/Paid' || o.status === 'Item Picked Up').length;
   const finishedOrPaidOrders = dateFilteredOrders.filter(o => o.status !== 'Pending' && o.status !== 'Expired');
   // Cash actually collected (amountPaid), not accrued totalPrice+lateFee - a

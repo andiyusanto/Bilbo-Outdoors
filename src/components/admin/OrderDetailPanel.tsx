@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Phone, UserCheck, AlertTriangle, CheckCircle, Clock, Printer } from 'lucide-react';
 import { Order, OrderStatus, Product, StoreSettings } from '../../types';
 import { formatDateLabel, formatDateTimeLabel } from '../../lib/date';
-import { calculateRentalCost, getRemainingBalance } from '../../pricing';
+import { calculateRentalCost, getRemainingBalance, getPenaltyTotal } from '../../pricing';
 import DateInput from '../DateInput';
 import OrderResiPrint from './OrderResiPrint';
 
@@ -22,6 +22,8 @@ interface OrderDetailPanelProps {
   onClose: () => void;
   onUpdateStatus: (orderId: string, newStatus: OrderStatus, pickupIdType?: string, amountPaid?: number) => void;
   onUpdatePayment: (orderId: string, amountPaid: number) => void;
+  onAddPenalty: (orderId: string, penalty: { type: 'Kerusakan' | 'Kehilangan'; productId: string; description: string; amount: number }) => void;
+  onRemovePenalty: (orderId: string, penaltyId: string) => void;
   showLateCalc: boolean;
   onOpenLateCalc: () => void;
   customReturnDateTime: string;
@@ -38,6 +40,8 @@ export default function OrderDetailPanel({
   onClose,
   onUpdateStatus,
   onUpdatePayment,
+  onAddPenalty,
+  onRemovePenalty,
   showLateCalc,
   onOpenLateCalc,
   customReturnDateTime,
@@ -54,6 +58,12 @@ export default function OrderDetailPanel({
   const [paymentAmountInput, setPaymentAmountInput] = useState(String(order.totalPrice));
   const [showEditPayment, setShowEditPayment] = useState(false);
   const [editPaymentInput, setEditPaymentInput] = useState(String(order.amountPaid ?? 0));
+
+  const [showAddPenalty, setShowAddPenalty] = useState(false);
+  const [penaltyType, setPenaltyType] = useState<'Kerusakan' | 'Kehilangan'>('Kerusakan');
+  const [penaltyProductId, setPenaltyProductId] = useState(order.items[0]?.productId ?? '');
+  const [penaltyDescription, setPenaltyDescription] = useState('');
+  const [penaltyAmountInput, setPenaltyAmountInput] = useState('');
 
   const resolvedPickupIdType = pickupIdTypeSelect === 'Lainnya' ? pickupIdTypeCustom.trim() : pickupIdTypeSelect;
   const canConfirmPickup = pickupIdTypeSelect !== '' && (pickupIdTypeSelect !== 'Lainnya' || pickupIdTypeCustom.trim() !== '');
@@ -75,7 +85,22 @@ export default function OrderDetailPanel({
     setShowEditPayment(false);
   };
 
-  const totalInvoice = (order.totalPrice || 0) + (order.lateFee || 0);
+  const canAddPenalty = penaltyProductId !== '' && penaltyDescription.trim() !== '' && penaltyAmountInput !== '' && Number(penaltyAmountInput) >= 0;
+
+  const handleAddPenaltySubmit = () => {
+    onAddPenalty(order.id, {
+      type: penaltyType,
+      productId: penaltyProductId,
+      description: penaltyDescription.trim(),
+      amount: Number(penaltyAmountInput),
+    });
+    setShowAddPenalty(false);
+    setPenaltyDescription('');
+    setPenaltyAmountInput('');
+  };
+
+  const penaltyTotal = getPenaltyTotal(order);
+  const totalInvoice = (order.totalPrice || 0) + (order.lateFee || 0) + penaltyTotal;
   const remainingBalance = getRemainingBalance(order);
 
   return (
@@ -424,6 +449,70 @@ export default function OrderDetailPanel({
                     Tanpa Denda
                   </button>
                 </div>
+
+                {!showAddPenalty ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowAddPenalty(true)}
+                    className="text-[10px] font-black text-zinc-500 hover:text-black underline cursor-pointer uppercase tracking-wider"
+                  >
+                    + Tambah Denda Kerusakan/Kehilangan
+                  </button>
+                ) : (
+                  <div className="border-2 border-black rounded-none p-3 bg-white space-y-2.5">
+                    <div className="grid grid-cols-2 gap-2">
+                      <select
+                        value={penaltyType}
+                        onChange={(e) => setPenaltyType(e.target.value as 'Kerusakan' | 'Kehilangan')}
+                        className="bg-white border-2 border-black px-2 py-2 text-[11px] font-black rounded-none focus:outline-none cursor-pointer"
+                      >
+                        <option value="Kerusakan">Kerusakan</option>
+                        <option value="Kehilangan">Kehilangan</option>
+                      </select>
+                      <select
+                        value={penaltyProductId}
+                        onChange={(e) => setPenaltyProductId(e.target.value)}
+                        className="bg-white border-2 border-black px-2 py-2 text-[11px] font-black rounded-none focus:outline-none cursor-pointer"
+                      >
+                        {order.items.map((item) => (
+                          <option key={item.productId} value={item.productId}>{item.productName}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <input
+                      type="text"
+                      value={penaltyDescription}
+                      onChange={(e) => setPenaltyDescription(e.target.value)}
+                      placeholder="Deskripsi/Alasan (contoh: sobek di bagian atap)"
+                      className="w-full bg-white border-2 border-black px-3 py-2 text-xs font-bold rounded-none focus:outline-none normal-case"
+                    />
+                    <input
+                      type="number"
+                      min={0}
+                      value={penaltyAmountInput}
+                      onChange={(e) => setPenaltyAmountInput(e.target.value)}
+                      placeholder="Jumlah Denda (Rp)"
+                      className="w-full bg-white border-2 border-black px-3 py-2 text-xs font-black rounded-none focus:outline-none"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => { setShowAddPenalty(false); setPenaltyDescription(''); setPenaltyAmountInput(''); }}
+                        className="flex-1 py-2 bg-white border-2 border-black text-black hover:bg-zinc-100 font-black text-[10px] rounded-none uppercase tracking-wider cursor-pointer"
+                      >
+                        Batal
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAddPenaltySubmit}
+                        disabled={!canAddPenalty}
+                        className="flex-1 py-2 bg-black hover:bg-brand hover:text-black text-brand font-black text-[10px] border-2 border-black rounded-none uppercase tracking-wider cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Tambah
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -434,6 +523,38 @@ export default function OrderDetailPanel({
               </div>
             )}
           </div>
+
+          {order.penalties && order.penalties.length > 0 && (
+            <div className="border-t-2 border-black pt-5 space-y-3">
+              <h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-wider">Denda Kerusakan/Kehilangan</h4>
+              <div className="border-2 border-black rounded-none overflow-hidden divide-y-2 divide-black bg-white shadow-[2px_2px_0px_rgba(0,0,0,1)]">
+                {order.penalties.map((p) => (
+                  <div key={p.id} className="flex justify-between items-start px-3 py-2.5 gap-2">
+                    <div className="min-w-0">
+                      <p className="font-black text-black text-[11px] uppercase">{p.type} &mdash; {p.productName}</p>
+                      <p className="text-[10px] text-zinc-500 font-bold normal-case break-words">{p.description}</p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="font-mono text-black font-black text-xs">Rp {p.amount.toLocaleString('id-ID')}</span>
+                      {(order.status === 'Approved/Paid' || order.status === 'Item Picked Up') && (
+                        <button
+                          type="button"
+                          onClick={() => onRemovePenalty(order.id, p.id)}
+                          className="text-[9px] font-black text-red-500 hover:text-red-700 underline cursor-pointer uppercase"
+                        >
+                          Hapus
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                <div className="flex justify-between items-baseline px-3 py-2 bg-zinc-50 font-black text-[10px] uppercase">
+                  <span>Total Denda Kerusakan/Kehilangan</span>
+                  <span className="font-mono">Rp {penaltyTotal.toLocaleString('id-ID')}</span>
+                </div>
+              </div>
+            </div>
+          )}
 
           {order.statusHistory && order.statusHistory.length > 0 && (
             <div className="border-t-2 border-black pt-5 space-y-3">

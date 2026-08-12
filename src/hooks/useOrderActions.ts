@@ -82,6 +82,50 @@ export function useOrderActions({ token, setOrders, fetchAdminData }: UseOrderAc
     });
   };
 
+  // Adds a damage/loss penalty entry to an order at return time - same
+  // request/response shape as handleUpdatePayment, since both mutate the
+  // order in place without changing its status.
+  const handleAddPenalty = async (orderId: string, penalty: { type: 'Kerusakan' | 'Kehilangan'; productId: string; description: string; amount: number }) => {
+    await withLoading(async () => {
+      try {
+        const res = await fetch(`/api/orders/${orderId}/penalties`, {
+          method: 'POST',
+          headers: jsonAuthHeaders(token),
+          body: JSON.stringify(penalty)
+        });
+        const updatedOrder = await parseJsonOrThrow(res);
+        setOrders(prev => prev.map(o => o.id === orderId ? updatedOrder : o));
+        if (selectedOrder?.id === orderId) {
+          setSelectedOrder(updatedOrder);
+        }
+        notifySuccess('Denda berhasil ditambahkan!');
+        fetchAdminData();
+      } catch (err: any) {
+        notifyError(`Gagal menambahkan denda: ${err.message}`);
+      }
+    });
+  };
+
+  const handleRemovePenalty = async (orderId: string, penaltyId: string) => {
+    await withLoading(async () => {
+      try {
+        const res = await fetch(`/api/orders/${orderId}/penalties/${penaltyId}`, {
+          method: 'DELETE',
+          headers: jsonAuthHeaders(token),
+        });
+        const updatedOrder = await parseJsonOrThrow(res);
+        setOrders(prev => prev.map(o => o.id === orderId ? updatedOrder : o));
+        if (selectedOrder?.id === orderId) {
+          setSelectedOrder(updatedOrder);
+        }
+        notifySuccess('Denda berhasil dihapus!');
+        fetchAdminData();
+      } catch (err: any) {
+        notifyError(`Gagal menghapus denda: ${err.message}`);
+      }
+    });
+  };
+
   const handleCalculateLateFees = async () => {
     if (!selectedOrder) return;
     await withLoading(async () => {
@@ -136,6 +180,8 @@ export function useOrderActions({ token, setOrders, fetchAdminData }: UseOrderAc
     setLateCalculationResult,
     handleUpdateOrderStatus,
     handleUpdatePayment,
+    handleAddPenalty,
+    handleRemovePenalty,
     handleCalculateLateFees,
     handleApplyLateFeesAndComplete,
     openLateCalc,

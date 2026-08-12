@@ -3,11 +3,11 @@ import { Search, ChevronRight, FileSpreadsheet } from 'lucide-react';
 import { Order, Product, StoreSettings } from '../../types';
 import { useOrderActions } from '../../hooks/useOrderActions';
 import { formatDateLabel, getDefaultDateRange } from '../../lib/date';
-import { getAmountPaid, getRemainingBalance } from '../../pricing';
+import { getAmountPaid, getRemainingBalance, getPenaltyTotal } from '../../pricing';
 import OrderDetailPanel from './OrderDetailPanel';
 import DateInput from '../DateInput';
 
-const CSV_COLUMNS = ['Nama Penyewa', 'WhatsApp', 'Tanggal Pemesanan', 'Tanggal Mulai', 'Tanggal Selesai', 'Durasi (Hari)', 'Total Biaya (Rp)', 'Denda (Rp)', 'Hari Terlambat', 'Sudah Dibayar (Rp)', 'Sisa Pembayaran (Rp)', 'Status'] as const;
+const CSV_COLUMNS = ['Nama Penyewa', 'WhatsApp', 'Tanggal Pemesanan', 'Tanggal Mulai', 'Tanggal Selesai', 'Durasi (Hari)', 'Total Biaya (Rp)', 'Denda (Rp)', 'Hari Terlambat', 'Denda Kerusakan/Kehilangan (Rp)', 'Sudah Dibayar (Rp)', 'Sisa Pembayaran (Rp)', 'Status'] as const;
 
 // Excel/CSV requires quoting any field containing a comma, quote, or newline -
 // and doubling internal quotes - or the file silently misparses into the wrong
@@ -28,6 +28,7 @@ function ordersToCsv(orders: Order[]): string {
     o.totalPrice,
     o.lateFee || 0,
     o.lateDays || 0,
+    getPenaltyTotal(o),
     getAmountPaid(o),
     getRemainingBalance(o),
     o.status,
@@ -59,6 +60,8 @@ export default function OrdersTab({ orders, products, settings, orderActions }: 
     lateCalculationResult,
     handleUpdateOrderStatus,
     handleUpdatePayment,
+    handleAddPenalty,
+    handleRemovePenalty,
     handleCalculateLateFees,
     handleApplyLateFeesAndComplete,
     openLateCalc,
@@ -212,6 +215,11 @@ export default function OrdersTab({ orders, products, settings, orderActions }: 
                           + DENDA: Rp {order.lateFee.toLocaleString('id-ID')} ({order.lateDays} hari)
                         </p>
                       ) : null}
+                      {getPenaltyTotal(order) > 0 ? (
+                        <p className="text-[9px] font-black text-red-700 bg-red-50 border border-red-500 inline-block px-1.5 py-0.5 mt-1 uppercase">
+                          + RUSAK/HILANG: Rp {getPenaltyTotal(order).toLocaleString('id-ID')}
+                        </p>
+                      ) : null}
                       {getRemainingBalance(order) > 0 ? (
                         <p className="text-[9px] font-black text-amber-700 bg-amber-50 border border-amber-500 inline-block px-1.5 py-0.5 mt-1 uppercase">
                           SISA: Rp {getRemainingBalance(order).toLocaleString('id-ID')}
@@ -255,6 +263,8 @@ export default function OrdersTab({ orders, products, settings, orderActions }: 
           onClose={closeOrderDetail}
           onUpdateStatus={handleUpdateOrderStatus}
           onUpdatePayment={handleUpdatePayment}
+          onAddPenalty={handleAddPenalty}
+          onRemovePenalty={handleRemovePenalty}
           showLateCalc={showLateCalc}
           onOpenLateCalc={openLateCalc}
           customReturnDateTime={customReturnDateTime}

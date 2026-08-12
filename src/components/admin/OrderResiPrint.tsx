@@ -1,7 +1,7 @@
 import { createPortal } from 'react-dom';
 import { Order, Product, FooterSettings } from '../../types';
 import { formatDateLabel, formatDateTimeLabel } from '../../lib/date';
-import { calculateRentalCost, getRemainingBalance } from '../../pricing';
+import { calculateRentalCost, getRemainingBalance, getPenaltyTotal } from '../../pricing';
 import bilboLogoWide from '../../assets/bilbo-logo-wide.webp';
 
 interface OrderResiPrintProps {
@@ -24,7 +24,8 @@ function statusLabel(order: Order, remainingBalance: number): string {
 }
 
 export default function OrderResiPrint({ order, products, storeFooter }: OrderResiPrintProps) {
-  const totalInvoice = (order.totalPrice || 0) + (order.lateFee || 0);
+  const penaltyTotal = getPenaltyTotal(order);
+  const totalInvoice = (order.totalPrice || 0) + (order.lateFee || 0) + penaltyTotal;
   const remainingBalance = getRemainingBalance(order);
 
   // Portaled to a direct sibling of #root under <body>, not rendered inline
@@ -121,6 +122,12 @@ export default function OrderResiPrint({ order, products, storeFooter }: OrderRe
           <div className="flex justify-between">
             <span>Denda Terlambat ({order.lateDays} Hari)</span>
             <span className="font-mono">Rp {order.lateFee.toLocaleString('id-ID')}</span>
+          </div>
+        ) : null}
+        {penaltyTotal > 0 ? (
+          <div className="flex justify-between">
+            <span>Denda Kerusakan/Kehilangan</span>
+            <span className="font-mono">Rp {penaltyTotal.toLocaleString('id-ID')}</span>
           </div>
         ) : null}
         <div className="flex justify-between border-t-2 border-black pt-1.5 text-sm">

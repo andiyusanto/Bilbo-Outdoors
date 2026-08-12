@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { JobEntry } from '../types';
 import { jsonAuthHeaders, parseJsonOrThrow } from '../lib/api';
+import { getTodayDateString } from '../lib/date';
 import { useLoading } from '../contexts/LoadingContext';
 import { useNotification } from '../contexts/NotificationContext';
 
@@ -12,7 +13,7 @@ interface UseApprovalActionsParams {
 export function useApprovalActions({ token, fetchAdminData }: UseApprovalActionsParams) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [paymentDateInput, setPaymentDateInput] = useState<string>(
-    new Date().toISOString().split('T')[0]
+    getTodayDateString()
   );
 
   const toggleSelected = (id: string) => {

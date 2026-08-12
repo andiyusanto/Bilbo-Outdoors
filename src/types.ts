@@ -58,6 +58,14 @@ export interface Order {
   lateDays?: number;
   lateFee?: number;
   amountPaid?: number; // total collected so far; undefined/0 while still Pending. remainingBalance is always derived (totalPrice + (lateFee||0)) - amountPaid, never stored.
+  statusHistory?: StatusHistoryEntry[]; // audit trail of staff-driven status transitions only - order creation (initial Pending) is not an entry, since that's the customer, not staff
+}
+
+export interface StatusHistoryEntry {
+  status: OrderStatus;
+  changedAt: string; // ISO datetime
+  changedByUserId: string; // AppUser.id, or 'system' for expireStaleOrders' auto-expiry transition
+  changedByName: string; // snapshot of AppUser.displayName at the time, or 'Sistem (Otomatis)' for the system sentinel
 }
 
 // Public-safe projection of Order for the customer-facing confirmation page -

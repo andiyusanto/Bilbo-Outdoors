@@ -637,6 +637,13 @@ function expireStaleOrders(db: DbShape): boolean {
   for (const order of db.orders) {
     if (order.status === 'Pending' && now - new Date(order.createdAt).getTime() > expiryMs) {
       order.status = 'Expired';
+      order.statusHistory = order.statusHistory || [];
+      order.statusHistory.push({
+        status: 'Expired',
+        changedAt: new Date().toISOString(),
+        changedByUserId: 'system',
+        changedByName: 'Sistem (Otomatis)',
+      });
       changed = true;
     }
   }
@@ -816,6 +823,17 @@ app.put('/api/orders/:id/status', authenticateUser, asyncHandler(async (req, res
 
     const previousStatus = db.orders[orderIndex].status;
     db.orders[orderIndex].status = status;
+    // Audit trail of who made this transition - skip no-op resends of the
+    // same status so the history only records real changes.
+    if (previousStatus !== status) {
+      db.orders[orderIndex].statusHistory = db.orders[orderIndex].statusHistory || [];
+      db.orders[orderIndex].statusHistory.push({
+        status,
+        changedAt: new Date().toISOString(),
+        changedByUserId: req.currentUser!.id,
+        changedByName: req.currentUser!.displayName,
+      });
+    }
     // Record which physical ID card was left as collateral in person, on the
     // transition into Item Picked Up.
     if (status === 'Item Picked Up' && pickupIdType) {
@@ -932,24 +950,29 @@ app.post('/api/orders/:id/calculate-late', authenticateUser, asyncHandler(async 
     let lateFeeTotal = 0;
     const breakdown = order.items.map(item => {
       let itemLateCost: number;
-      let dailyRateBreakdown: string;
 
       if (item.ratesSnapshot) {
         itemLateCost = calculateRentalCost(item.ratesSnapshot, order.rentDuration + lateDays)
           - calculateRentalCost(item.ratesSnapshot, order.rentDuration);
-        dailyRateBreakdown = `5 Hari: Rp${item.ratesSnapshot.day5Price} (+Rp${item.ratesSnapshot.extraDayRate}/hari setelahnya)`;
       } else {
         const basePrice = item.legacyPricePerDay!;
         const incremental = item.legacyIncrementalPrice ?? 0;
         const discountThresholdDays = item.legacyDiscountThresholdDays ?? 5;
         itemLateCost = calculateLegacyRentalCost(basePrice, incremental, discountThresholdDays, order.rentDuration + lateDays)
           - calculateLegacyRentalCost(basePrice, incremental, discountThresholdDays, order.rentDuration);
-        dailyRateBreakdown = incremental > 0 ? `Base: ${basePrice} (-${incremental} after ${discountThresholdDays}d)` : `Rate: ${basePrice}`;
       }
       itemLateCost = Math.max(0, itemLateCost); // defensive: a mistyped (non-monotonic) rate table could otherwise produce a negative late fee
 
       const itemTotalLateCost = itemLateCost * item.quantity;
       lateFeeTotal += itemTotalLateCost;
+
+      // Describes the days actually being charged (order.rentDuration+1 through
+      // +lateDays), not a fixed "5 Hari" - the marginal per-day cost only equals
+      // day5Price/extraDayRate when those late days actually fall past day 5; for
+      // a short rental returned late, they don't, and the old hardcoded string
+      // named the wrong tier entirely regardless of what was really charged.
+      const perDayLateRate = Math.round(itemLateCost / lateDays);
+      const dailyRateBreakdown = `Rp${perDayLateRate.toLocaleString('id-ID')}/hari x ${lateDays} hari telat`;
 
       return {
         productName: item.productName,

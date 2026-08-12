@@ -143,7 +143,8 @@ CREATE TABLE IF NOT EXISTS orders (
   confirmation_token VARCHAR(255),
   returned_at VARCHAR(255),
   pickup_id_type VARCHAR(255),
-  amount_paid NUMERIC
+  amount_paid NUMERIC,
+  status_history JSONB
 );
 
 -- 3. Membuat Tabel Order Items (Relasi Detail Item dari Order)
@@ -260,6 +261,11 @@ CREATE TABLE IF NOT EXISTS job_entries (
 > **Sudah pernah menjalankan Step A sebelum kolom `amount_paid` di `orders` ada?** Jalankan ini sekali di SQL Editor yang sama (aman dijalankan berulang) - nullable, tanpa default, order lama tetap `NULL` selamanya (tidak ada regresi). Menyimpan total yang sudah benar-benar diterima dari penyewa - bisa berupa DP (down payment) sebagian atau pembayaran penuh, diisi saat staf menekan "Konfirmasi Pembayaran" di menu Manajemen Order, dan otomatis disesuaikan menjadi lunas saat pesanan diselesaikan (barang dikembalikan). Sisa tagihan (`total_price + late_fee - amount_paid`) selalu dihitung on-the-fly, tidak pernah disimpan sebagai kolom terpisah.
 > ```sql
 > ALTER TABLE orders ADD COLUMN IF NOT EXISTS amount_paid NUMERIC;
+> ```
+
+> **Sudah pernah menjalankan Step A sebelum kolom `status_history` di `orders` ada?** Jalankan ini sekali di SQL Editor yang sama (aman dijalankan berulang) - nullable tanpa default; kode aplikasi (`rowToOrder` di `db/postgres.ts`) otomatis memakai `[]` selama kolom masih `NULL`, jadi tidak ada regresi pada order lama. Menyimpan jejak audit staf mana yang mengubah status pesanan ke apa dan kapan (Pending &rarr; Approved/Paid &rarr; Item Picked Up &rarr; Item Returned/Completed), ditampilkan sebagai "Riwayat Status" di Manajemen Order. Transisi otomatis oleh sistem (pesanan Pending yang kedaluwarsa) dicatat dengan nama "Sistem (Otomatis)". Pembuatan pesanan awal (status Pending pertama kali) sengaja tidak dicatat di sini karena itu tindakan pelanggan, bukan staf.
+> ```sql
+> ALTER TABLE orders ADD COLUMN IF NOT EXISTS status_history JSONB;
 > ```
 
 > **Sudah pernah menjalankan Step A sebelum kolom `active`/`product_ids` di `job_price_list` ada?** Jalankan ini sekali di SQL Editor yang sama (aman dijalankan berulang) - `active` otomatis mengisi `true` untuk semua baris yang sudah ada saat ALTER dijalankan (item lama tidak pernah tiba-tiba jadi nonaktif), dan `product_ids` (array id dari tabel `products`, dipakai menu "Item Operasional" untuk menyimpan alat rental mana saja yang jadi dasar item harga tersebut) nullable tanpa default - baris lama yang dibuat sebelum fitur ini tetap `NULL` selamanya, tidak ada regresi.

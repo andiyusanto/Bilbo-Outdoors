@@ -435,6 +435,23 @@ export default function OrderDetailPanel({
             )}
           </div>
 
+          {order.statusHistory && order.statusHistory.length > 0 && (
+            <div className="border-t-2 border-black pt-5 space-y-3">
+              <h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-wider">Riwayat Status</h4>
+              <div className="border-2 border-black rounded-none overflow-hidden divide-y-2 divide-black bg-white shadow-[2px_2px_0px_rgba(0,0,0,1)]">
+                {order.statusHistory.map((entry, idx) => (
+                  <div key={idx} className="flex justify-between items-start px-3 py-2.5">
+                    <div>
+                      <p className="font-black text-black text-[11px] uppercase">{entry.status}</p>
+                      <p className="text-[10px] text-zinc-500 font-bold">oleh {entry.changedByName}</p>
+                    </div>
+                    <span className="text-[10px] text-zinc-400 font-mono font-bold whitespace-nowrap">{formatDateTimeLabel(entry.changedAt)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* LATE RETURN CALCULATOR PANEL */}
           {showLateCalc && (
             <div className="border-2 border-black bg-red-50 p-4 rounded-none space-y-4 shadow-[2px_2px_0px_rgba(0,0,0,1)]">

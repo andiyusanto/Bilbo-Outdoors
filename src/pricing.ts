@@ -1,4 +1,4 @@
-import { DayRateTable } from './types';
+import { DayRateTable, Order } from './types';
 
 // Total cost to rent one unit for `days` days, under the new cumulative-table model.
 export function calculateRentalCost(rates: DayRateTable, days: number): number {
@@ -33,4 +33,21 @@ export function calculateLegacyRentalCost(
 // Clamped to 0 so a mistyped (non-monotonic) rate table can't read as "discounted".
 export function calculateSavingsFor5Days(rates: DayRateTable): number {
   return Math.max(0, rates.day1Price * 5 - rates.day5Price);
+}
+
+type PaymentFields = Pick<Order, 'status' | 'amountPaid' | 'totalPrice' | 'lateFee'>;
+
+// Orders confirmed paid before down-payment tracking shipped have
+// amountPaid === undefined forever (nullable column, never backfilled) -
+// under the old flow, reaching any status past Pending/Expired always meant
+// paid in full, so undefined there means "fully paid", not "nothing paid".
+// A still-Pending/Expired order genuinely has nothing collected yet.
+export function getAmountPaid(order: PaymentFields): number {
+  if (order.amountPaid !== undefined) return order.amountPaid;
+  if (order.status === 'Pending' || order.status === 'Expired') return 0;
+  return order.totalPrice + (order.lateFee || 0);
+}
+
+export function getRemainingBalance(order: PaymentFields): number {
+  return Math.max(0, order.totalPrice + (order.lateFee || 0) - getAmountPaid(order));
 }

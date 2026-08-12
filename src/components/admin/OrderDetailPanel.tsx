@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Phone, UserCheck, AlertTriangle, CheckCircle, Clock, Printer } from 'lucide-react';
 import { Order, OrderStatus, Product, StoreSettings } from '../../types';
 import { formatDateLabel, formatDateTimeLabel } from '../../lib/date';
-import { calculateRentalCost } from '../../pricing';
+import { calculateRentalCost, getRemainingBalance } from '../../pricing';
 import DateInput from '../DateInput';
 import OrderResiPrint from './OrderResiPrint';
 
@@ -76,7 +76,7 @@ export default function OrderDetailPanel({
   };
 
   const totalInvoice = (order.totalPrice || 0) + (order.lateFee || 0);
-  const remainingBalance = totalInvoice - (order.amountPaid || 0);
+  const remainingBalance = getRemainingBalance(order);
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex justify-end transition-opacity">
@@ -247,7 +247,8 @@ export default function OrderDetailPanel({
                     <button
                       type="button"
                       onClick={handleSaveEditPayment}
-                      className="px-3 py-1.5 bg-black hover:bg-brand hover:text-black text-brand font-black text-[10px] border-2 border-black rounded-none uppercase tracking-wider cursor-pointer"
+                      disabled={editPaymentInput === '' || Number(editPaymentInput) < 0 || Number(editPaymentInput) > totalInvoice}
+                      className="px-3 py-1.5 bg-black hover:bg-brand hover:text-black text-brand font-black text-[10px] border-2 border-black rounded-none uppercase tracking-wider cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       Simpan
                     </button>

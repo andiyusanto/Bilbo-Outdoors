@@ -3,6 +3,7 @@ import { Search, ChevronRight, FileSpreadsheet } from 'lucide-react';
 import { Order, Product, StoreSettings } from '../../types';
 import { useOrderActions } from '../../hooks/useOrderActions';
 import { formatDateLabel, getDefaultDateRange } from '../../lib/date';
+import { getAmountPaid, getRemainingBalance } from '../../pricing';
 import OrderDetailPanel from './OrderDetailPanel';
 import DateInput from '../DateInput';
 
@@ -27,8 +28,8 @@ function ordersToCsv(orders: Order[]): string {
     o.totalPrice,
     o.lateFee || 0,
     o.lateDays || 0,
-    o.amountPaid || 0,
-    Math.max(0, o.totalPrice + (o.lateFee || 0) - (o.amountPaid || 0)),
+    getAmountPaid(o),
+    getRemainingBalance(o),
     o.status,
   ]);
   // Leading BOM so Excel (especially on Windows) detects UTF-8 instead of
@@ -211,16 +212,11 @@ export default function OrdersTab({ orders, products, settings, orderActions }: 
                           + DENDA: Rp {order.lateFee.toLocaleString('id-ID')} ({order.lateDays} hari)
                         </p>
                       ) : null}
-                      {(() => {
-                        const remaining = order.amountPaid !== undefined
-                          ? Math.max(0, order.totalPrice + (order.lateFee || 0) - order.amountPaid)
-                          : 0;
-                        return remaining > 0 ? (
-                          <p className="text-[9px] font-black text-amber-700 bg-amber-50 border border-amber-500 inline-block px-1.5 py-0.5 mt-1 uppercase">
-                            SISA: Rp {remaining.toLocaleString('id-ID')}
-                          </p>
-                        ) : null;
-                      })()}
+                      {getRemainingBalance(order) > 0 ? (
+                        <p className="text-[9px] font-black text-amber-700 bg-amber-50 border border-amber-500 inline-block px-1.5 py-0.5 mt-1 uppercase">
+                          SISA: Rp {getRemainingBalance(order).toLocaleString('id-ID')}
+                        </p>
+                      ) : null}
                     </td>
                     <td className="px-5 py-4">
                       <span className={`inline-flex items-center px-2 py-1 text-[9px] font-black uppercase tracking-wider border-2 border-black rounded-none ${

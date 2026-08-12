@@ -10,7 +10,7 @@ import { defaultSettings } from './db/defaultSettings';
 import { defaultUsers } from './db/defaultUsers';
 import { defaultJobPriceList } from './db/defaultJobPriceList';
 import { initPostgresPool, seedPostgresIfEmpty, readDBPostgres, writeDBPostgres } from './db/postgres';
-import { calculateRentalCost, calculateLegacyRentalCost } from './src/pricing';
+import { calculateRentalCost, calculateLegacyRentalCost, getAmountPaid, getRemainingBalance } from './src/pricing';
 import { hashPassword, verifyPassword, generateSessionToken } from './src/auth';
 import { formatDateLabel } from './src/lib/date';
 
@@ -1043,13 +1043,13 @@ app.get('/api/stats', authenticateUser, requireOwner, asyncHandler(async (req, r
     // excluded alongside Pending.)
     const finishedOrPaidOrders = orders.filter(o => o.status !== 'Pending' && o.status !== 'Expired');
     const totalRevenue = finishedOrPaidOrders.reduce((sum, o) => {
-      return sum + (o.amountPaid || 0);
+      return sum + getAmountPaid(o);
     }, 0);
 
     // Piutang - total still owed across the same order set (0 for orders paid
     // in full; Completed orders auto-settle to 0 on return, see PUT .../status).
     const totalOutstanding = finishedOrPaidOrders.reduce((sum, o) => {
-      return sum + Math.max(0, o.totalPrice + (o.lateFee || 0) - (o.amountPaid || 0));
+      return sum + getRemainingBalance(o);
     }, 0);
 
     // Items due for return today = Active orders with EndDate === todayStr or before today and not completed

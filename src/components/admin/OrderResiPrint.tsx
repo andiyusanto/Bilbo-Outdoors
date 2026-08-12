@@ -1,7 +1,7 @@
 import { createPortal } from 'react-dom';
 import { Order, Product, FooterSettings } from '../../types';
 import { formatDateLabel, formatDateTimeLabel } from '../../lib/date';
-import { calculateRentalCost } from '../../pricing';
+import { calculateRentalCost, getRemainingBalance } from '../../pricing';
 import bilboLogoWide from '../../assets/bilbo-logo-wide.webp';
 
 interface OrderResiPrintProps {
@@ -25,7 +25,7 @@ function statusLabel(order: Order, remainingBalance: number): string {
 
 export default function OrderResiPrint({ order, products, storeFooter }: OrderResiPrintProps) {
   const totalInvoice = (order.totalPrice || 0) + (order.lateFee || 0);
-  const remainingBalance = totalInvoice - (order.amountPaid || 0);
+  const remainingBalance = getRemainingBalance(order);
 
   // Portaled to a direct sibling of #root under <body>, not rendered inline
   // where OrderDetailPanel mounts it - so it sits outside the whole app's DOM

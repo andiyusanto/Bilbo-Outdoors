@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Clock, DollarSign, Calendar, ChevronDown } from 'lucide-react';
 import { Order, Product, DashboardStats } from '../../types';
 import { getDefaultDateRange } from '../../lib/date';
+import { getAmountPaid, getRemainingBalance } from '../../pricing';
 import DateInput from '../DateInput';
 
 interface OverviewTabProps {
@@ -34,9 +35,9 @@ export default function OverviewTab({ orders, products }: OverviewTabProps) {
   const finishedOrPaidOrders = dateFilteredOrders.filter(o => o.status !== 'Pending' && o.status !== 'Expired');
   // Cash actually collected (amountPaid), not accrued totalPrice+lateFee - a
   // partially-paid order should only count what's actually been received.
-  const totalRevenue = finishedOrPaidOrders.reduce((sum, o) => sum + (o.amountPaid || 0), 0);
+  const totalRevenue = finishedOrPaidOrders.reduce((sum, o) => sum + getAmountPaid(o), 0);
   // Piutang - total still owed across the same order set.
-  const totalOutstanding = finishedOrPaidOrders.reduce((sum, o) => sum + Math.max(0, o.totalPrice + (o.lateFee || 0) - (o.amountPaid || 0)), 0);
+  const totalOutstanding = finishedOrPaidOrders.reduce((sum, o) => sum + getRemainingBalance(o), 0);
   const dueTodayCount = dateFilteredOrders.filter(o => (o.status === 'Item Picked Up' || o.status === 'Approved/Paid') && (o.endDate <= todayStr)).length;
 
   // Calculate some analytics values for visual dashboard charts - also tracks

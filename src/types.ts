@@ -57,6 +57,7 @@ export interface Order {
   pickupIdType?: string; // type of physical ID card left as collateral in person (KTP/SIM/KTA/KIP/Kartu Pelajar/etc.), admin-entered at the Approved/Paid -> Item Picked Up transition
   lateDays?: number;
   lateFee?: number;
+  amountPaid?: number; // total collected so far; undefined/0 while still Pending. remainingBalance is always derived (totalPrice + (lateFee||0)) - amountPaid, never stored.
 }
 
 // Public-safe projection of Order for the customer-facing confirmation page -
@@ -65,7 +66,8 @@ export type PublicOrder = Omit<Order, 'personalPhotoBase64'>;
 
 export interface DashboardStats {
   activeRentalsCount: number;
-  totalRevenue: number;
+  totalRevenue: number; // cash actually collected (sum of amountPaid), not accrued totalPrice
+  totalOutstanding: number; // sum of remaining unpaid balance across confirmed/active orders ("Piutang")
   dueTodayCount: number;
 }
 

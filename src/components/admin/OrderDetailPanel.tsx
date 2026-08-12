@@ -20,7 +20,8 @@ interface OrderDetailPanelProps {
   products: Product[];
   settings: StoreSettings;
   onClose: () => void;
-  onUpdateStatus: (orderId: string, newStatus: OrderStatus, pickupIdType?: string) => void;
+  onUpdateStatus: (orderId: string, newStatus: OrderStatus, pickupIdType?: string, amountPaid?: number) => void;
+  onUpdatePayment: (orderId: string, amountPaid: number) => void;
   showLateCalc: boolean;
   onOpenLateCalc: () => void;
   customReturnDateTime: string;
@@ -36,6 +37,7 @@ export default function OrderDetailPanel({
   settings,
   onClose,
   onUpdateStatus,
+  onUpdatePayment,
   showLateCalc,
   onOpenLateCalc,
   customReturnDateTime,
@@ -48,6 +50,11 @@ export default function OrderDetailPanel({
   const [pickupIdTypeSelect, setPickupIdTypeSelect] = useState('');
   const [pickupIdTypeCustom, setPickupIdTypeCustom] = useState('');
 
+  const [showPaymentConfirm, setShowPaymentConfirm] = useState(false);
+  const [paymentAmountInput, setPaymentAmountInput] = useState(String(order.totalPrice));
+  const [showEditPayment, setShowEditPayment] = useState(false);
+  const [editPaymentInput, setEditPaymentInput] = useState(String(order.amountPaid ?? 0));
+
   const resolvedPickupIdType = pickupIdTypeSelect === 'Lainnya' ? pickupIdTypeCustom.trim() : pickupIdTypeSelect;
   const canConfirmPickup = pickupIdTypeSelect !== '' && (pickupIdTypeSelect !== 'Lainnya' || pickupIdTypeCustom.trim() !== '');
 
@@ -57,6 +64,19 @@ export default function OrderDetailPanel({
     setPickupIdTypeSelect('');
     setPickupIdTypeCustom('');
   };
+
+  const handleConfirmPayment = () => {
+    onUpdateStatus(order.id, 'Approved/Paid', undefined, Number(paymentAmountInput));
+    setShowPaymentConfirm(false);
+  };
+
+  const handleSaveEditPayment = () => {
+    onUpdatePayment(order.id, Number(editPaymentInput));
+    setShowEditPayment(false);
+  };
+
+  const totalInvoice = (order.totalPrice || 0) + (order.lateFee || 0);
+  const remainingBalance = totalInvoice - (order.amountPaid || 0);
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex justify-end transition-opacity">
@@ -183,9 +203,69 @@ export default function OrderDetailPanel({
             <div className="border-t-2 border-dashed border-black pt-3 flex justify-between items-baseline">
               <span className="text-xs font-black text-black uppercase tracking-wider">Total Invoice:</span>
               <span className="text-lg font-black text-black font-mono">
-                Rp {((order.totalPrice || 0) + (order.lateFee || 0)).toLocaleString('id-ID')}
+                Rp {totalInvoice.toLocaleString('id-ID')}
               </span>
             </div>
+
+            {order.amountPaid !== undefined && (
+              <div className="border-t-2 border-black pt-3 space-y-2">
+                <div className="flex justify-between items-baseline font-bold text-xs uppercase text-zinc-700">
+                  <span className="flex items-center gap-1.5">
+                    Sudah Dibayar:
+                    {!showEditPayment && (
+                      <button
+                        type="button"
+                        onClick={() => { setEditPaymentInput(String(order.amountPaid ?? 0)); setShowEditPayment(true); }}
+                        className="text-[9px] font-black text-zinc-400 hover:text-black underline cursor-pointer normal-case"
+                      >
+                        Edit
+                      </button>
+                    )}
+                  </span>
+                  <span className="font-mono text-black font-black">
+                    Rp {(order.amountPaid || 0).toLocaleString('id-ID')}
+                  </span>
+                </div>
+
+                {showEditPayment && (
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      min={0}
+                      max={totalInvoice}
+                      value={editPaymentInput}
+                      onChange={(e) => setEditPaymentInput(e.target.value)}
+                      className="flex-1 bg-white border-2 border-black px-3 py-1.5 text-xs font-bold rounded-none focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowEditPayment(false)}
+                      className="px-3 py-1.5 bg-white border-2 border-black text-black hover:bg-zinc-100 font-black text-[10px] rounded-none uppercase tracking-wider cursor-pointer"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveEditPayment}
+                      className="px-3 py-1.5 bg-black hover:bg-brand hover:text-black text-brand font-black text-[10px] border-2 border-black rounded-none uppercase tracking-wider cursor-pointer"
+                    >
+                      Simpan
+                    </button>
+                  </div>
+                )}
+
+                {remainingBalance > 0 ? (
+                  <div className="flex justify-between items-baseline font-bold text-xs uppercase text-red-600">
+                    <span>Sisa Pembayaran:</span>
+                    <span className="font-mono font-black text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-none">
+                      Rp {remainingBalance.toLocaleString('id-ID')}
+                    </span>
+                  </div>
+                ) : (
+                  <p className="text-[10px] font-black text-emerald-600 uppercase">Lunas</p>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Personal Photo Render */}
@@ -226,13 +306,45 @@ export default function OrderDetailPanel({
               </div>
             )}
 
-            {(order.status === 'Pending' || order.status === 'Expired') && (
+            {(order.status === 'Pending' || order.status === 'Expired') && !showPaymentConfirm && (
               <button
-                onClick={() => onUpdateStatus(order.id, 'Approved/Paid')}
+                onClick={() => { setPaymentAmountInput(String(order.totalPrice)); setShowPaymentConfirm(true); }}
                 className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs border-2 border-black shadow-[3px_3px_0px_rgba(0,0,0,1)] rounded-none transition-all uppercase tracking-widest cursor-pointer"
               >
                 Konfirmasi Pembayaran (Setujui Sewa)
               </button>
+            )}
+
+            {(order.status === 'Pending' || order.status === 'Expired') && showPaymentConfirm && (
+              <div className="border-2 border-black rounded-none p-4 bg-zinc-50 space-y-3 shadow-[2px_2px_0px_rgba(0,0,0,1)]">
+                <p className="text-xs font-black text-black uppercase tracking-wide">Jumlah Dibayar Sekarang (Rp)</p>
+                <input
+                  type="number"
+                  min={0}
+                  max={order.totalPrice}
+                  value={paymentAmountInput}
+                  onChange={(e) => setPaymentAmountInput(e.target.value)}
+                  className="w-full bg-white border-2 border-black px-3 py-2.5 text-xs font-black rounded-none focus:outline-none"
+                />
+                <p className="text-[10px] text-zinc-500 font-semibold normal-case leading-relaxed">
+                  Total tagihan Rp {order.totalPrice.toLocaleString('id-ID')} sudah terisi otomatis. Jika penyewa hanya membayar sebagian (DP), ubah nominal ini sesuai yang sudah diterima &mdash; sisanya bisa dilunasi saat barang diambil atau dikembalikan.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowPaymentConfirm(false)}
+                    className="flex-1 py-2.5 bg-white border-2 border-black text-black hover:bg-zinc-100 font-black text-xs rounded-none transition-all uppercase tracking-wider cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    onClick={handleConfirmPayment}
+                    disabled={paymentAmountInput === '' || Number(paymentAmountInput) < 0 || Number(paymentAmountInput) > order.totalPrice}
+                    className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs border-2 border-black rounded-none shadow-[2px_2px_0px_rgba(0,0,0,1)] transition-all uppercase tracking-wider cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Konfirmasi Pembayaran
+                  </button>
+                </div>
+              </div>
             )}
 
             {order.status === 'Approved/Paid' && !showPickupConfirm && (

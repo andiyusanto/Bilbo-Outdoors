@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom';
-import { Order, OrderStatus, Product, FooterSettings } from '../../types';
+import { Order, Product, FooterSettings } from '../../types';
 import { formatDateLabel, formatDateTimeLabel } from '../../lib/date';
 import { calculateRentalCost } from '../../pricing';
 import bilboLogoWide from '../../assets/bilbo-logo-wide.webp';
@@ -10,16 +10,22 @@ interface OrderResiPrintProps {
   storeFooter: FooterSettings;
 }
 
-const STATUS_LABELS: Record<OrderStatus, string> = {
-  'Pending': 'PENDING - BELUM DIBAYAR',
-  'Approved/Paid': 'LUNAS - MENUNGGU PENGAMBILAN',
-  'Item Picked Up': 'LUNAS - BARANG SUDAH DIAMBIL',
-  'Item Returned/Completed': 'SELESAI - BARANG SUDAH KEMBALI',
-  'Expired': 'KEDALUWARSA - BELUM DIBAYAR',
-};
+// Can't be a static Record anymore - Approved/Paid and Item Picked Up must
+// only claim "LUNAS" (paid in full) once amountPaid actually covers the
+// invoice, otherwise a DP-only customer's receipt would falsely say so.
+function statusLabel(order: Order, remainingBalance: number): string {
+  if (order.status === 'Pending') return 'PENDING - BELUM DIBAYAR';
+  if (order.status === 'Expired') return 'KEDALUWARSA - BELUM DIBAYAR';
+  if (order.status === 'Item Returned/Completed') return 'SELESAI - BARANG SUDAH KEMBALI';
+  const suffix = order.status === 'Item Picked Up' ? 'BARANG SUDAH DIAMBIL' : 'MENUNGGU PENGAMBILAN';
+  return remainingBalance > 0
+    ? `DP DITERIMA - SISA Rp ${remainingBalance.toLocaleString('id-ID')}`
+    : `LUNAS - ${suffix}`;
+}
 
 export default function OrderResiPrint({ order, products, storeFooter }: OrderResiPrintProps) {
   const totalInvoice = (order.totalPrice || 0) + (order.lateFee || 0);
+  const remainingBalance = totalInvoice - (order.amountPaid || 0);
 
   // Portaled to a direct sibling of #root under <body>, not rendered inline
   // where OrderDetailPanel mounts it - so it sits outside the whole app's DOM
@@ -54,7 +60,7 @@ export default function OrderResiPrint({ order, products, storeFooter }: OrderRe
         </div>
         <div className="text-right">
           <p className="font-black uppercase text-[10px]">Status</p>
-          <p className="font-black">{STATUS_LABELS[order.status]}</p>
+          <p className="font-black">{statusLabel(order, remainingBalance)}</p>
         </div>
       </div>
 
@@ -121,6 +127,18 @@ export default function OrderResiPrint({ order, products, storeFooter }: OrderRe
           <span>Total Invoice</span>
           <span className="font-mono">Rp {totalInvoice.toLocaleString('id-ID')}</span>
         </div>
+        {order.amountPaid !== undefined && (
+          <div className="flex justify-between">
+            <span>Sudah Dibayar</span>
+            <span className="font-mono">Rp {order.amountPaid.toLocaleString('id-ID')}</span>
+          </div>
+        )}
+        {order.amountPaid !== undefined && remainingBalance > 0 && (
+          <div className="flex justify-between">
+            <span>Sisa Pembayaran</span>
+            <span className="font-mono">Rp {remainingBalance.toLocaleString('id-ID')}</span>
+          </div>
+        )}
         {order.pickupIdType && (
           <p className="text-[10px] pt-1">Jaminan diberikan saat pengambilan: {order.pickupIdType}</p>
         )}

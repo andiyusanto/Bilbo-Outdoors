@@ -142,7 +142,8 @@ CREATE TABLE IF NOT EXISTS orders (
   late_fee NUMERIC DEFAULT 0,
   confirmation_token VARCHAR(255),
   returned_at VARCHAR(255),
-  pickup_id_type VARCHAR(255)
+  pickup_id_type VARCHAR(255),
+  amount_paid NUMERIC
 );
 
 -- 3. Membuat Tabel Order Items (Relasi Detail Item dari Order)
@@ -254,6 +255,11 @@ CREATE TABLE IF NOT EXISTS job_entries (
 > **Sudah pernah menjalankan Step A sebelum kolom `pickup_id_type` ada?** Jalankan ini sekali di SQL Editor yang sama (aman dijalankan berulang). Kolom `id_card_base64` sekarang menyimpan foto diri pelanggan (bukan scan KTP/SIM), sedangkan `pickup_id_type` mencatat jenis kartu identitas fisik (KTP/SIM/KTA/KIP/Kartu Pelajar/dll.) yang diserahkan langsung di toko sebagai jaminan saat status pesanan berubah ke "Item Picked Up". Nullable, tanpa default - order lama tetap `NULL` selamanya, tidak ada regresi.
 > ```sql
 > ALTER TABLE orders ADD COLUMN IF NOT EXISTS pickup_id_type VARCHAR(255);
+> ```
+
+> **Sudah pernah menjalankan Step A sebelum kolom `amount_paid` di `orders` ada?** Jalankan ini sekali di SQL Editor yang sama (aman dijalankan berulang) - nullable, tanpa default, order lama tetap `NULL` selamanya (tidak ada regresi). Menyimpan total yang sudah benar-benar diterima dari penyewa - bisa berupa DP (down payment) sebagian atau pembayaran penuh, diisi saat staf menekan "Konfirmasi Pembayaran" di menu Manajemen Order, dan otomatis disesuaikan menjadi lunas saat pesanan diselesaikan (barang dikembalikan). Sisa tagihan (`total_price + late_fee - amount_paid`) selalu dihitung on-the-fly, tidak pernah disimpan sebagai kolom terpisah.
+> ```sql
+> ALTER TABLE orders ADD COLUMN IF NOT EXISTS amount_paid NUMERIC;
 > ```
 
 > **Sudah pernah menjalankan Step A sebelum kolom `active`/`product_ids` di `job_price_list` ada?** Jalankan ini sekali di SQL Editor yang sama (aman dijalankan berulang) - `active` otomatis mengisi `true` untuk semua baris yang sudah ada saat ALTER dijalankan (item lama tidak pernah tiba-tiba jadi nonaktif), dan `product_ids` (array id dari tabel `products`, dipakai menu "Item Operasional" untuk menyimpan alat rental mana saja yang jadi dasar item harga tersebut) nullable tanpa default - baris lama yang dibuat sebelum fitur ini tetap `NULL` selamanya, tidak ada regresi.

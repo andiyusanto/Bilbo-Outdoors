@@ -32,7 +32,11 @@ export default function OverviewTab({ orders, products }: OverviewTabProps) {
   const todayStr = new Date().toISOString().split('T')[0];
   const activeRentalsCount = dateFilteredOrders.filter(o => o.status === 'Approved/Paid' || o.status === 'Item Picked Up').length;
   const finishedOrPaidOrders = dateFilteredOrders.filter(o => o.status !== 'Pending' && o.status !== 'Expired');
-  const totalRevenue = finishedOrPaidOrders.reduce((sum, o) => sum + o.totalPrice + (o.lateFee || 0), 0);
+  // Cash actually collected (amountPaid), not accrued totalPrice+lateFee - a
+  // partially-paid order should only count what's actually been received.
+  const totalRevenue = finishedOrPaidOrders.reduce((sum, o) => sum + (o.amountPaid || 0), 0);
+  // Piutang - total still owed across the same order set.
+  const totalOutstanding = finishedOrPaidOrders.reduce((sum, o) => sum + Math.max(0, o.totalPrice + (o.lateFee || 0) - (o.amountPaid || 0)), 0);
   const dueTodayCount = dateFilteredOrders.filter(o => (o.status === 'Item Picked Up' || o.status === 'Approved/Paid') && (o.endDate <= todayStr)).length;
 
   // Calculate some analytics values for visual dashboard charts - also tracks
@@ -98,7 +102,7 @@ export default function OverviewTab({ orders, products }: OverviewTabProps) {
       </div>
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="bg-white border-2 border-black p-5 rounded-none flex items-center space-x-4 shadow-[4px_4px_0px_rgba(0,0,0,1)]">
           <div className="w-12 h-12 bg-zinc-100 text-black border-2 border-black rounded-none flex items-center justify-center shrink-0 shadow-[1px_1px_0px_rgba(0,0,0,1)]">
             <Clock className="w-6 h-6 stroke-[2.5]" />
@@ -117,7 +121,18 @@ export default function OverviewTab({ orders, products }: OverviewTabProps) {
           <div>
             <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Total Omset</p>
             <p className="text-2xl font-display font-black text-black mt-0.5">Rp {totalRevenue.toLocaleString('id-ID')}</p>
-            <p className="text-[10px] text-zinc-500 font-bold uppercase mt-0.5">Termasuk Denda Late-Return</p>
+            <p className="text-[10px] text-zinc-500 font-bold uppercase mt-0.5">Kas Yang Sudah Diterima</p>
+          </div>
+        </div>
+
+        <div className="bg-white border-2 border-black p-5 rounded-none flex items-center space-x-4 shadow-[4px_4px_0px_rgba(0,0,0,1)]">
+          <div className="w-12 h-12 bg-amber-100 text-black border-2 border-black rounded-none flex items-center justify-center shrink-0 shadow-[1px_1px_0px_rgba(0,0,0,1)]">
+            <DollarSign className="w-6 h-6 stroke-[2.5]" />
+          </div>
+          <div>
+            <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Piutang</p>
+            <p className="text-2xl font-display font-black text-black mt-0.5">Rp {totalOutstanding.toLocaleString('id-ID')}</p>
+            <p className="text-[10px] text-zinc-500 font-bold uppercase mt-0.5">Sisa Belum Dibayar</p>
           </div>
         </div>
 

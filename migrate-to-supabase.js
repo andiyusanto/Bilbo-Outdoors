@@ -93,8 +93,8 @@ async function runMigration() {
       const existing = await client.query('SELECT id FROM orders WHERE id = $1', [order.id]);
       if (existing.rows.length === 0) {
         await client.query(
-          `INSERT INTO orders (id, customer_name, customer_whatsapp, start_date, end_date, rent_duration, total_price, id_card_base64, status, created_at, late_days, late_fee, confirmation_token, returned_at, pickup_id_type)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+          `INSERT INTO orders (id, customer_name, customer_whatsapp, start_date, end_date, rent_duration, total_price, id_card_base64, status, created_at, late_days, late_fee, confirmation_token, returned_at, pickup_id_type, amount_paid)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
           [
             order.id,
             order.customerName,
@@ -110,7 +110,8 @@ async function runMigration() {
             Number(order.lateFee || 0),
             order.confirmationToken ?? null,
             order.returnedAt ?? null,
-            order.pickupIdType ?? null
+            order.pickupIdType ?? null,
+            order.amountPaid ?? null
           ]
         );
         console.log(`   - Order: ${order.id} by ${order.customerName} migrated.`);

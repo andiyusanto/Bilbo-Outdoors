@@ -6,7 +6,7 @@ import { formatDateLabel, getDefaultDateRange } from '../../lib/date';
 import OrderDetailPanel from './OrderDetailPanel';
 import DateInput from '../DateInput';
 
-const CSV_COLUMNS = ['Nama Penyewa', 'WhatsApp', 'Tanggal Pemesanan', 'Tanggal Mulai', 'Tanggal Selesai', 'Durasi (Hari)', 'Total Biaya (Rp)', 'Denda (Rp)', 'Hari Terlambat', 'Status'] as const;
+const CSV_COLUMNS = ['Nama Penyewa', 'WhatsApp', 'Tanggal Pemesanan', 'Tanggal Mulai', 'Tanggal Selesai', 'Durasi (Hari)', 'Total Biaya (Rp)', 'Denda (Rp)', 'Hari Terlambat', 'Sudah Dibayar (Rp)', 'Sisa Pembayaran (Rp)', 'Status'] as const;
 
 // Excel/CSV requires quoting any field containing a comma, quote, or newline -
 // and doubling internal quotes - or the file silently misparses into the wrong
@@ -27,6 +27,8 @@ function ordersToCsv(orders: Order[]): string {
     o.totalPrice,
     o.lateFee || 0,
     o.lateDays || 0,
+    o.amountPaid || 0,
+    Math.max(0, o.totalPrice + (o.lateFee || 0) - (o.amountPaid || 0)),
     o.status,
   ]);
   // Leading BOM so Excel (especially on Windows) detects UTF-8 instead of
@@ -55,6 +57,7 @@ export default function OrdersTab({ orders, products, settings, orderActions }: 
     setCustomReturnDateTime,
     lateCalculationResult,
     handleUpdateOrderStatus,
+    handleUpdatePayment,
     handleCalculateLateFees,
     handleApplyLateFeesAndComplete,
     openLateCalc,
@@ -208,6 +211,16 @@ export default function OrdersTab({ orders, products, settings, orderActions }: 
                           + DENDA: Rp {order.lateFee.toLocaleString('id-ID')} ({order.lateDays} hari)
                         </p>
                       ) : null}
+                      {(() => {
+                        const remaining = order.amountPaid !== undefined
+                          ? Math.max(0, order.totalPrice + (order.lateFee || 0) - order.amountPaid)
+                          : 0;
+                        return remaining > 0 ? (
+                          <p className="text-[9px] font-black text-amber-700 bg-amber-50 border border-amber-500 inline-block px-1.5 py-0.5 mt-1 uppercase">
+                            SISA: Rp {remaining.toLocaleString('id-ID')}
+                          </p>
+                        ) : null;
+                      })()}
                     </td>
                     <td className="px-5 py-4">
                       <span className={`inline-flex items-center px-2 py-1 text-[9px] font-black uppercase tracking-wider border-2 border-black rounded-none ${
@@ -245,6 +258,7 @@ export default function OrdersTab({ orders, products, settings, orderActions }: 
           settings={settings}
           onClose={closeOrderDetail}
           onUpdateStatus={handleUpdateOrderStatus}
+          onUpdatePayment={handleUpdatePayment}
           showLateCalc={showLateCalc}
           onOpenLateCalc={openLateCalc}
           customReturnDateTime={customReturnDateTime}

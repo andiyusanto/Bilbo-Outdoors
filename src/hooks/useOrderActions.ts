@@ -35,13 +35,13 @@ export function useOrderActions({ token, setOrders, fetchAdminData }: UseOrderAc
   const { withLoading } = useLoading();
   const { notifySuccess, notifyError } = useNotification();
 
-  const handleUpdateOrderStatus = async (orderId: string, newStatus: OrderStatus, pickupIdType?: string) => {
+  const handleUpdateOrderStatus = async (orderId: string, newStatus: OrderStatus, pickupIdType?: string, amountPaid?: number) => {
     await withLoading(async () => {
       try {
         const res = await fetch(`/api/orders/${orderId}/status`, {
           method: 'PUT',
           headers: jsonAuthHeaders(token),
-          body: JSON.stringify({ status: newStatus, pickupIdType })
+          body: JSON.stringify({ status: newStatus, pickupIdType, amountPaid })
         });
         const updatedOrder = await parseJsonOrThrow(res);
 
@@ -55,6 +55,29 @@ export function useOrderActions({ token, setOrders, fetchAdminData }: UseOrderAc
         fetchAdminData();
       } catch (err: any) {
         notifyError(`Gagal memperbarui status: ${err.message}`);
+      }
+    });
+  };
+
+  // Corrects/tops-up the amount collected on an order without touching its
+  // status - e.g. a partially-paying customer pays more before pickup.
+  const handleUpdatePayment = async (orderId: string, amountPaid: number) => {
+    await withLoading(async () => {
+      try {
+        const res = await fetch(`/api/orders/${orderId}/payment`, {
+          method: 'PUT',
+          headers: jsonAuthHeaders(token),
+          body: JSON.stringify({ amountPaid })
+        });
+        const updatedOrder = await parseJsonOrThrow(res);
+        setOrders(prev => prev.map(o => o.id === orderId ? updatedOrder : o));
+        if (selectedOrder?.id === orderId) {
+          setSelectedOrder(updatedOrder);
+        }
+        notifySuccess('Jumlah pembayaran berhasil diperbarui!');
+        fetchAdminData();
+      } catch (err: any) {
+        notifyError(`Gagal memperbarui pembayaran: ${err.message}`);
       }
     });
   };
@@ -112,6 +135,7 @@ export function useOrderActions({ token, setOrders, fetchAdminData }: UseOrderAc
     lateCalculationResult,
     setLateCalculationResult,
     handleUpdateOrderStatus,
+    handleUpdatePayment,
     handleCalculateLateFees,
     handleApplyLateFeesAndComplete,
     openLateCalc,

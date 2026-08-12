@@ -801,7 +801,7 @@ app.get('/api/orders', authenticateUser, asyncHandler(async (req, res) => {
 app.put('/api/orders/:id/status', authenticateUser, asyncHandler(async (req, res) => {
   await withDbLock(async () => {
     const { id } = req.params;
-    const { status, pickupIdType } = req.body;
+    const { status, pickupIdType, amountPaid } = req.body;
 
     const validStatuses: OrderStatus[] = ['Pending', 'Approved/Paid', 'Item Picked Up', 'Item Returned/Completed', 'Expired'];
     if (!validStatuses.includes(status)) {
@@ -821,13 +821,56 @@ app.put('/api/orders/:id/status', authenticateUser, asyncHandler(async (req, res
     if (status === 'Item Picked Up' && pickupIdType) {
       db.orders[orderIndex].pickupIdType = pickupIdType;
     }
+    // First confirmation of payment - captures how much was actually collected
+    // (a down payment or the full amount), defaulting to the full totalPrice
+    // when the client sends nothing, so the common no-DP case is unchanged.
+    // Late fee isn't known yet at this point, so the cap is just totalPrice.
+    if (status === 'Approved/Paid' && previousStatus !== 'Approved/Paid') {
+      const total = db.orders[orderIndex].totalPrice;
+      if (amountPaid !== undefined) {
+        const paid = Number(amountPaid);
+        if (isNaN(paid) || paid < 0 || paid > total) {
+          return res.status(400).json({ error: 'Jumlah pembayaran tidak valid.' });
+        }
+        db.orders[orderIndex].amountPaid = paid;
+      } else {
+        db.orders[orderIndex].amountPaid = total;
+      }
+    }
     // Stamp the actual return time once, on the transition into Completed - this
     // is what the readiness-time stock calculation anchors on (calculateAllocatedStock).
+    // Also auto-settles the remaining balance (including any late fee) here,
+    // matching the real-world flow: the renter pays off the rest on return.
     if (status === 'Item Returned/Completed' && previousStatus !== 'Item Returned/Completed') {
       db.orders[orderIndex].returnedAt = new Date().toISOString();
+      db.orders[orderIndex].amountPaid = db.orders[orderIndex].totalPrice + (db.orders[orderIndex].lateFee || 0);
     }
     await writeDB(db);
     res.json(db.orders[orderIndex]);
+  });
+}));
+
+// Admin: correct/top-up the amount collected on an order without changing its
+// status - e.g. a partially-paying customer tops up before pickup. Capped at
+// the current full invoice (totalPrice + lateFee, if already calculated).
+app.put('/api/orders/:id/payment', authenticateUser, asyncHandler(async (req, res) => {
+  await withDbLock(async () => {
+    const { id } = req.params;
+    const { amountPaid } = req.body;
+    const db = await readDB();
+    const idx = db.orders.findIndex((o: Order) => o.id === id);
+    if (idx === -1) {
+      return res.status(404).json({ error: 'Order not found.' });
+    }
+    const order = db.orders[idx];
+    const cap = order.totalPrice + (order.lateFee || 0);
+    const paid = Number(amountPaid);
+    if (isNaN(paid) || paid < 0 || paid > cap) {
+      return res.status(400).json({ error: 'Jumlah pembayaran tidak valid.' });
+    }
+    db.orders[idx].amountPaid = paid;
+    await writeDB(db);
+    res.json(db.orders[idx]);
   });
 }));
 
@@ -994,11 +1037,19 @@ app.get('/api/stats', authenticateUser, requireOwner, asyncHandler(async (req, r
     // Active rentals = orders that have been approved or items picked up
     const activeRentalsCount = orders.filter(o => o.status === 'Approved/Paid' || o.status === 'Item Picked Up').length;
 
-    // Total Revenue = Sum of totalPrice of all Approved, Picked Up, and Completed orders, plus any late fees
-    // (Expired orders were never paid, so they're excluded alongside Pending)
+    // Total Revenue = cash actually collected (amountPaid), not the accrued
+    // totalPrice+lateFee - a partially-paid order should only count what's
+    // actually been received. (Expired orders were never paid, so they're
+    // excluded alongside Pending.)
     const finishedOrPaidOrders = orders.filter(o => o.status !== 'Pending' && o.status !== 'Expired');
     const totalRevenue = finishedOrPaidOrders.reduce((sum, o) => {
-      return sum + o.totalPrice + (o.lateFee || 0);
+      return sum + (o.amountPaid || 0);
+    }, 0);
+
+    // Piutang - total still owed across the same order set (0 for orders paid
+    // in full; Completed orders auto-settle to 0 on return, see PUT .../status).
+    const totalOutstanding = finishedOrPaidOrders.reduce((sum, o) => {
+      return sum + Math.max(0, o.totalPrice + (o.lateFee || 0) - (o.amountPaid || 0));
     }, 0);
 
     // Items due for return today = Active orders with EndDate === todayStr or before today and not completed
@@ -1009,6 +1060,7 @@ app.get('/api/stats', authenticateUser, requireOwner, asyncHandler(async (req, r
     res.json({
       activeRentalsCount,
       totalRevenue,
+      totalOutstanding,
       dueTodayCount
     });
   });

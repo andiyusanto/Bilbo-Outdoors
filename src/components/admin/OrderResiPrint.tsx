@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { Order, OrderStatus, Product, FooterSettings } from '../../types';
 import { formatDateLabel, formatDateTimeLabel } from '../../lib/date';
 import { calculateRentalCost } from '../../pricing';
@@ -20,7 +21,14 @@ const STATUS_LABELS: Record<OrderStatus, string> = {
 export default function OrderResiPrint({ order, products, storeFooter }: OrderResiPrintProps) {
   const totalInvoice = (order.totalPrice || 0) + (order.lateFee || 0);
 
-  return (
+  // Portaled to a direct sibling of #root under <body>, not rendered inline
+  // where OrderDetailPanel mounts it - so it sits outside the whole app's DOM
+  // subtree and stays in normal document flow for print. See index.css's
+  // @media print block (hides #root, not this) for why that matters: a resi
+  // with enough items to span multiple pages needs normal flow to paginate
+  // correctly, which an element nested deep inside the app (and therefore
+  // needing position:absolute to reach the page's top-left) can't do.
+  return createPortal(
     <div id="print-resi" className="hidden print:block p-8 text-black bg-white text-xs font-bold leading-relaxed">
       <div className="flex items-center justify-between border-b-2 border-black pb-4 mb-4">
         <div className="flex items-center gap-3">
@@ -126,6 +134,7 @@ export default function OrderResiPrint({ order, products, storeFooter }: OrderRe
           <div className="border-t-2 border-black pt-1.5 mx-6">Tanda Tangan Staff</div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

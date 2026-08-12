@@ -59,20 +59,16 @@
 }
 
 /* Print only #print-resi (Cetak Resi in OrderDetailPanel), nothing else on the
-   page - visibility (unlike display) is inherited but a descendant can still
-   re-declare visible even while its ancestors are hidden. */
+   page. #print-resi is portaled to a direct sibling of #root (see
+   OrderResiPrint.tsx), so simply hiding the whole app is enough to isolate it -
+   it stays in normal document flow, so a resi with enough items to span
+   multiple pages (e.g. on A5) paginates correctly. An earlier version used
+   visibility:hidden + position:absolute to achieve this without a portal, but
+   position:absolute takes an element out of flow, which broke pagination for
+   any resi taller than one page (content would overlap/duplicate across
+   pages instead of flowing to page 2 cleanly). */
 @media print {
-  body * {
-    visibility: hidden;
-  }
-  #print-resi,
-  #print-resi * {
-    visibility: visible;
-  }
-  #print-resi {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
+  #root {
+    display: none;
   }
 }

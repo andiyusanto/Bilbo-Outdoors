@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { MapPin, Instagram, Phone } from 'lucide-react';
+import { MapPin, Instagram, Phone, Search } from 'lucide-react';
 import { Product } from '../types';
 import { calculateRentalCost, calculateSavingsFor5Days } from '../pricing';
 import { getDistinctCategories } from '../lib/categories';
@@ -89,6 +89,9 @@ export default function ClientPortal({ onAdminToggle, runningText }: ClientPorta
   // Category filter state
   const [activeCategory, setActiveCategory] = useState<string>('ALL');
 
+  // Search filter state
+  const [productSearch, setProductSearch] = useState<string>('');
+
   // Categories list - derived from live products so newly admin-added
   // categories (see ProductFormModal's "add new category" flow) show up here
   // automatically, no separate hardcoded list to keep in sync.
@@ -132,11 +135,20 @@ export default function ClientPortal({ onAdminToggle, runningText }: ClientPorta
     return total;
   };
 
-  // Filter products by active category selection, then surface discounted
-  // items first (highest discount first) - items with no discount all tie at
-  // 0 and keep their existing relative order via the stable sort.
+  // Filter products by active category selection and search text, then
+  // surface discounted items first (highest discount first) - items with no
+  // discount all tie at 0 and keep their existing relative order via the
+  // stable sort. Search matches customer-relevant fields only (not
+  // rates/prices, unlike the admin-only Manajemen Stok search).
+  const hasActiveFilter = activeCategory !== 'ALL' || productSearch.trim() !== '';
   const filteredProducts = products
     .filter(p => activeCategory === 'ALL' || p.category === activeCategory)
+    .filter(p => {
+      const q = productSearch.trim().toLowerCase();
+      if (!q) return true;
+      return [p.name, p.category, p.description, p.varian, p.size, p.color]
+        .some(field => field?.toLowerCase().includes(q));
+    })
     .sort((a, b) => calculateSavingsFor5Days(b.rates) - calculateSavingsFor5Days(a.rates));
 
   return (
@@ -209,6 +221,17 @@ export default function ClientPortal({ onAdminToggle, runningText }: ClientPorta
             rentDuration={rentDuration}
           />
 
+          <div className="relative">
+            <Search className="w-4 h-4 text-black absolute left-3 top-3.5 stroke-[2.5]" />
+            <input
+              type="text"
+              placeholder="Cari nama alat sewa..."
+              value={productSearch}
+              onChange={(e) => setProductSearch(e.target.value)}
+              className="pl-9 pr-4 py-2.5 text-xs bg-white border-2 border-black rounded-none focus:bg-brand/10 focus:outline-none w-full font-black tracking-wider"
+            />
+          </div>
+
           <CategoryFilterTabs
             categories={categories}
             activeCategory={activeCategory}
@@ -218,6 +241,7 @@ export default function ClientPortal({ onAdminToggle, runningText }: ClientPorta
           <EquipmentGrid
             loadingProducts={loadingProducts}
             filteredProducts={filteredProducts}
+            hasActiveFilter={hasActiveFilter}
             cart={cart}
             stockDetails={stockDetails}
             startDate={startDate}

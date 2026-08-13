@@ -13,6 +13,7 @@ interface StockInfo {
 interface EquipmentGridProps {
   loadingProducts: boolean;
   filteredProducts: Product[];
+  hasActiveFilter: boolean;
   cart: Record<string, number>;
   stockDetails: Record<string, StockInfo>;
   startDate: string;
@@ -24,6 +25,7 @@ interface EquipmentGridProps {
 export default function EquipmentGrid({
   loadingProducts,
   filteredProducts,
+  hasActiveFilter,
   cart,
   stockDetails,
   startDate,
@@ -44,7 +46,7 @@ export default function EquipmentGrid({
   if (filteredProducts.length === 0) {
     return (
       <div className="py-20 text-center text-xs font-bold uppercase tracking-wider text-zinc-400 bg-white border-2 border-black rounded-none">
-        Tidak ada produk di kategori ini.
+        {hasActiveFilter ? 'Tidak ada alat yang cocok dengan pencarian atau kategori.' : 'Tidak ada produk di kategori ini.'}
       </div>
     );
   }

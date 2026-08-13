@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { Clock, DollarSign, Calendar, ChevronDown } from 'lucide-react';
-import { Order, Product, DashboardStats } from '../../types';
+import { OrderListItem, Product, DashboardStats } from '../../types';
 import { getDefaultDateRange, getTodayDateString } from '../../lib/date';
 import { getAmountPaid, getRemainingBalance } from '../../pricing';
 import DateInput from '../DateInput';
 
 interface OverviewTabProps {
   stats: DashboardStats;
-  orders: Order[];
+  orders: OrderListItem[];
   products: Product[];
 }
 

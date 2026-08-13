@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Product, Order, DashboardStats, StoreSettings, PublicUser, JobPriceListItem, JobEntry, UserRole } from '../types';
+import { Product, OrderListItem, DashboardStats, StoreSettings, PublicUser, JobPriceListItem, JobEntry, UserRole } from '../types';
 import { authHeaders, parseJsonOrThrow } from '../lib/api';
 import { useLoading } from '../contexts/LoadingContext';
 
@@ -34,7 +34,7 @@ const DEFAULT_SETTINGS: StoreSettings = {
 };
 
 export function useAdminData({ isLoggedIn, token, role, onUnauthorized }: UseAdminDataParams) {
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<OrderListItem[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [stats, setStats] = useState<DashboardStats>({
     activeRentalsCount: 0,

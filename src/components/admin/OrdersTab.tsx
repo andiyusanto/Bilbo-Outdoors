@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Search, ChevronRight, FileSpreadsheet } from 'lucide-react';
-import { Order, Product, StoreSettings } from '../../types';
+import { OrderListItem, Product, StoreSettings } from '../../types';
 import { useOrderActions } from '../../hooks/useOrderActions';
 import { formatDateLabel, formatDateTimeLabel, getDefaultDateRange } from '../../lib/date';
 import { getAmountPaid, getRemainingBalance, getPenaltyTotal } from '../../pricing';
@@ -17,7 +17,7 @@ function csvField(value: string | number): string {
   return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
 }
 
-function ordersToCsv(orders: Order[]): string {
+function ordersToCsv(orders: OrderListItem[]): string {
   const rows = orders.map(o => [
     o.customerName,
     o.customerWhatsApp,
@@ -39,7 +39,7 @@ function ordersToCsv(orders: Order[]): string {
 }
 
 interface OrdersTabProps {
-  orders: Order[];
+  orders: OrderListItem[];
   products: Product[];
   settings: StoreSettings;
   orderActions: ReturnType<typeof useOrderActions>;
@@ -53,11 +53,11 @@ export default function OrdersTab({ orders, products, settings, orderActions }: 
 
   const {
     selectedOrder,
-    setSelectedOrder,
     showLateCalc,
     customReturnDateTime,
     setCustomReturnDateTime,
     lateCalculationResult,
+    handleOpenOrderDetail,
     handleUpdateOrderStatus,
     handleUpdatePayment,
     handleAddPenalty,
@@ -254,7 +254,7 @@ export default function OrdersTab({ orders, products, settings, orderActions }: 
                     </td>
                     <td className="px-5 py-4 text-right">
                       <button
-                        onClick={() => setSelectedOrder(order)}
+                        onClick={() => handleOpenOrderDetail(order.id)}
                         className="text-xs font-black uppercase tracking-widest text-black hover:bg-black hover:text-brand bg-zinc-100 px-3 py-2 rounded-none border-2 border-black shadow-[2px_2px_0px_rgba(0,0,0,1)] transition-all cursor-pointer inline-flex items-center"
                       >
                         Detail Order

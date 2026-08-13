@@ -86,6 +86,12 @@ export interface PenaltyEntry {
 // reach this unauthenticated endpoint.
 export type PublicOrder = Omit<Order, 'personalPhotoBase64' | 'statusHistory' | 'penalties'>;
 
+// List-view projection - the orders array fetched on login/refresh never
+// needs personalPhotoBase64 (only OrderDetailPanel does, via a dedicated
+// single-order fetch - see handleOpenOrderDetail). Keeps the list payload
+// from scaling with every order's photo forever.
+export type OrderListItem = Omit<Order, 'personalPhotoBase64'>;
+
 export interface DashboardStats {
   activeRentalsCount: number;
   totalRevenue: number; // cash actually collected (sum of amountPaid), not accrued totalPrice

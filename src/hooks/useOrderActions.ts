@@ -1,12 +1,12 @@
 import { useState, Dispatch, SetStateAction } from 'react';
-import { Order, OrderStatus } from '../types';
+import { Order, OrderListItem, OrderStatus } from '../types';
 import { jsonAuthHeaders, parseJsonOrThrow } from '../lib/api';
 import { useLoading } from '../contexts/LoadingContext';
 import { useNotification } from '../contexts/NotificationContext';
 
 interface UseOrderActionsParams {
   token: string;
-  setOrders: Dispatch<SetStateAction<Order[]>>;
+  setOrders: Dispatch<SetStateAction<OrderListItem[]>>;
   fetchAdminData: () => Promise<void>;
 }
 
@@ -34,6 +34,21 @@ export function useOrderActions({ token, setOrders, fetchAdminData }: UseOrderAc
   } | null>(null);
   const { withLoading } = useLoading();
   const { notifySuccess, notifyError } = useNotification();
+
+  // Fetches the full order (including personalPhotoBase64, omitted from the
+  // list payload - see GET /api/orders/:id) and opens the detail panel with
+  // it, rather than reusing the photo-less list item the click came from.
+  const handleOpenOrderDetail = async (orderId: string) => {
+    await withLoading(async () => {
+      try {
+        const res = await fetch(`/api/orders/${orderId}`, { headers: jsonAuthHeaders(token) });
+        const fullOrder = await parseJsonOrThrow(res);
+        setSelectedOrder(fullOrder);
+      } catch (err: any) {
+        notifyError(`Gagal membuka detail pesanan: ${err.message}`);
+      }
+    });
+  };
 
   const handleUpdateOrderStatus = async (orderId: string, newStatus: OrderStatus, pickupIdType?: string, amountPaid?: number) => {
     await withLoading(async () => {
@@ -178,6 +193,7 @@ export function useOrderActions({ token, setOrders, fetchAdminData }: UseOrderAc
     setCustomReturnDateTime,
     lateCalculationResult,
     setLateCalculationResult,
+    handleOpenOrderDetail,
     handleUpdateOrderStatus,
     handleUpdatePayment,
     handleAddPenalty,

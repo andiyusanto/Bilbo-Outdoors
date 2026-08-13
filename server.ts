@@ -4,7 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { createServer as createViteServer } from 'vite';
-import { Product, Order, OrderItem, OrderStatus, PenaltyEntry, PublicOrder, DashboardStats, StoreSettings, AppUser, PublicUser, UserRole, JobPriceListItem, JobEntry, JobType } from './src/types';
+import { Product, Order, OrderItem, OrderStatus, PenaltyEntry, PublicOrder, OrderListItem, DashboardStats, StoreSettings, AppUser, PublicUser, UserRole, JobPriceListItem, JobEntry, JobType } from './src/types';
 import { defaultProducts } from './db/defaultProducts';
 import { defaultSettings } from './db/defaultSettings';
 import { defaultUsers } from './db/defaultUsers';
@@ -794,15 +794,33 @@ app.get('/api/orders/confirm/:token', asyncHandler(async (req, res) => {
   res.json(publicOrder);
 }));
 
-// Admin: Get all orders
+// Admin: Get all orders - strips personalPhotoBase64 (see GET /api/orders/:id
+// below for the single-order fetch that includes it) so this list payload
+// doesn't grow with every order's photo forever.
 app.get('/api/orders', authenticateUser, asyncHandler(async (req, res) => {
   await withDbLock(async () => {
     const db = await readDB();
     if (expireStaleOrders(db)) {
       await writeDB(db);
     }
-    res.json(db.orders);
+    const orderList: OrderListItem[] = db.orders.map((o: Order) => {
+      const { personalPhotoBase64, ...rest } = o;
+      return rest;
+    });
+    res.json(orderList);
   });
+}));
+
+// Admin: Get a single order in full (including personalPhotoBase64) - used
+// by OrderDetailPanel when opened, since the list above omits the photo.
+app.get('/api/orders/:id', authenticateUser, asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const db = await readDB();
+  const order = db.orders.find((o: Order) => o.id === id);
+  if (!order) {
+    return res.status(404).json({ error: 'Order not found.' });
+  }
+  res.json(order);
 }));
 
 // Admin: Update order status

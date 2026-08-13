@@ -1,9 +1,12 @@
 import { useState } from 'react';
-import { Phone, UserCheck, AlertTriangle, CheckCircle, Clock, Printer } from 'lucide-react';
+import { Phone, UserCheck, AlertTriangle, CheckCircle, Clock, Printer, Search, Pencil } from 'lucide-react';
 import { Order, OrderStatus, Product, StoreSettings } from '../../types';
-import { formatDateLabel, formatDateTimeLabel } from '../../lib/date';
+import { formatDateLabel, formatDateTimeLabel, getTodayDateString } from '../../lib/date';
 import { calculateRentalCost, getRemainingBalance, getPenaltyTotal } from '../../pricing';
+import { getDistinctCategories } from '../../lib/categories';
+import { useOrderEditActions } from '../../hooks/useOrderEditActions';
 import DateInput from '../DateInput';
+import CategoryFilterTabs from '../client/CategoryFilterTabs';
 import OrderResiPrint from './OrderResiPrint';
 
 const PICKUP_ID_TYPE_OPTIONS = ['KTP', 'SIM', 'KTA', 'KIP', 'Kartu Pelajar', 'Lainnya'];
@@ -31,6 +34,7 @@ interface OrderDetailPanelProps {
   onCalculateLateFees: () => void;
   lateCalculationResult: LateCalculationResult | null;
   onApplyLateFeesAndComplete: () => void;
+  orderEditActions: ReturnType<typeof useOrderEditActions>;
 }
 
 export default function OrderDetailPanel({
@@ -49,7 +53,26 @@ export default function OrderDetailPanel({
   onCalculateLateFees,
   lateCalculationResult,
   onApplyLateFeesAndComplete,
+  orderEditActions,
 }: OrderDetailPanelProps) {
+  const {
+    showEditOrder,
+    editStartDate,
+    setEditStartDate,
+    editEndDate,
+    setEditEndDate,
+    editItems,
+    setEditItems,
+    editAvailability,
+    editProductSearch,
+    setEditProductSearch,
+    editCategory,
+    setEditCategory,
+    openEditOrder,
+    closeEditOrder,
+    handleSaveOrderEdit,
+  } = orderEditActions;
+
   const [showPickupConfirm, setShowPickupConfirm] = useState(false);
   const [pickupIdTypeSelect, setPickupIdTypeSelect] = useState('');
   const [pickupIdTypeCustom, setPickupIdTypeCustom] = useState('');
@@ -103,6 +126,52 @@ export default function OrderDetailPanel({
   const totalInvoice = (order.totalPrice || 0) + (order.lateFee || 0) + penaltyTotal;
   const remainingBalance = getRemainingBalance(order);
 
+  // Edit-order form derived values - live client-side preview only, the
+  // server recomputes rentDuration/totalPrice authoritatively on save.
+  const editCategories = ['ALL', ...getDistinctCategories(products)];
+  const editFilteredProducts = products
+    .filter(p => editCategory === 'ALL' || p.category === editCategory)
+    .filter(p => {
+      const q = editProductSearch.trim().toLowerCase();
+      if (!q) return true;
+      return [p.name, p.category, p.description, p.varian, p.size, p.color]
+        .some(field => field?.toLowerCase().includes(q));
+    });
+  // Items already on this order whose product no longer exists in the live
+  // catalog (deleted since booking) - no rate table to reprice against, so
+  // these can only be removed, not adjusted.
+  const staleEditItems = Object.keys(editItems)
+    .filter(pId => editItems[pId] > 0 && !products.some(p => p.id === pId));
+  const editRentDuration = (() => {
+    if (!editStartDate || !editEndDate) return 0;
+    const start = new Date(editStartDate);
+    const end = new Date(editEndDate);
+    if (end < start) return 0;
+    // Same non-inclusive "nights" formula as order creation (server.ts).
+    const diffTime = Math.abs(end.getTime() - start.getTime());
+    return Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+  })();
+  const editTotalPrice = Object.entries(editItems).reduce((sum: number, [pId, qty]: [string, number]) => {
+    if (qty <= 0) return sum;
+    const product = products.find(p => p.id === pId);
+    if (!product) return sum;
+    return sum + calculateRentalCost(product.rates, editRentDuration) * qty;
+  }, 0);
+  const canSaveEdit = editStartDate !== '' && editEndDate !== '' && editRentDuration > 0
+    && Object.values(editItems).some((qty: number) => qty > 0) && staleEditItems.length === 0;
+
+  const updateEditItemQty = (productId: string, quantity: number) => {
+    setEditItems(prev => {
+      const next = { ...prev };
+      if (quantity <= 0) {
+        delete next[productId];
+      } else {
+        next[productId] = quantity;
+      }
+      return next;
+    });
+  };
+
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex justify-end transition-opacity">
       <div className="bg-white w-full max-w-lg h-full flex flex-col shadow-2xl relative overflow-hidden">
@@ -151,61 +220,184 @@ export default function OrderDetailPanel({
               </div>
             </div>
 
-            <div className="border-t-2 border-black pt-3 flex items-center justify-between">
-              <div>
-                <p className="text-[10px] text-zinc-500 font-black uppercase tracking-wider">Jadwal Sewa</p>
-                <p className="text-xs text-black mt-1 font-black uppercase">
-                  {formatDateLabel(order.startDate)} s/d {formatDateLabel(order.endDate)}
-                </p>
+            {!showEditOrder && (
+              <div className="border-t-2 border-black pt-3 flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] text-zinc-500 font-black uppercase tracking-wider">Jadwal Sewa</p>
+                  <p className="text-xs text-black mt-1 font-black uppercase">
+                    {formatDateLabel(order.startDate)} s/d {formatDateLabel(order.endDate)}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] text-zinc-500 font-black uppercase tracking-wider">Total Durasi</p>
+                  <p className="text-xs text-black mt-1 font-black font-mono">
+                    {order.rentDuration} HARI
+                  </p>
+                </div>
               </div>
-              <div className="text-right">
-                <p className="text-[10px] text-zinc-500 font-black uppercase tracking-wider">Total Durasi</p>
-                <p className="text-xs text-black mt-1 font-black font-mono">
-                  {order.rentDuration} HARI
-                </p>
+            )}
+
+            {order.status === 'Pending' && !showEditOrder && (
+              <div className="border-t-2 border-black pt-3">
+                <button
+                  type="button"
+                  onClick={() => openEditOrder(order)}
+                  className="w-full py-2 bg-white border-2 border-black text-black hover:bg-black hover:text-brand font-black text-[10px] rounded-none uppercase tracking-widest cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <Pencil className="w-3 h-3 stroke-[2.5]" />
+                  Edit Pesanan (Item & Tanggal)
+                </button>
               </div>
-            </div>
+            )}
           </div>
 
-          {/* Item Details */}
-          <div>
-            <h4 className="text-[10px] font-black uppercase text-zinc-400 tracking-wider mb-2.5">Rincian Peralatan Rented</h4>
-            <div className="border-2 border-black rounded-none overflow-hidden divide-y-2 divide-black bg-white shadow-[2px_2px_0px_rgba(0,0,0,1)]">
-              {order.items.map((item, index) => {
-                // Live lookup, not snapshotted - varian/size/color are pure catalog
-                // metadata (like the product's own display on the public page),
-                // not price-relevant, so no order-time integrity concern here.
-                const product = products.find((p) => p.id === item.productId);
-                const attrLine = product && (product.varian || product.size || product.color)
-                  ? [
-                      product.varian && `Varian: ${product.varian}`,
-                      product.size && `Ukuran: ${product.size}`,
-                      product.color && `Warna: ${product.color}`,
-                    ].filter(Boolean).join('   •   ')
-                  : null;
-                return (
-                  <div key={index} className="p-3.5 flex items-center justify-between hover:bg-brand/5">
-                    <div>
-                      <p className="text-xs font-black text-black uppercase">{item.productName}</p>
-                      {attrLine && (
-                        <p className="text-[10px] text-zinc-500 font-bold uppercase mt-0.5">{attrLine}</p>
-                      )}
-                      <p className="text-[10px] text-zinc-600 font-bold uppercase mt-1">
-                        {item.ratesSnapshot ? (
-                          `${order.rentDuration} Hari: Rp ${calculateRentalCost(item.ratesSnapshot, order.rentDuration).toLocaleString('id-ID')}`
-                        ) : item.legacyPricePerDay !== undefined ? (
-                          `Rp ${item.legacyPricePerDay.toLocaleString('id-ID')}/hari${(item.legacyIncrementalPrice ?? 0) > 0 ? ` (-Rp ${(item.legacyIncrementalPrice ?? 0).toLocaleString('id-ID')}/hari diskon setelah ${item.legacyDiscountThresholdDays ?? 5} hari)` : ''}`
-                        ) : null}
-                      </p>
-                    </div>
-                    <span className="text-xs font-black bg-brand/10 border-2 border-black px-2.5 py-1 rounded-none font-mono text-black">
-                      {item.quantity} UNIT
-                    </span>
+          {showEditOrder ? (
+            <div className="border-2 border-black rounded-none p-4 bg-zinc-50 space-y-4 shadow-[2px_2px_0px_rgba(0,0,0,1)]">
+              <h4 className="text-[10px] font-black uppercase text-zinc-400 tracking-wider">Edit Jadwal & Item</h4>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-[10px] text-zinc-500 font-black uppercase tracking-wider mb-1">Tanggal Mulai</p>
+                  <DateInput
+                    value={editStartDate}
+                    onChange={setEditStartDate}
+                    min={getTodayDateString()}
+                    className="w-full rounded-none border-2 border-black px-3 py-2 text-xs font-bold bg-white uppercase text-black"
+                  />
+                </div>
+                <div>
+                  <p className="text-[10px] text-zinc-500 font-black uppercase tracking-wider mb-1">Tanggal Selesai</p>
+                  <DateInput
+                    value={editEndDate}
+                    onChange={setEditEndDate}
+                    min={editStartDate || getTodayDateString()}
+                    className="w-full rounded-none border-2 border-black px-3 py-2 text-xs font-bold bg-white uppercase text-black"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-between items-baseline text-xs font-black uppercase bg-white border-2 border-black px-3 py-2">
+                <span>{editRentDuration > 0 ? `${editRentDuration} Hari` : 'Pilih tanggal'}</span>
+                <span className="font-mono">Rp {editTotalPrice.toLocaleString('id-ID')}</span>
+              </div>
+
+              {staleEditItems.length > 0 && (
+                <div className="bg-red-50 border-2 border-red-500 text-red-800 text-[10px] p-2.5 rounded-none font-bold uppercase">
+                  {staleEditItems.length} item pada pesanan ini sudah tidak ada di katalog. Hapus item tersebut untuk melanjutkan.
+                  <div className="mt-2 space-y-1.5">
+                    {staleEditItems.map(pId => (
+                      <div key={pId} className="flex justify-between items-center bg-white border border-red-300 px-2 py-1.5">
+                        <span className="normal-case">{order.items.find(i => i.productId === pId)?.productName ?? pId}</span>
+                        <button type="button" onClick={() => updateEditItemQty(pId, 0)} className="text-red-600 hover:text-red-800 underline cursor-pointer">Hapus</button>
+                      </div>
+                    ))}
                   </div>
-                );
-              })}
+                </div>
+              )}
+
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-black absolute left-2.5 top-2.5 stroke-[2.5]" />
+                <input
+                  type="text"
+                  placeholder="Cari alat..."
+                  value={editProductSearch}
+                  onChange={(e) => setEditProductSearch(e.target.value)}
+                  className="pl-8 pr-3 py-1.5 text-[11px] bg-white border-2 border-black rounded-none focus:bg-brand/10 focus:outline-none w-full font-black tracking-wider"
+                />
+              </div>
+
+              <CategoryFilterTabs categories={editCategories} activeCategory={editCategory} setActiveCategory={setEditCategory} />
+
+              <div className="border-2 border-black rounded-none overflow-hidden divide-y-2 divide-black bg-white max-h-72 overflow-y-auto">
+                {editFilteredProducts.length === 0 ? (
+                  <p className="p-3 text-[10px] text-zinc-400 font-bold uppercase text-center">Tidak ada alat yang cocok.</p>
+                ) : editFilteredProducts.map((prod) => {
+                  const qty = editItems[prod.id] || 0;
+                  const maxQty = editAvailability[prod.id]?.remaining ?? prod.stock;
+                  return (
+                    <div key={prod.id} className="p-2.5 flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-black text-black uppercase truncate">{prod.name}</p>
+                        <p className="text-[9px] text-zinc-500 font-bold uppercase">Tersisa: {maxQty}</p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => updateEditItemQty(prod.id, Math.max(0, qty - 1))}
+                          disabled={qty <= 0}
+                          className="w-6 h-6 flex items-center justify-center bg-white border-2 border-black font-black text-xs rounded-none cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                        >-</button>
+                        <span className="w-5 text-center font-mono font-black text-xs">{qty}</span>
+                        <button
+                          type="button"
+                          onClick={() => updateEditItemQty(prod.id, qty + 1)}
+                          disabled={qty >= maxQty}
+                          className="w-6 h-6 flex items-center justify-center bg-black text-brand border-2 border-black font-black text-xs rounded-none cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                        >+</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={closeEditOrder}
+                  className="flex-1 py-2.5 bg-white border-2 border-black text-black hover:bg-zinc-100 font-black text-xs rounded-none uppercase tracking-wider cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveOrderEdit}
+                  disabled={!canSaveEdit}
+                  className="flex-1 py-2.5 bg-black hover:bg-brand hover:text-black text-brand font-black text-xs border-2 border-black rounded-none uppercase tracking-wider cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Simpan Perubahan
+                </button>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div>
+              <h4 className="text-[10px] font-black uppercase text-zinc-400 tracking-wider mb-2.5">Rincian Peralatan Rented</h4>
+              <div className="border-2 border-black rounded-none overflow-hidden divide-y-2 divide-black bg-white shadow-[2px_2px_0px_rgba(0,0,0,1)]">
+                {order.items.map((item, index) => {
+                  // Live lookup, not snapshotted - varian/size/color are pure catalog
+                  // metadata (like the product's own display on the public page),
+                  // not price-relevant, so no order-time integrity concern here.
+                  const product = products.find((p) => p.id === item.productId);
+                  const attrLine = product && (product.varian || product.size || product.color)
+                    ? [
+                        product.varian && `Varian: ${product.varian}`,
+                        product.size && `Ukuran: ${product.size}`,
+                        product.color && `Warna: ${product.color}`,
+                      ].filter(Boolean).join('   •   ')
+                    : null;
+                  return (
+                    <div key={index} className="p-3.5 flex items-center justify-between hover:bg-brand/5">
+                      <div>
+                        <p className="text-xs font-black text-black uppercase">{item.productName}</p>
+                        {attrLine && (
+                          <p className="text-[10px] text-zinc-500 font-bold uppercase mt-0.5">{attrLine}</p>
+                        )}
+                        <p className="text-[10px] text-zinc-600 font-bold uppercase mt-1">
+                          {item.ratesSnapshot ? (
+                            `${order.rentDuration} Hari: Rp ${calculateRentalCost(item.ratesSnapshot, order.rentDuration).toLocaleString('id-ID')}`
+                          ) : item.legacyPricePerDay !== undefined ? (
+                            `Rp ${item.legacyPricePerDay.toLocaleString('id-ID')}/hari${(item.legacyIncrementalPrice ?? 0) > 0 ? ` (-Rp ${(item.legacyIncrementalPrice ?? 0).toLocaleString('id-ID')}/hari diskon setelah ${item.legacyDiscountThresholdDays ?? 5} hari)` : ''}`
+                          ) : null}
+                        </p>
+                      </div>
+                      <span className="text-xs font-black bg-brand/10 border-2 border-black px-2.5 py-1 rounded-none font-mono text-black">
+                        {item.quantity} UNIT
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Payment Detail Status bar */}
           <div className="border-2 border-black p-4 rounded-none space-y-4 bg-white shadow-[2px_2px_0px_rgba(0,0,0,1)]">
@@ -563,7 +755,7 @@ export default function OrderDetailPanel({
                 {order.statusHistory.map((entry, idx) => (
                   <div key={idx} className="flex justify-between items-start px-3 py-2.5">
                     <div>
-                      <p className="font-black text-black text-[11px] uppercase">{entry.status}</p>
+                      <p className="font-black text-black text-[11px] uppercase">{entry.action || entry.status}</p>
                       <p className="text-[10px] text-zinc-500 font-bold">oleh {entry.changedByName}</p>
                     </div>
                     <span className="text-[10px] text-zinc-400 font-mono font-bold whitespace-nowrap">{formatDateTimeLabel(entry.changedAt)}</span>

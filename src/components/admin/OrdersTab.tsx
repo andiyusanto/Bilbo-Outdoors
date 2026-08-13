@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Search, ChevronRight, FileSpreadsheet } from 'lucide-react';
 import { OrderListItem, Product, StoreSettings } from '../../types';
 import { useOrderActions } from '../../hooks/useOrderActions';
+import { useOrderEditActions } from '../../hooks/useOrderEditActions';
 import { formatDateLabel, formatDateTimeLabel, getDefaultDateRange } from '../../lib/date';
 import { getAmountPaid, getRemainingBalance, getPenaltyTotal } from '../../pricing';
 import OrderDetailPanel from './OrderDetailPanel';
@@ -43,9 +44,10 @@ interface OrdersTabProps {
   products: Product[];
   settings: StoreSettings;
   orderActions: ReturnType<typeof useOrderActions>;
+  orderEditActions: ReturnType<typeof useOrderEditActions>;
 }
 
-export default function OrdersTab({ orders, products, settings, orderActions }: OrdersTabProps) {
+export default function OrdersTab({ orders, products, settings, orderActions, orderEditActions }: OrdersTabProps) {
   const [orderSearch, setOrderSearch] = useState<string>('');
   const [orderStatusFilter, setOrderStatusFilter] = useState<string>('All');
   const [orderDateFrom, setOrderDateFrom] = useState<string>(() => getDefaultDateRange().from);
@@ -67,6 +69,16 @@ export default function OrdersTab({ orders, products, settings, orderActions }: 
     openLateCalc,
     closeOrderDetail,
   } = orderActions;
+
+  const { closeEditOrder } = orderEditActions;
+
+  // Closing the whole detail panel must also reset any in-progress order
+  // edit - otherwise reopening a different order could show the previous
+  // order's stale edit form still open.
+  const handleCloseOrderDetail = () => {
+    closeOrderDetail();
+    closeEditOrder();
+  };
 
   // Order Search and Filtering
   const filteredOrders = orders.filter(o => {
@@ -254,7 +266,7 @@ export default function OrdersTab({ orders, products, settings, orderActions }: 
                     </td>
                     <td className="px-5 py-4 text-right">
                       <button
-                        onClick={() => handleOpenOrderDetail(order.id)}
+                        onClick={() => { closeEditOrder(); handleOpenOrderDetail(order.id); }}
                         className="text-xs font-black uppercase tracking-widest text-black hover:bg-black hover:text-brand bg-zinc-100 px-3 py-2 rounded-none border-2 border-black shadow-[2px_2px_0px_rgba(0,0,0,1)] transition-all cursor-pointer inline-flex items-center"
                       >
                         Detail Order
@@ -275,7 +287,7 @@ export default function OrdersTab({ orders, products, settings, orderActions }: 
           order={selectedOrder}
           products={products}
           settings={settings}
-          onClose={closeOrderDetail}
+          onClose={handleCloseOrderDetail}
           onUpdateStatus={handleUpdateOrderStatus}
           onUpdatePayment={handleUpdatePayment}
           onAddPenalty={handleAddPenalty}
@@ -287,6 +299,7 @@ export default function OrdersTab({ orders, products, settings, orderActions }: 
           onCalculateLateFees={handleCalculateLateFees}
           lateCalculationResult={lateCalculationResult}
           onApplyLateFeesAndComplete={handleApplyLateFeesAndComplete}
+          orderEditActions={orderEditActions}
         />
       )}
     </div>

@@ -63,7 +63,8 @@ export interface Order {
 }
 
 export interface StatusHistoryEntry {
-  status: OrderStatus;
+  status: OrderStatus; // for a real status transition this IS the new status; for a non-transition action (see `action`) this is just the status the order was already in
+  action?: string; // overrides the displayed label, e.g. "Item/Tanggal Diubah" - absent for ordinary status transitions, which continue to display `status`
   changedAt: string; // ISO datetime
   changedByUserId: string; // AppUser.id, or 'system' for expireStaleOrders' auto-expiry transition
   changedByName: string; // snapshot of AppUser.displayName at the time, or 'Sistem (Otomatis)' for the system sentinel

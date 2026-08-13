@@ -16,6 +16,7 @@ import {
 import { useAdminAuth } from '../hooks/useAdminAuth';
 import { useAdminData } from '../hooks/useAdminData';
 import { useOrderActions } from '../hooks/useOrderActions';
+import { useOrderEditActions } from '../hooks/useOrderEditActions';
 import { useProductActions } from '../hooks/useProductActions';
 import { useSettingsActions } from '../hooks/useSettingsActions';
 import { useJobPriceActions } from '../hooks/useJobPriceActions';
@@ -63,6 +64,14 @@ export default function AdminPanel() {
   const orderActions = useOrderActions({
     token: auth.token,
     setOrders: data.setOrders,
+    fetchAdminData: data.fetchAdminData,
+  });
+
+  const orderEditActions = useOrderEditActions({
+    token: auth.token,
+    selectedOrder: orderActions.selectedOrder,
+    setOrders: data.setOrders,
+    setSelectedOrder: orderActions.setSelectedOrder,
     fetchAdminData: data.fetchAdminData,
   });
 
@@ -248,7 +257,7 @@ export default function AdminPanel() {
             )}
             <Route
               path="orders"
-              element={<OrdersTab orders={data.orders} products={data.products} settings={data.settings} orderActions={orderActions} />}
+              element={<OrdersTab orders={data.orders} products={data.products} settings={data.settings} orderActions={orderActions} orderEditActions={orderEditActions} />}
             />
             <Route
               path="inventory"

@@ -553,7 +553,7 @@ app.post('/api/products/upload-image', authenticateUser, asyncHandler(async (req
 // readiness is never applied retroactively. Active (not-yet-returned) orders are
 // unaffected by readiness and block through their scheduled endDate only, same as
 // before this feature.
-function calculateAllocatedStock(orders: Order[], products: Product[], startDateStr: string, endDateStr: string): Record<string, number> {
+function calculateAllocatedStock(orders: Order[], products: Product[], startDateStr: string, endDateStr: string, excludeOrderId?: string): Record<string, number> {
   const startReq = new Date(startDateStr);
   const endReq = new Date(endDateStr);
 
@@ -564,7 +564,10 @@ function calculateAllocatedStock(orders: Order[], products: Product[], startDate
   // Legacy completed orders (no returnedAt) are excluded entirely, same as before.
   // Expired orders never block stock either - by the time this runs, expireStaleOrders
   // has already persisted any stale Pending->Expired flip earlier in the same request.
+  // excludeOrderId lets editing an order's own items/dates check availability
+  // without that order's own current allocation counting against itself.
   const relevantOrders = orders.filter(o =>
+    o.id !== excludeOrderId &&
     o.status !== 'Expired' &&
     (o.status !== 'Item Returned/Completed' || o.returnedAt)
   );
@@ -652,7 +655,7 @@ function expireStaleOrders(db: DbShape): boolean {
 
 // Check Availability (Available to clients and admins)
 app.post('/api/check-availability', asyncHandler(async (req, res) => {
-  const { startDate, endDate, items } = req.body; // items is optional array of { productId, quantity }
+  const { startDate, endDate, items, excludeOrderId } = req.body; // items is optional array of { productId, quantity }; excludeOrderId lets an order being edited check availability without its own current allocation counting against itself
   if (!startDate || !endDate) {
     return res.status(400).json({ error: 'Missing start date or end date.' });
   }
@@ -662,7 +665,7 @@ app.post('/api/check-availability', asyncHandler(async (req, res) => {
     if (expireStaleOrders(db)) {
       await writeDB(db);
     }
-    const allocatedMap = calculateAllocatedStock(db.orders, db.products, startDate, endDate);
+    const allocatedMap = calculateAllocatedStock(db.orders, db.products, startDate, endDate, excludeOrderId);
 
     const availabilityDetails = db.products.map((prod: Product) => {
       const allocated = allocatedMap[prod.id] || 0;
@@ -821,6 +824,70 @@ app.get('/api/orders/:id', authenticateUser, asyncHandler(async (req, res) => {
     return res.status(404).json({ error: 'Order not found.' });
   }
   res.json(order);
+}));
+
+// Admin: edit a Pending order's items and/or rental dates - staff correcting
+// a booking (add/remove/swap items, change quantities, reschedule) without
+// cancelling and recreating it. Only while still Pending - once approved,
+// items/dates are considered locked in. Sends the full replacement items
+// array (not a delta), same shape as the client-side cart, so add/remove/
+// swap/change-quantity are all covered by one save.
+app.put('/api/orders/:id/edit', authenticateUser, asyncHandler(async (req, res) => {
+  await withDbLock(async () => {
+    const { id } = req.params;
+    const { startDate, endDate, items } = req.body; // items: { productId: string; quantity: number }[]
+    const db = await readDB();
+    const orderIndex = db.orders.findIndex((o: Order) => o.id === id);
+    if (orderIndex === -1) {
+      return res.status(404).json({ error: 'Order not found.' });
+    }
+    const order = db.orders[orderIndex];
+    if (order.status !== 'Pending') {
+      return res.status(400).json({ error: 'Hanya pesanan berstatus Pending yang bisa diedit.' });
+    }
+    if (!startDate || !endDate || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Tanggal dan minimal satu item wajib diisi.' });
+    }
+
+    // Same non-inclusive "nights" formula as order creation, floored at 1 day.
+    const diffTime = Math.abs(new Date(endDate).getTime() - new Date(startDate).getTime());
+    const rentDuration = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+
+    // Stock check excluding this order's own current allocation, so
+    // re-saving the same items/dates (or a smaller change) isn't rejected
+    // for "conflicting" with itself.
+    const allocatedMap = calculateAllocatedStock(db.orders, db.products, startDate, endDate, id);
+    const newItems: OrderItem[] = [];
+    let totalPrice = 0;
+    for (const it of items) {
+      const product = db.products.find((p: Product) => p.id === it.productId);
+      if (!product) {
+        return res.status(400).json({ error: 'Salah satu produk tidak ditemukan di katalog.' });
+      }
+      const qty = Number(it.quantity);
+      if (isNaN(qty) || qty <= 0) {
+        return res.status(400).json({ error: `Jumlah untuk ${product.name} tidak valid.` });
+      }
+      const remaining = product.stock - (allocatedMap[product.id] || 0);
+      if (qty > remaining) {
+        return res.status(400).json({ error: `Stok ${product.name} tidak cukup (tersisa ${remaining}).` });
+      }
+      totalPrice += calculateRentalCost(product.rates, rentDuration) * qty;
+      newItems.push({ productId: product.id, productName: product.name, quantity: qty, ratesSnapshot: { ...product.rates } });
+    }
+
+    db.orders[orderIndex] = { ...order, startDate, endDate, rentDuration, items: newItems, totalPrice };
+    db.orders[orderIndex].statusHistory = db.orders[orderIndex].statusHistory || [];
+    db.orders[orderIndex].statusHistory.push({
+      status: order.status,
+      action: 'Item/Tanggal Diubah',
+      changedAt: new Date().toISOString(),
+      changedByUserId: req.currentUser!.id,
+      changedByName: req.currentUser!.displayName,
+    });
+    await writeDB(db);
+    res.json(db.orders[orderIndex]);
+  });
 }));
 
 // Admin: Update order status

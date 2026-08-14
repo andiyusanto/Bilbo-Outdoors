@@ -45,9 +45,10 @@ interface OrdersTabProps {
   settings: StoreSettings;
   orderActions: ReturnType<typeof useOrderActions>;
   orderEditActions: ReturnType<typeof useOrderEditActions>;
+  isOwner: boolean;
 }
 
-export default function OrdersTab({ orders, products, settings, orderActions, orderEditActions }: OrdersTabProps) {
+export default function OrdersTab({ orders, products, settings, orderActions, orderEditActions, isOwner }: OrdersTabProps) {
   const [orderSearch, setOrderSearch] = useState<string>('');
   const [orderStatusFilter, setOrderStatusFilter] = useState<string>('All');
   const [orderDateFrom, setOrderDateFrom] = useState<string>(() => getDefaultDateRange().from);
@@ -64,6 +65,7 @@ export default function OrdersTab({ orders, products, settings, orderActions, or
     handleUpdatePayment,
     handleAddPenalty,
     handleRemovePenalty,
+    handleDeleteOrder,
     handleCalculateLateFees,
     handleApplyLateFeesAndComplete,
     openLateCalc,
@@ -292,6 +294,8 @@ export default function OrdersTab({ orders, products, settings, orderActions, or
           onUpdatePayment={handleUpdatePayment}
           onAddPenalty={handleAddPenalty}
           onRemovePenalty={handleRemovePenalty}
+          onDeleteOrder={handleDeleteOrder}
+          isOwner={isOwner}
           showLateCalc={showLateCalc}
           onOpenLateCalc={openLateCalc}
           customReturnDateTime={customReturnDateTime}

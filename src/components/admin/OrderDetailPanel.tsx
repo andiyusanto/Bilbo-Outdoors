@@ -27,6 +27,8 @@ interface OrderDetailPanelProps {
   onUpdatePayment: (orderId: string, amountPaid: number) => void;
   onAddPenalty: (orderId: string, penalty: { type: 'Kerusakan' | 'Kehilangan'; productId: string; description: string; amount: number }) => void;
   onRemovePenalty: (orderId: string, penaltyId: string) => void;
+  onDeleteOrder: (orderId: string) => void;
+  isOwner: boolean;
   showLateCalc: boolean;
   onOpenLateCalc: () => void;
   customReturnDateTime: string;
@@ -46,6 +48,8 @@ export default function OrderDetailPanel({
   onUpdatePayment,
   onAddPenalty,
   onRemovePenalty,
+  onDeleteOrder,
+  isOwner,
   showLateCalc,
   onOpenLateCalc,
   customReturnDateTime,
@@ -616,7 +620,7 @@ export default function OrderDetailPanel({
               </div>
             )}
 
-            {(order.status === 'Item Picked Up' || order.status === 'Approved/Paid') && (
+            {order.status === 'Item Picked Up' && (
               <div className="border-2 border-black rounded-none p-4 bg-zinc-50 space-y-3 shadow-[2px_2px_0px_rgba(0,0,0,1)]">
                 <div className="flex items-start">
                   <AlertTriangle className="w-4 h-4 text-red-600 mr-2 shrink-0 mt-0.5 stroke-[2.5]" />
@@ -728,7 +732,7 @@ export default function OrderDetailPanel({
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <span className="font-mono text-black font-black text-xs">Rp {p.amount.toLocaleString('id-ID')}</span>
-                      {(order.status === 'Approved/Paid' || order.status === 'Item Picked Up') && (
+                      {(isOwner || order.status === 'Approved/Paid' || order.status === 'Item Picked Up') && (
                         <button
                           type="button"
                           onClick={() => onRemovePenalty(order.id, p.id)}
@@ -836,6 +840,23 @@ export default function OrderDetailPanel({
                   )}
                 </div>
               )}
+            </div>
+          )}
+
+          {isOwner && order.status !== 'Item Returned/Completed' && (
+            <div className="border-2 border-red-500 rounded-none p-4 bg-red-50 space-y-2">
+              <h4 className="text-[10px] font-black text-red-700 uppercase tracking-wider">Zona Berbahaya (Owner)</h4>
+              <p className="text-[10px] text-red-700 font-bold normal-case leading-relaxed">
+                Menghapus pesanan bersifat permanen dan tidak bisa dibatalkan &mdash; gunakan hanya untuk kesalahan
+                seperti double booking.
+              </p>
+              <button
+                type="button"
+                onClick={() => onDeleteOrder(order.id)}
+                className="text-[10px] font-black text-red-600 hover:text-red-800 underline cursor-pointer uppercase"
+              >
+                Hapus Pesanan Ini
+              </button>
             </div>
           )}
 

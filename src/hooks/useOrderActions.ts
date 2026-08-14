@@ -33,7 +33,7 @@ export function useOrderActions({ token, setOrders, fetchAdminData }: UseOrderAc
     deadline: string;
   } | null>(null);
   const { withLoading } = useLoading();
-  const { notifySuccess, notifyError } = useNotification();
+  const { notifySuccess, notifyError, confirmAction } = useNotification();
 
   // Fetches the full order (including personalPhotoBase64, omitted from the
   // list payload - see GET /api/orders/:id) and opens the detail panel with
@@ -141,6 +141,27 @@ export function useOrderActions({ token, setOrders, fetchAdminData }: UseOrderAc
     });
   };
 
+  // Owner-only (enforced server-side too) - permanently removes an order,
+  // e.g. an erroneous double-booking. Not allowed once completed.
+  const handleDeleteOrder = async (orderId: string) => {
+    if (!(await confirmAction('Apakah Anda yakin ingin menghapus pesanan ini? Tindakan ini tidak bisa dibatalkan.'))) return;
+    await withLoading(async () => {
+      try {
+        const res = await fetch(`/api/orders/${orderId}`, {
+          method: 'DELETE',
+          headers: jsonAuthHeaders(token),
+        });
+        await parseJsonOrThrow(res);
+        setOrders(prev => prev.filter(o => o.id !== orderId));
+        setSelectedOrder(null);
+        notifySuccess('Pesanan berhasil dihapus.');
+        fetchAdminData();
+      } catch (err: any) {
+        notifyError(`Gagal menghapus pesanan: ${err.message}`);
+      }
+    });
+  };
+
   const handleCalculateLateFees = async () => {
     if (!selectedOrder) return;
     await withLoading(async () => {
@@ -198,6 +219,7 @@ export function useOrderActions({ token, setOrders, fetchAdminData }: UseOrderAc
     handleUpdatePayment,
     handleAddPenalty,
     handleRemovePenalty,
+    handleDeleteOrder,
     handleCalculateLateFees,
     handleApplyLateFeesAndComplete,
     openLateCalc,

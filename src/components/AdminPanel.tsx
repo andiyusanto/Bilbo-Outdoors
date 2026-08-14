@@ -257,7 +257,7 @@ export default function AdminPanel() {
             )}
             <Route
               path="orders"
-              element={<OrdersTab orders={data.orders} products={data.products} settings={data.settings} orderActions={orderActions} orderEditActions={orderEditActions} />}
+              element={<OrdersTab orders={data.orders} products={data.products} settings={data.settings} orderActions={orderActions} orderEditActions={orderEditActions} isOwner={isOwner} />}
             />
             <Route
               path="inventory"

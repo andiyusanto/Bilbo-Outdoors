@@ -1034,12 +1034,39 @@ app.delete('/api/orders/:id/penalties/:penaltyId', authenticateUser, asyncHandle
     if (!order) {
       return res.status(404).json({ error: 'Order not found.' });
     }
-    if (order.status !== 'Approved/Paid' && order.status !== 'Item Picked Up') {
+    // Owner can override this restriction and remove a penalty at any time,
+    // even after the order is completed - staff (karyawan) keep the
+    // before-completion-only restriction.
+    const isOwnerOverride = req.currentUser!.role === 'owner';
+    if (!isOwnerOverride && order.status !== 'Approved/Paid' && order.status !== 'Item Picked Up') {
       return res.status(400).json({ error: 'Denda hanya bisa diubah sebelum pesanan diselesaikan.' });
     }
     order.penalties = (order.penalties || []).filter((p: PenaltyEntry) => p.id !== penaltyId);
     await writeDB(db);
     res.json(order);
+  });
+}));
+
+// Admin (owner-only): permanently delete an order - e.g. an erroneous
+// double-booking. Not allowed once Item Returned/Completed, so a settled
+// order's revenue can never silently disappear from stats/reports. No
+// Postgres-specific sync code needed - writeDBPostgres already prunes any
+// order (and cascade-deletes its order_items) no longer present in the
+// dataset on every write, same mechanism DELETE /api/products/:id relies on.
+app.delete('/api/orders/:id', authenticateUser, requireOwner, asyncHandler(async (req, res) => {
+  await withDbLock(async () => {
+    const { id } = req.params;
+    const db = await readDB();
+    const order = db.orders.find((o: Order) => o.id === id);
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found.' });
+    }
+    if (order.status === 'Item Returned/Completed') {
+      return res.status(400).json({ error: 'Pesanan yang sudah selesai tidak bisa dihapus.' });
+    }
+    db.orders = db.orders.filter((o: Order) => o.id !== id);
+    await writeDB(db);
+    res.json({ message: 'Order deleted successfully.' });
   });
 }));
 
@@ -1053,6 +1080,12 @@ app.post('/api/orders/:id/calculate-late', authenticateUser, asyncHandler(async 
     const order = db.orders.find((o: Order) => o.id === id);
     if (!order) {
       return res.status(404).json({ error: 'Order not found.' });
+    }
+    // A late-return fee only makes sense once the item has actually been
+    // handed over - calculating one before Item Picked Up (e.g. while still
+    // Approved/Paid) would charge for lateness that can't have happened yet.
+    if (order.status !== 'Item Picked Up') {
+      return res.status(400).json({ error: 'Denda keterlambatan hanya bisa dihitung setelah barang diambil.' });
     }
 
     // Both sides parsed as local-time literals (no 'Z' suffix) so they compare

@@ -424,7 +424,8 @@
     <li>Kotak pencarian <span class="ui">Cari nama / WhatsApp...</span></li>
     <li>Filter status: Semua Status / Pending / Approved-Paid / Item Picked Up / Returned-Completed / Expired.</li>
     <li>Filter tanggal <span class="ui">Dari</span> / <span class="ui">Sampai</span> (default bulan berjalan).</li>
-    <li><span class="ui">Unduh Excel</span> &mdash; mengekspor daftar pesanan yang sedang tampil (sesuai filter aktif) ke file CSV berisi kolom Nama Penyewa, WhatsApp, Tanggal Mulai, Tanggal Selesai, Durasi, Total Biaya, Denda, Hari Terlambat, dan Status. Tombol ini otomatis nonaktif jika daftar sedang kosong.</li>
+    <li><span class="ui">Unduh Excel</span> &mdash; mengekspor daftar pesanan yang sedang tampil (sesuai filter aktif) ke file CSV berisi kolom Nama Penyewa, WhatsApp, Tanggal Mulai, Tanggal Selesai, Durasi, Total Biaya, Denda, Hari Terlambat, Denda Kerusakan/Kehilangan, Sudah Dibayar, Sisa Pembayaran, dan Status. Tombol ini otomatis nonaktif jika daftar sedang kosong.</li>
+    <li>Kolom <span class="ui">Diubah Terakhir Oleh</span> menampilkan staf dan waktu perubahan status/edit terakhir pada pesanan tersebut (strip &mdash; berarti belum pernah diubah). Riwayat lengkap semua perubahan ada di bagian <span class="ui">Riwayat Status</span> pada panel Detail Order, termasuk perubahan otomatis oleh sistem (misalnya kedaluwarsa) yang tercatat sebagai &ldquo;Sistem (Otomatis)&rdquo;.</li>
   </ul>
 
   <p>Setiap baris tabel memiliki tombol <span class="ui">Detail Order</span> yang membuka panel detail di sisi kanan layar.</p>
@@ -442,17 +443,27 @@
   <p>Panel ini menampilkan nama &amp; WhatsApp penyewa, waktu pesanan dibuat, tanggal &amp; durasi sewa, rincian alat yang disewa beserta harga, ringkasan biaya (Biaya Rental Pokok, Denda Terlambat jika ada, Total Invoice), dan foto diri penyewa yang diunggah saat checkout (untuk verifikasi identitas) &mdash; atau keterangan &ldquo;Tidak ada foto diunggah&rdquo; jika pelanggan tidak mengunggah foto.</p>
 
   <ol class="steps">
-    <li><strong>Saat status Pending / Expired:</strong> setelah memverifikasi bukti pembayaran (lihat 2.7), tekan <span class="ui">Konfirmasi Pembayaran (Setujui Sewa)</span>. Pesanan berpindah ke status Approved/Paid.</li>
+    <li><strong>Saat status Pending / Expired:</strong> setelah memverifikasi bukti pembayaran (lihat 2.7), tekan <span class="ui">Konfirmasi Pembayaran (Setujui Sewa)</span>. Nominal terisi otomatis sesuai Total Biaya &mdash; ubah nominal ini jika penyewa hanya membayar sebagian (DP/uang muka). Pesanan berpindah ke status Approved/Paid.</li>
     <li><strong>Saat status Approved/Paid, ketika pelanggan datang mengambil barang:</strong> tekan <span class="ui">Barang Diambil (Diserahkan ke Penyewa)</span>. Pilih jenis <span class="ui">Jaminan yang Diberikan</span> (KTP, SIM, KTA, KIP, Kartu Pelajar, atau Lainnya &mdash; pilihan Lainnya membuka kolom isian bebas), lalu tekan <span class="ui">Konfirmasi &amp; Serahkan Barang</span>. Pesanan berpindah ke Item Picked Up.</li>
     <li><strong>Saat barang dikembalikan:</strong> pada bagian &ldquo;Alat Dikembalikan &amp; Cek Denda&rdquo;, pilih salah satu:
       <ul class="plain">
         <li><span class="ui">Tanpa Denda</span> &mdash; langsung menandai pesanan selesai tanpa biaya tambahan.</li>
         <li><span class="ui">Kalkulator Denda</span> &mdash; jika terlambat, masukkan tanggal &amp; jam pengembalian sebenarnya, tekan <span class="ui">Hitung</span>. Sistem menampilkan jumlah hari telat, rincian biaya per alat, dan total denda. Tekan <span class="ui">Terapkan Denda &amp; Selesaikan Sewa</span> untuk menutup pesanan.</li>
       </ul>
+      Sisa pembayaran (termasuk DP yang belum lunas) otomatis dianggap lunas saat pesanan diselesaikan.
     </li>
   </ol>
 
   <p>Pesanan berstatus Item Returned/Completed menampilkan banner konfirmasi &ldquo;Transaksi Selesai &amp; Peralatan Kembali&rdquo; dan tidak memiliki aksi lanjutan.</p>
+
+  <h3 class="sub">Pembayaran sebagian (DP)</h3>
+  <p>Baris <span class="ui">Sudah Dibayar</span> menampilkan nominal yang sudah diterima; baris <span class="ui">Sisa Pembayaran</span> muncul otomatis selama masih ada tagihan tersisa. Gunakan tautan <span class="ui">Edit</span> di samping <span class="ui">Sudah Dibayar</span> kapan saja untuk mencatat pelunasan tambahan sebelum barang diambil atau dikembalikan.</p>
+
+  <h3 class="sub">Edit Pesanan (khusus status Pending)</h3>
+  <p>Tombol <span class="ui">Edit Pesanan (Item &amp; Tanggal)</span> hanya muncul selama pesanan masih Pending. Gunakan untuk menambah, mengurangi, atau mengganti alat yang disewa, maupun menjadwalkan ulang tanggal sewa &mdash; tanpa perlu membatalkan dan membuat pesanan baru. Total biaya dan ketersediaan stok dihitung ulang otomatis; stok milik pesanan ini sendiri tidak ikut dihitung sebagai &ldquo;terpakai&rdquo; saat mengecek ketersediaan. Perubahan ini tercatat di <span class="ui">Riwayat Status</span>.</p>
+
+  <h3 class="sub">Denda Kerusakan &amp; Kehilangan</h3>
+  <p>Selain denda keterlambatan, staf bisa mencatat denda untuk alat yang rusak atau hilang lewat tautan <span class="ui">+ Tambah Denda Kerusakan/Kehilangan</span> pada panel yang sama. Pilih jenis (<span class="ui">Kerusakan</span> atau <span class="ui">Kehilangan</span>), alat yang terkait, alasan singkat (wajib diisi), dan nominal denda. Alasan hanya terlihat oleh staf/owner &mdash; tidak dicetak di resi pelanggan, yang hanya menampilkan total gabungan.</p>
 </section>
 
 <section class="chapter">
@@ -630,7 +641,7 @@
   <h2 class="section-title">2.4 Memilih Kategori &amp; Alat Camping</h2>
   <p class="kicker">Menjelajahi katalog dan memasukkan alat ke keranjang.</p>
 
-  <p>Tab filter kategori (Tent &amp; Shelter, Sleeping System, Carrier &amp; Backpack, Cooking Gear, Lighting &amp; Power, Hiking Essentials, Camp Support, Apparel &amp; Personal Gear, dan kategori tambahan lain) membantu mempersempit tampilan katalog. Setiap kartu alat menunjukkan foto, kategori, sisa stok (setelah tanggal dipilih), nama, deskripsi, harga per hari, serta catatan hemat jika alat tersebut memiliki diskon untuk sewa 5 hari.</p>
+  <p>Kotak <span class="ui">Cari nama alat sewa...</span> di atas tab kategori menyaring katalog berdasarkan nama, kategori, deskripsi, varian, ukuran, atau warna. Tab filter kategori (Tent &amp; Shelter, Sleeping System, Carrier &amp; Backpack, Cooking Gear, Lighting &amp; Power, Hiking Essentials, Camp Support, Apparel &amp; Personal Gear, dan kategori tambahan lain) mempersempit tampilan lebih lanjut &mdash; keduanya bisa dipakai bersamaan. Setiap kartu alat menunjukkan foto, kategori, sisa stok (setelah tanggal dipilih), nama, deskripsi, harga per hari, serta catatan hemat jika alat tersebut memiliki diskon untuk sewa 5 hari.</p>
 
   <p>Tekan <span class="ui">Pilih Alat</span> untuk menambahkan 1 unit ke keranjang. Setelah masuk keranjang, gunakan tombol <span class="ui">-</span>/<span class="ui">+</span> untuk mengubah jumlah &mdash; dibatasi oleh sisa stok yang tersedia untuk rentang tanggal yang dipilih.</p>
 </section>

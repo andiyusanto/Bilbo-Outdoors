@@ -235,6 +235,12 @@ export default function GuideTab() {
             <Ui>Unduh Excel</Ui> &mdash; ekspor daftar pesanan yang sedang tampil (sesuai filter aktif) ke CSV. Nonaktif
             jika daftar kosong.
           </li>
+          <li>
+            Kolom <Ui>Diubah Terakhir Oleh</Ui> menampilkan staf dan waktu perubahan status/edit terakhir pada pesanan
+            tersebut (strip &mdash; berarti belum pernah diubah). Riwayat lengkap semua perubahan ada di bagian{' '}
+            <Ui>Riwayat Status</Ui> pada panel Detail Order, termasuk perubahan otomatis oleh sistem (misalnya
+            kedaluwarsa) yang tercatat sebagai &ldquo;Sistem (Otomatis)&rdquo;.
+          </li>
         </ul>
         <p className="font-bold text-xs mt-3">Alur status pesanan</p>
         <StatusFlow statuses={['Pending', 'Approved/Paid', 'Item Picked Up', 'Item Returned/Completed']} branch="Expired" />
@@ -245,14 +251,40 @@ export default function GuideTab() {
         <p className="font-bold text-xs mt-3">Panel Detail Order</p>
         <Steps
           items={[
-            <>Saat Pending/Expired, setelah verifikasi bukti pembayaran (lihat 2.7): tekan <Ui>Konfirmasi Pembayaran (Setujui Sewa)</Ui>.</>,
+            <>
+              Saat Pending/Expired, setelah verifikasi bukti pembayaran (lihat 2.7): tekan{' '}
+              <Ui>Konfirmasi Pembayaran (Setujui Sewa)</Ui>. Nominal terisi otomatis sesuai Total Biaya &mdash; ubah
+              nominal ini jika penyewa hanya membayar sebagian (DP/uang muka).
+            </>,
             <>Saat pelanggan mengambil barang: pilih <Ui>Jaminan yang Diberikan</Ui>, lalu <Ui>Konfirmasi &amp; Serahkan Barang</Ui>.</>,
             <>
               Saat barang dikembalikan: <Ui>Tanpa Denda</Ui> untuk langsung selesai, atau <Ui>Kalkulator Denda</Ui> &rarr;{' '}
-              <Ui>Hitung</Ui> &rarr; <Ui>Terapkan Denda &amp; Selesaikan Sewa</Ui> jika terlambat.
+              <Ui>Hitung</Ui> &rarr; <Ui>Terapkan Denda &amp; Selesaikan Sewa</Ui> jika terlambat. Sisa pembayaran (termasuk
+              DP yang belum lunas) otomatis dianggap lunas saat pesanan diselesaikan.
             </>,
           ]}
         />
+        <p className="font-bold text-xs mt-3">Pembayaran sebagian (DP)</p>
+        <p>
+          Baris <Ui>Sudah Dibayar</Ui> menampilkan nominal yang sudah diterima; baris <Ui>Sisa Pembayaran</Ui> muncul
+          otomatis selama masih ada tagihan tersisa. Gunakan tautan <Ui>Edit</Ui> di samping <Ui>Sudah Dibayar</Ui>{' '}
+          kapan saja untuk mencatat pelunasan tambahan sebelum barang diambil atau dikembalikan.
+        </p>
+        <p className="font-bold text-xs mt-3">Edit Pesanan (khusus status Pending)</p>
+        <p>
+          Tombol <Ui>Edit Pesanan (Item &amp; Tanggal)</Ui> hanya muncul selama pesanan masih Pending. Gunakan untuk
+          menambah, mengurangi, atau mengganti alat yang disewa, maupun menjadwalkan ulang tanggal sewa &mdash; tanpa
+          perlu membatalkan dan membuat pesanan baru. Total biaya dan ketersediaan stok dihitung ulang otomatis; stok
+          milik pesanan ini sendiri tidak ikut dihitung sebagai &ldquo;terpakai&rdquo; saat mengecek ketersediaan.
+          Perubahan ini tercatat di <Ui>Riwayat Status</Ui>.
+        </p>
+        <p className="font-bold text-xs mt-3">Denda Kerusakan &amp; Kehilangan</p>
+        <p>
+          Selain denda keterlambatan, staf bisa mencatat denda untuk alat yang rusak atau hilang lewat tautan{' '}
+          <Ui>+ Tambah Denda Kerusakan/Kehilangan</Ui> pada panel yang sama. Pilih jenis (<Ui>Kerusakan</Ui> atau{' '}
+          <Ui>Kehilangan</Ui>), alat yang terkait, alasan singkat (wajib diisi), dan nominal denda. Alasan hanya
+          terlihat oleh staf/owner &mdash; tidak dicetak di resi pelanggan, yang hanya menampilkan total gabungan.
+        </p>
       </Section>
 
       <Section id="g-1-6" num="1.6" title="Manajemen Stok" kicker="Mengelola katalog alat: tambah, edit, hapus, harga, dan foto produk.">
@@ -400,8 +432,10 @@ export default function GuideTab() {
 
       <Section id="g-2-4" num="2.4" title="Memilih Kategori & Alat Camping" kicker="Menjelajahi katalog dan memasukkan alat ke keranjang.">
         <p>
-          Tab kategori mempersempit tampilan katalog. Tekan <Ui>Pilih Alat</Ui> untuk menambah 1 unit ke keranjang, lalu
-          gunakan <Ui>-</Ui>/<Ui>+</Ui> untuk mengubah jumlah &mdash; dibatasi sisa stok pada rentang tanggal yang dipilih.
+          Kotak <Ui>Cari nama alat sewa...</Ui> di atas tab kategori menyaring katalog berdasarkan nama, kategori,
+          deskripsi, varian, ukuran, atau warna. Tab kategori mempersempit tampilan lebih lanjut &mdash; keduanya bisa
+          dipakai bersamaan. Tekan <Ui>Pilih Alat</Ui> untuk menambah 1 unit ke keranjang, lalu gunakan{' '}
+          <Ui>-</Ui>/<Ui>+</Ui> untuk mengubah jumlah &mdash; dibatasi sisa stok pada rentang tanggal yang dipilih.
         </p>
       </Section>
 

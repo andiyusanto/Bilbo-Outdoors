@@ -1070,6 +1070,26 @@ app.delete('/api/orders/:id', authenticateUser, requireOwner, asyncHandler(async
   });
 }));
 
+// Admin (owner-only): remove/reset an already-applied late fee (lateDays/lateFee
+// back to 0), even after completion - symmetric to the penalty delete override
+// above. Deliberately doesn't touch amountPaid; getRemainingBalance() already
+// clamps to 0, so an order that's now "overpaid" relative to the lower invoice
+// just shows as Lunas, same as how removing a penalty already behaves.
+app.delete('/api/orders/:id/late-fee', authenticateUser, requireOwner, asyncHandler(async (req, res) => {
+  await withDbLock(async () => {
+    const { id } = req.params;
+    const db = await readDB();
+    const order = db.orders.find((o: Order) => o.id === id);
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found.' });
+    }
+    order.lateDays = 0;
+    order.lateFee = 0;
+    await writeDB(db);
+    res.json(order);
+  });
+}));
+
 // Admin: Calculate late returns and penalty fees
 app.post('/api/orders/:id/calculate-late', authenticateUser, asyncHandler(async (req, res) => {
   await withDbLock(async () => {

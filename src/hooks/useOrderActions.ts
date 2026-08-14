@@ -162,6 +162,31 @@ export function useOrderActions({ token, setOrders, fetchAdminData }: UseOrderAc
     });
   };
 
+  // Owner-only (enforced server-side too) - resets an already-applied late
+  // fee back to 0, even after completion. Doesn't touch amountPaid; the
+  // remaining-balance display already clamps to 0 (shows Lunas) if this
+  // leaves the order looking "overpaid" relative to the now-lower invoice.
+  const handleRemoveLateFee = async (orderId: string) => {
+    if (!(await confirmAction('Apakah Anda yakin ingin menghapus denda keterlambatan ini?'))) return;
+    await withLoading(async () => {
+      try {
+        const res = await fetch(`/api/orders/${orderId}/late-fee`, {
+          method: 'DELETE',
+          headers: jsonAuthHeaders(token),
+        });
+        const updatedOrder = await parseJsonOrThrow(res);
+        setOrders(prev => prev.map(o => o.id === orderId ? updatedOrder : o));
+        if (selectedOrder?.id === orderId) {
+          setSelectedOrder(updatedOrder);
+        }
+        notifySuccess('Denda keterlambatan berhasil dihapus!');
+        fetchAdminData();
+      } catch (err: any) {
+        notifyError(`Gagal menghapus denda keterlambatan: ${err.message}`);
+      }
+    });
+  };
+
   const handleCalculateLateFees = async () => {
     if (!selectedOrder) return;
     await withLoading(async () => {
@@ -220,6 +245,7 @@ export function useOrderActions({ token, setOrders, fetchAdminData }: UseOrderAc
     handleAddPenalty,
     handleRemovePenalty,
     handleDeleteOrder,
+    handleRemoveLateFee,
     handleCalculateLateFees,
     handleApplyLateFeesAndComplete,
     openLateCalc,

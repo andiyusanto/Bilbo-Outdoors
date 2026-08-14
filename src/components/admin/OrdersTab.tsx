@@ -66,6 +66,7 @@ export default function OrdersTab({ orders, products, settings, orderActions, or
     handleAddPenalty,
     handleRemovePenalty,
     handleDeleteOrder,
+    handleRemoveLateFee,
     handleCalculateLateFees,
     handleApplyLateFeesAndComplete,
     openLateCalc,
@@ -295,6 +296,7 @@ export default function OrdersTab({ orders, products, settings, orderActions, or
           onAddPenalty={handleAddPenalty}
           onRemovePenalty={handleRemovePenalty}
           onDeleteOrder={handleDeleteOrder}
+          onRemoveLateFee={handleRemoveLateFee}
           isOwner={isOwner}
           showLateCalc={showLateCalc}
           onOpenLateCalc={openLateCalc}

@@ -28,6 +28,7 @@ interface OrderDetailPanelProps {
   onAddPenalty: (orderId: string, penalty: { type: 'Kerusakan' | 'Kehilangan'; productId: string; description: string; amount: number }) => void;
   onRemovePenalty: (orderId: string, penaltyId: string) => void;
   onDeleteOrder: (orderId: string) => void;
+  onRemoveLateFee: (orderId: string) => void;
   isOwner: boolean;
   showLateCalc: boolean;
   onOpenLateCalc: () => void;
@@ -49,6 +50,7 @@ export default function OrderDetailPanel({
   onAddPenalty,
   onRemovePenalty,
   onDeleteOrder,
+  onRemoveLateFee,
   isOwner,
   showLateCalc,
   onOpenLateCalc,
@@ -414,7 +416,18 @@ export default function OrderDetailPanel({
 
             {order.lateFee && order.lateFee > 0 ? (
               <div className="flex justify-between items-baseline border-t-2 border-black pt-3 font-bold text-xs uppercase text-red-600">
-                <span>Denda Terlambat ({order.lateDays} Hari):</span>
+                <span className="flex items-center gap-1.5">
+                  Denda Terlambat ({order.lateDays} Hari):
+                  {isOwner && (
+                    <button
+                      type="button"
+                      onClick={() => onRemoveLateFee(order.id)}
+                      className="text-[9px] font-black text-red-500 hover:text-red-700 underline cursor-pointer uppercase normal-case"
+                    >
+                      Hapus
+                    </button>
+                  )}
+                </span>
                 <span className="font-mono font-black text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-none">
                   Rp {order.lateFee.toLocaleString('id-ID')}
                 </span>

@@ -231,9 +231,10 @@ export default function GuideTab() {
       <Section id="g-1-5" num="1.5" title="Manajemen Order" kicker="Menu utama untuk memproses seluruh pesanan pelanggan.">
         <ul className="list-disc pl-5 space-y-1.5 text-xs text-zinc-800">
           <li>
-            Kolom pertama <Ui>No. Order</Ui> menampilkan ID unik tiap pesanan &mdash; nomor yang sama dengan yang
-            tercetak di resi pelanggan. Bisa dicari lewat kotak <Ui>Cari nama / WhatsApp...</Ui>, yang juga menyaring
-            berdasarkan No. Order, filter status, filter tanggal <Ui>Dari</Ui>/<Ui>Sampai</Ui>.
+            Baris paling bawah tiap sel <Ui>Penyewa / WhatsApp</Ui> menampilkan No. Order &mdash; ID unik pesanan yang
+            sama dengan nomor yang tercetak di resi pelanggan. Bisa dicari lewat kotak{' '}
+            <Ui>Cari nama / WhatsApp...</Ui>, yang juga menyaring berdasarkan No. Order, filter status, filter tanggal{' '}
+            <Ui>Dari</Ui>/<Ui>Sampai</Ui>.
           </li>
           <li>
             Kolom <Ui>Tanggal Pemesanan</Ui>, <Ui>Tanggal Sewa</Ui>, dan <Ui>Status</Ui> bisa diurutkan &mdash; klik

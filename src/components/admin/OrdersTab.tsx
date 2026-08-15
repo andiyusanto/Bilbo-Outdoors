@@ -54,10 +54,10 @@ const STATUS_SORT_ORDER: Record<OrderStatus, number> = {
 };
 
 function SortIcon({ active, direction }: { active: boolean; direction: 'asc' | 'desc' }) {
-  if (!active) return <ArrowUpDown className="w-3 h-3 ml-1 text-zinc-300 inline" />;
+  if (!active) return <ArrowUpDown className="w-3.5 h-3.5 ml-1 text-zinc-500 stroke-[2.5] inline" />;
   return direction === 'asc'
-    ? <ChevronUp className="w-3 h-3 ml-1 text-black inline" />
-    : <ChevronDown className="w-3 h-3 ml-1 text-black inline" />;
+    ? <ChevronUp className="w-3.5 h-3.5 ml-1 text-black stroke-[3] inline" />
+    : <ChevronDown className="w-3.5 h-3.5 ml-1 text-black stroke-[3] inline" />;
 }
 
 interface OrdersTabProps {
@@ -237,7 +237,6 @@ export default function OrdersTab({ orders, products, settings, orderActions, or
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-zinc-50 border-b-2 border-black">
-                <th className="px-5 py-3.5 text-[10px] font-black text-black uppercase tracking-wider">No. Order</th>
                 <th className="px-5 py-3.5 text-[10px] font-black text-black uppercase tracking-wider">Penyewa / WhatsApp</th>
                 <th
                   onClick={() => handleSort('createdAt')}
@@ -266,7 +265,7 @@ export default function OrdersTab({ orders, products, settings, orderActions, or
             <tbody className="divide-y-2 divide-black">
               {sortedOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-5 py-12 text-center text-xs text-zinc-500 font-bold uppercase tracking-wider">
+                  <td colSpan={8} className="px-5 py-12 text-center text-xs text-zinc-500 font-bold uppercase tracking-wider">
                     Belum ada pesanan penyewaan camping yang cocok.
                   </td>
                 </tr>
@@ -274,11 +273,9 @@ export default function OrdersTab({ orders, products, settings, orderActions, or
                 sortedOrders.map((order) => (
                   <tr key={order.id} className="hover:bg-brand/5 transition-colors">
                     <td className="px-5 py-4">
-                      <span className="font-mono text-[10px] text-zinc-500 font-bold">{order.id}</span>
-                    </td>
-                    <td className="px-5 py-4">
                       <p className="font-black text-black text-xs uppercase">{order.customerName}</p>
                       <p className="text-[10px] text-zinc-500 font-mono font-bold mt-0.5">{order.customerWhatsApp}</p>
+                      <p className="text-[10px] text-zinc-400 font-mono font-bold mt-0.5">{order.id}</p>
                     </td>
                     <td className="px-5 py-4 text-xs text-zinc-800 font-bold uppercase font-mono">
                       {formatDateLabel(order.createdAt.split('T')[0])}

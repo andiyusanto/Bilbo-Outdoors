@@ -52,6 +52,12 @@ export default function ApprovalTab({ jobEntries, approvalActions }: ApprovalTab
 
   const pendingTotal = pendingEntries.reduce((sum, e) => sum + e.total, 0);
   const paidTotal = paidEntries.reduce((sum, e) => sum + e.total, 0);
+  // Sourced from the full jobEntries list (not the filtered pendingEntries
+  // view) so the figure stays correct even if a selection was made before
+  // the search/date filter narrowed it out of view.
+  const selectedTotal = jobEntries
+    .filter((e) => selectedIds.includes(e.id))
+    .reduce((sum, e) => sum + e.total, 0);
 
   const pendingIds = pendingEntries.map((e) => e.id);
   const allPendingSelected = pendingIds.length > 0 && pendingIds.every((id) => selectedIds.includes(id));
@@ -180,6 +186,13 @@ export default function ApprovalTab({ jobEntries, approvalActions }: ApprovalTab
               <tr className="text-xs font-black bg-zinc-50 border-t-2 border-black">
                 <td colSpan={6} className="px-4 py-3 text-right uppercase">Total</td>
                 <td className="px-4 py-3 font-mono">Rp {pendingTotal.toLocaleString('id-ID')}</td>
+                <td className="px-4 py-3"></td>
+              </tr>
+            )}
+            {selectedIds.length > 0 && (
+              <tr className="text-xs font-black bg-red-50 border-t-2 border-black">
+                <td colSpan={6} className="px-4 py-3 text-right uppercase text-red-700">Total Terpilih ({selectedIds.length})</td>
+                <td className="px-4 py-3 font-mono text-red-700">Rp {selectedTotal.toLocaleString('id-ID')}</td>
                 <td className="px-4 py-3"></td>
               </tr>
             )}

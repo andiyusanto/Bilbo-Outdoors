@@ -1,13 +1,13 @@
 import { useState, Dispatch, SetStateAction, FormEvent } from 'react';
 import { Product } from '../types';
 import { jsonAuthHeaders, authHeaders, parseJsonOrThrow } from '../lib/api';
+import { upsertById } from '../lib/collections';
 import { resizeImageToDataUrl } from '../lib/imageResize';
 import { useLoading } from '../contexts/LoadingContext';
 import { useNotification } from '../contexts/NotificationContext';
 
 interface UseProductActionsParams {
   token: string;
-  fetchAdminData: () => Promise<void>;
   setProducts: Dispatch<SetStateAction<Product[]>>;
 }
 
@@ -24,7 +24,7 @@ const DEFAULT_PRODUCT_FORM = {
   color: '',
 };
 
-export function useProductActions({ token, fetchAdminData, setProducts }: UseProductActionsParams) {
+export function useProductActions({ token, setProducts }: UseProductActionsParams) {
   const [showProductModal, setShowProductModal] = useState<boolean>(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [productFormData, setProductFormData] = useState(DEFAULT_PRODUCT_FORM);
@@ -45,13 +45,13 @@ export function useProductActions({ token, fetchAdminData, setProducts }: UsePro
           body: JSON.stringify(productFormData)
         });
 
-        await parseJsonOrThrow(res);
+        const savedProduct = await parseJsonOrThrow(res);
+        setProducts(prev => upsertById(prev, savedProduct)); // POST appends server-side (db.products.push)
 
         notifySuccess(editingProduct ? 'Alat camping berhasil diperbarui!' : 'Alat camping baru berhasil ditambahkan!');
         setShowProductModal(false);
         setEditingProduct(null);
         setProductFormData(DEFAULT_PRODUCT_FORM);
-        fetchAdminData();
       } catch (err: any) {
         notifyError(`Gagal menyimpan produk: ${err.message}`);
       }
@@ -85,8 +85,8 @@ export function useProductActions({ token, fetchAdminData, setProducts }: UsePro
           headers: authHeaders(token)
         });
         await parseJsonOrThrow(res);
+        setProducts(prev => prev.filter(p => p.id !== id));
         notifySuccess('Alat camping berhasil dihapus!');
-        fetchAdminData();
       } catch (err: any) {
         notifyError(`Gagal menghapus produk: ${err.message}`);
       }

@@ -48,15 +48,53 @@ export function useAdminData({ isLoggedIn, token, role, onUnauthorized }: UseAdm
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const { withLoading } = useLoading();
 
+  // Narrow refresh for just the Overview stats - the only cached value that
+  // an order write can change without already being returned by that write's
+  // own response (stats is a server-computed aggregate over db.orders, see
+  // server.ts's GET /api/stats). Used after order mutations instead of a full
+  // fetchAdminData() so a status/payment/penalty change doesn't also
+  // re-download products/job-prices/job-entries/users/settings.
+  const fetchStats = async () => {
+    if (role !== 'owner') return;
+    try {
+      const res = await fetch('/api/stats', { headers: authHeaders(token) });
+      const data = await parseJsonOrThrow(res, 'Failed to fetch stats');
+      setStats(data);
+    } catch (err: any) {
+      console.error(err);
+      if (err.message.includes('Unauthorized')) {
+        onUnauthorized();
+      }
+    }
+  };
+
+  // Narrow refresh for just the orders list - polled periodically below
+  // instead of on every mutation. Since mutation hooks no longer call the
+  // full fetchAdminData() as a side effect, a brand-new customer order
+  // (placed via the public portal, not any admin action) needs its own way
+  // to surface without the admin having to notice and click "Refresh Data"
+  // manually - a flat-rate poll of this one lightweight endpoint is far
+  // cheaper than the old "refetch everything on every admin write" pattern.
+  const fetchOrders = async () => {
+    try {
+      const res = await fetch('/api/orders', { headers: authHeaders(token) });
+      const data = await parseJsonOrThrow(res, 'Failed to fetch orders');
+      setOrders(data);
+    } catch (err: any) {
+      console.error(err);
+      if (err.message.includes('Unauthorized')) {
+        onUnauthorized();
+      }
+    }
+  };
+
   const fetchAdminData = async () => {
     setIsLoading(true);
     try {
       const headers = authHeaders(token);
 
       // Fetch Orders (owner + karyawan)
-      const ordersRes = await fetch('/api/orders', { headers });
-      const ordersData = await parseJsonOrThrow(ordersRes, 'Failed to fetch orders');
-      setOrders(ordersData);
+      await fetchOrders();
 
       // Fetch Products (public)
       const productsRes = await fetch('/api/products');
@@ -75,11 +113,8 @@ export function useAdminData({ isLoggedIn, token, role, onUnauthorized }: UseAdm
 
       // Owner-only data - never fetched as karyawan, avoids a spurious 403
       // being mistaken for an expired session (see onUnauthorized below).
+      await fetchStats();
       if (role === 'owner') {
-        const statsRes = await fetch('/api/stats', { headers });
-        const statsData = await parseJsonOrThrow(statsRes, 'Failed to fetch stats');
-        setStats(statsData);
-
         const settingsRes = await fetch('/api/settings', { headers });
         const settingsData = await parseJsonOrThrow(settingsRes, 'Failed to fetch settings');
         setSettings(settingsData);
@@ -99,16 +134,25 @@ export function useAdminData({ isLoggedIn, token, role, onUnauthorized }: UseAdm
     }
   };
 
-  // Fetch all admin data. Wrapped in withLoading only here, for the initial
-  // post-login load - fetchAdminData is also called (unawaited) as a silent
-  // background refresh after other actions (save/delete/approve/etc.), each
-  // already inside their own withLoading scope; wrapping it internally would
-  // keep the shared overlay open for this whole multi-fetch refresh, well
-  // past the point where the triggering action's own success already showed.
+  // Fetch all admin data once on login. Mutation hooks patch their own slice
+  // of state directly from each write's response instead of re-calling this -
+  // fetchAdminData now only runs here and from the manual "Refresh Data"
+  // button, both already wrapped in their own withLoading scope.
   useEffect(() => {
     if (isLoggedIn && token) {
       withLoading(fetchAdminData);
     }
+  }, [isLoggedIn, token]);
+
+  // Keep the orders list eventually-fresh without polling everything else -
+  // see fetchOrders' comment above. 60s bounds the worst case ("how stale can
+  // a new order be before it's visible") to something reasonable for a
+  // walk-in pickup workflow, at a flat, predictable request rate.
+  const ORDERS_POLL_INTERVAL_MS = 60000;
+  useEffect(() => {
+    if (!isLoggedIn || !token) return;
+    const interval = setInterval(fetchOrders, ORDERS_POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
   }, [isLoggedIn, token]);
 
   return {
@@ -127,5 +171,6 @@ export function useAdminData({ isLoggedIn, token, role, onUnauthorized }: UseAdm
     setJobEntries,
     isLoading,
     fetchAdminData,
+    fetchStats,
   };
 }

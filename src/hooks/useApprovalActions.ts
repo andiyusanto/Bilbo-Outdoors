@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, Dispatch, SetStateAction } from 'react';
 import { JobEntry } from '../types';
 import { jsonAuthHeaders, parseJsonOrThrow } from '../lib/api';
 import { getTodayDateString } from '../lib/date';
@@ -7,10 +7,10 @@ import { useNotification } from '../contexts/NotificationContext';
 
 interface UseApprovalActionsParams {
   token: string;
-  fetchAdminData: () => Promise<void>;
+  setJobEntries: Dispatch<SetStateAction<JobEntry[]>>;
 }
 
-export function useApprovalActions({ token, fetchAdminData }: UseApprovalActionsParams) {
+export function useApprovalActions({ token, setJobEntries }: UseApprovalActionsParams) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [paymentDateInput, setPaymentDateInput] = useState<string>(
     getTodayDateString()
@@ -57,9 +57,21 @@ export function useApprovalActions({ token, fetchAdminData }: UseApprovalActions
           body: JSON.stringify({ ids: selectedIds, paymentDate: paymentDateInput })
         });
         const data = await parseJsonOrThrow(res);
+        // Patch exactly the ids the server actually flipped to Paid
+        // (data.updatedIds), not selectedIds re-filtered against local
+        // status - the local cache can be stale relative to a concurrent
+        // change from another session (e.g. someone else rejected one of
+        // these entries a moment earlier), so trusting the server's
+        // authoritative result avoids the UI showing a status that was
+        // never actually applied.
+        const updatedIdSet = new Set<string>(data.updatedIds);
+        setJobEntries(prev => prev.map(e =>
+          updatedIdSet.has(e.id)
+            ? { ...e, status: 'Paid' as const, paymentDate: paymentDateInput }
+            : e
+        ));
         notifySuccess(`${data.updatedCount} pekerjaan berhasil disetujui & dibayar!`);
         clearSelection();
-        fetchAdminData();
       } catch (err: any) {
         notifyError(`Gagal memproses pembayaran: ${err.message}`);
       }
@@ -75,10 +87,10 @@ export function useApprovalActions({ token, fetchAdminData }: UseApprovalActions
           headers: jsonAuthHeaders(token),
           body: JSON.stringify({ reason: rejectReason.trim() })
         });
-        await parseJsonOrThrow(res);
+        const updatedEntry = await parseJsonOrThrow(res);
+        setJobEntries(prev => prev.map(e => e.id === updatedEntry.id ? updatedEntry : e));
         notifySuccess('Pekerjaan ditolak.');
         closeRejectModal();
-        fetchAdminData();
       } catch (err: any) {
         notifyError(`Gagal menolak pekerjaan: ${err.message}`);
       }

@@ -14,7 +14,7 @@ interface UseOrderEditActionsParams {
   selectedOrder: Order | null;
   setOrders: Dispatch<SetStateAction<OrderListItem[]>>;
   setSelectedOrder: Dispatch<SetStateAction<Order | null>>;
-  fetchAdminData: () => Promise<void>;
+  fetchStats: () => Promise<void>;
 }
 
 // Mirrors useAvailability.ts's date-change-triggers-availability-refetch
@@ -22,7 +22,7 @@ interface UseOrderEditActionsParams {
 // items/dates instead of building a new cart - the key difference is
 // excludeOrderId, so the order's own current allocation never counts as
 // "unavailable" against itself.
-export function useOrderEditActions({ token, selectedOrder, setOrders, setSelectedOrder, fetchAdminData }: UseOrderEditActionsParams) {
+export function useOrderEditActions({ token, selectedOrder, setOrders, setSelectedOrder, fetchStats }: UseOrderEditActionsParams) {
   const [showEditOrder, setShowEditOrder] = useState<boolean>(false);
   const [editStartDate, setEditStartDate] = useState<string>('');
   const [editEndDate, setEditEndDate] = useState<string>('');
@@ -100,7 +100,7 @@ export function useOrderEditActions({ token, selectedOrder, setOrders, setSelect
         setSelectedOrder(updatedOrder);
         notifySuccess('Pesanan berhasil diperbarui!');
         closeEditOrder();
-        fetchAdminData();
+        fetchStats();
       } catch (err: any) {
         notifyError(`Gagal menyimpan perubahan: ${err.message}`);
       }

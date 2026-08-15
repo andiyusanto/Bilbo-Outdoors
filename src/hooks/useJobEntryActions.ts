@@ -1,13 +1,14 @@
-import { useState, FormEvent } from 'react';
+import { useState, Dispatch, SetStateAction, FormEvent } from 'react';
 import { JobEntry, JobType } from '../types';
 import { jsonAuthHeaders, parseJsonOrThrow } from '../lib/api';
+import { upsertById } from '../lib/collections';
 import { getTodayDateString } from '../lib/date';
 import { useLoading } from '../contexts/LoadingContext';
 import { useNotification } from '../contexts/NotificationContext';
 
 interface UseJobEntryActionsParams {
   token: string;
-  fetchAdminData: () => Promise<void>;
+  setJobEntries: Dispatch<SetStateAction<JobEntry[]>>;
 }
 
 const DEFAULT_ENTRY_FORM = {
@@ -17,7 +18,7 @@ const DEFAULT_ENTRY_FORM = {
   quantity: 1,
 };
 
-export function useJobEntryActions({ token, fetchAdminData }: UseJobEntryActionsParams) {
+export function useJobEntryActions({ token, setJobEntries }: UseJobEntryActionsParams) {
   const [showEntryModal, setShowEntryModal] = useState<boolean>(false);
   const [editingEntry, setEditingEntry] = useState<JobEntry | null>(null);
   const [entryFormData, setEntryFormData] = useState(DEFAULT_ENTRY_FORM);
@@ -35,12 +36,12 @@ export function useJobEntryActions({ token, fetchAdminData }: UseJobEntryActions
           headers: jsonAuthHeaders(token),
           body: JSON.stringify(entryFormData)
         });
-        await parseJsonOrThrow(res);
+        const savedEntry = await parseJsonOrThrow(res);
+        setJobEntries(prev => upsertById(prev, savedEntry, 'start')); // POST prepends server-side (db.jobEntries.unshift)
         notifySuccess(editingEntry ? 'Pekerjaan berhasil diperbarui!' : 'Pekerjaan berhasil dicatat!');
         setShowEntryModal(false);
         setEditingEntry(null);
         setEntryFormData(DEFAULT_ENTRY_FORM);
-        fetchAdminData();
       } catch (err: any) {
         notifyError(`Gagal menyimpan pekerjaan: ${err.message}`);
       }

@@ -63,8 +63,9 @@ export default function AdminPanel() {
 
   const orderActions = useOrderActions({
     token: auth.token,
+    orders: data.orders,
     setOrders: data.setOrders,
-    fetchAdminData: data.fetchAdminData,
+    fetchStats: data.fetchStats,
   });
 
   const orderEditActions = useOrderEditActions({
@@ -72,12 +73,11 @@ export default function AdminPanel() {
     selectedOrder: orderActions.selectedOrder,
     setOrders: data.setOrders,
     setSelectedOrder: orderActions.setSelectedOrder,
-    fetchAdminData: data.fetchAdminData,
+    fetchStats: data.fetchStats,
   });
 
   const productActions = useProductActions({
     token: auth.token,
-    fetchAdminData: data.fetchAdminData,
     setProducts: data.setProducts,
   });
 
@@ -88,23 +88,22 @@ export default function AdminPanel() {
 
   const jobPriceActions = useJobPriceActions({
     token: auth.token,
-    fetchAdminData: data.fetchAdminData,
+    setJobPriceList: data.setJobPriceList,
   });
 
   const userActions = useUserActions({
     token: auth.token,
-    fetchAdminData: data.fetchAdminData,
     setUsers: data.setUsers,
   });
 
   const jobEntryActions = useJobEntryActions({
     token: auth.token,
-    fetchAdminData: data.fetchAdminData,
+    setJobEntries: data.setJobEntries,
   });
 
   const approvalActions = useApprovalActions({
     token: auth.token,
-    fetchAdminData: data.fetchAdminData,
+    setJobEntries: data.setJobEntries,
   });
 
   const passwordActions = useChangePassword(auth.token, auth.updateSessionToken);

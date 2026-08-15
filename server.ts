@@ -1420,16 +1420,20 @@ app.put('/api/job-entries/approve-batch', authenticateUser, requireOwner, asyncH
     }
     const db = await readDB();
     const idSet = new Set(ids);
-    let updatedCount = 0;
+    const updatedIds: string[] = [];
     db.jobEntries = db.jobEntries.map((e: JobEntry) => {
       if (idSet.has(e.id) && e.status === 'Pending') {
-        updatedCount++;
+        updatedIds.push(e.id);
         return { ...e, status: 'Paid' as const, paymentDate };
       }
       return e;
     });
     await writeDB(db);
-    res.json({ updatedCount });
+    // Returns exactly which ids were actually flipped to Paid (not just a
+    // count) - the client needs the authoritative set, since its own
+    // selectedIds/local status can be stale relative to a concurrent change
+    // (e.g. another session rejected one of them a moment earlier).
+    res.json({ updatedCount: updatedIds.length, updatedIds });
   });
 }));
 

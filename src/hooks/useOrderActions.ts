@@ -1,4 +1,4 @@
-import { useState, Dispatch, SetStateAction } from 'react';
+import { useState, useEffect, Dispatch, SetStateAction } from 'react';
 import { Order, OrderListItem, OrderStatus } from '../types';
 import { jsonAuthHeaders, parseJsonOrThrow } from '../lib/api';
 import { useLoading } from '../contexts/LoadingContext';
@@ -6,8 +6,9 @@ import { useNotification } from '../contexts/NotificationContext';
 
 interface UseOrderActionsParams {
   token: string;
+  orders: OrderListItem[];
   setOrders: Dispatch<SetStateAction<OrderListItem[]>>;
-  fetchAdminData: () => Promise<void>;
+  fetchStats: () => Promise<void>;
 }
 
 // Formats a Date as the naive local "YYYY-MM-DDTHH:mm" string a
@@ -18,8 +19,24 @@ function toLocalDateTimeInputValue(date: Date): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-export function useOrderActions({ token, setOrders, fetchAdminData }: UseOrderActionsParams) {
+export function useOrderActions({ token, orders, setOrders, fetchStats }: UseOrderActionsParams) {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+
+  // Keeps an open detail panel in sync with the orders list, which is now
+  // refreshed independently of this hook's own actions (the background poll
+  // in useAdminData, or another admin's edit landing via that poll). The list
+  // item carries every field the panel needs except personalPhotoBase64
+  // (omitted from GET /api/orders, see handleOpenOrderDetail below) - a photo
+  // that never changes after order creation - so this is a local merge, not
+  // a fetch. After this hook's own mutations, orders/selectedOrder are
+  // already patched from the same response in the same tick, so the merge
+  // below is a no-op then; it only does real work for external changes.
+  useEffect(() => {
+    if (!selectedOrder) return;
+    const latest = orders.find(o => o.id === selectedOrder.id);
+    if (!latest) return;
+    setSelectedOrder(prev => prev ? { ...prev, ...latest } : prev);
+  }, [orders]);
 
   // Late Fee Calculation Modal/State
   const [showLateCalc, setShowLateCalc] = useState<boolean>(false);
@@ -67,7 +84,7 @@ export function useOrderActions({ token, setOrders, fetchAdminData }: UseOrderAc
         }
 
         // Refresh dashboard stats
-        fetchAdminData();
+        fetchStats();
       } catch (err: any) {
         notifyError(`Gagal memperbarui status: ${err.message}`);
       }
@@ -90,7 +107,7 @@ export function useOrderActions({ token, setOrders, fetchAdminData }: UseOrderAc
           setSelectedOrder(updatedOrder);
         }
         notifySuccess('Jumlah pembayaran berhasil diperbarui!');
-        fetchAdminData();
+        fetchStats();
       } catch (err: any) {
         notifyError(`Gagal memperbarui pembayaran: ${err.message}`);
       }
@@ -114,7 +131,7 @@ export function useOrderActions({ token, setOrders, fetchAdminData }: UseOrderAc
           setSelectedOrder(updatedOrder);
         }
         notifySuccess('Denda berhasil ditambahkan!');
-        fetchAdminData();
+        fetchStats();
       } catch (err: any) {
         notifyError(`Gagal menambahkan denda: ${err.message}`);
       }
@@ -134,7 +151,7 @@ export function useOrderActions({ token, setOrders, fetchAdminData }: UseOrderAc
           setSelectedOrder(updatedOrder);
         }
         notifySuccess('Denda berhasil dihapus!');
-        fetchAdminData();
+        fetchStats();
       } catch (err: any) {
         notifyError(`Gagal menghapus denda: ${err.message}`);
       }
@@ -155,7 +172,7 @@ export function useOrderActions({ token, setOrders, fetchAdminData }: UseOrderAc
         setOrders(prev => prev.filter(o => o.id !== orderId));
         setSelectedOrder(null);
         notifySuccess('Pesanan berhasil dihapus.');
-        fetchAdminData();
+        fetchStats();
       } catch (err: any) {
         notifyError(`Gagal menghapus pesanan: ${err.message}`);
       }
@@ -180,7 +197,7 @@ export function useOrderActions({ token, setOrders, fetchAdminData }: UseOrderAc
           setSelectedOrder(updatedOrder);
         }
         notifySuccess('Denda keterlambatan berhasil dihapus!');
-        fetchAdminData();
+        fetchStats();
       } catch (err: any) {
         notifyError(`Gagal menghapus denda keterlambatan: ${err.message}`);
       }

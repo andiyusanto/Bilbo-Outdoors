@@ -1,12 +1,13 @@
-import { useState, FormEvent } from 'react';
+import { useState, Dispatch, SetStateAction, FormEvent } from 'react';
 import { JobPriceListItem } from '../types';
 import { jsonAuthHeaders, authHeaders, parseJsonOrThrow } from '../lib/api';
+import { upsertById } from '../lib/collections';
 import { useLoading } from '../contexts/LoadingContext';
 import { useNotification } from '../contexts/NotificationContext';
 
 interface UseJobPriceActionsParams {
   token: string;
-  fetchAdminData: () => Promise<void>;
+  setJobPriceList: Dispatch<SetStateAction<JobPriceListItem[]>>;
 }
 
 const DEFAULT_JOB_PRICE_FORM = {
@@ -17,7 +18,7 @@ const DEFAULT_JOB_PRICE_FORM = {
   productIds: [] as string[],
 };
 
-export function useJobPriceActions({ token, fetchAdminData }: UseJobPriceActionsParams) {
+export function useJobPriceActions({ token, setJobPriceList }: UseJobPriceActionsParams) {
   const [showJobPriceModal, setShowJobPriceModal] = useState<boolean>(false);
   const [editingJobPrice, setEditingJobPrice] = useState<JobPriceListItem | null>(null);
   const [jobPriceFormData, setJobPriceFormData] = useState(DEFAULT_JOB_PRICE_FORM);
@@ -35,11 +36,11 @@ export function useJobPriceActions({ token, fetchAdminData }: UseJobPriceActions
           headers: jsonAuthHeaders(token),
           body: JSON.stringify(jobPriceFormData)
         });
-        await parseJsonOrThrow(res);
+        const savedItem = await parseJsonOrThrow(res);
+        setJobPriceList(prev => upsertById(prev, savedItem)); // POST appends server-side (db.jobPriceList.push)
         setShowJobPriceModal(false);
         setEditingJobPrice(null);
         setJobPriceFormData(DEFAULT_JOB_PRICE_FORM);
-        fetchAdminData();
       } catch (err: any) {
         notifyError(`Gagal menyimpan harga pekerjaan: ${err.message}`);
       }
@@ -55,7 +56,7 @@ export function useJobPriceActions({ token, fetchAdminData }: UseJobPriceActions
           headers: authHeaders(token)
         });
         await parseJsonOrThrow(res);
-        fetchAdminData();
+        setJobPriceList(prev => prev.filter(j => j.id !== id));
       } catch (err: any) {
         notifyError(`Gagal menghapus item: ${err.message}`);
       }
@@ -70,8 +71,8 @@ export function useJobPriceActions({ token, fetchAdminData }: UseJobPriceActions
           headers: jsonAuthHeaders(token),
           body: JSON.stringify({ active: item.active === false ? true : false })
         });
-        await parseJsonOrThrow(res);
-        fetchAdminData();
+        const updatedItem = await parseJsonOrThrow(res);
+        setJobPriceList(prev => prev.map(j => j.id === updatedItem.id ? updatedItem : j));
       } catch (err: any) {
         notifyError(`Gagal mengubah status item: ${err.message}`);
       }

@@ -275,7 +275,7 @@ export default function OrdersTab({ orders, products, settings, orderActions, or
                     <td className="px-5 py-4">
                       <p className="font-black text-black text-xs uppercase">{order.customerName}</p>
                       <p className="text-[10px] text-zinc-500 font-mono font-bold mt-0.5">{order.customerWhatsApp}</p>
-                      <p className="text-[10px] text-zinc-400 font-mono font-bold mt-0.5">{order.id}</p>
+                      <p className="text-[10px] text-zinc-600 font-mono font-black mt-0.5">{order.id}</p>
                     </td>
                     <td className="px-5 py-4 text-xs text-zinc-800 font-bold uppercase font-mono">
                       {formatDateLabel(order.createdAt.split('T')[0])}

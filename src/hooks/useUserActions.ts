@@ -1,12 +1,12 @@
 import { useState, Dispatch, SetStateAction, FormEvent } from 'react';
 import { PublicUser, UserRole } from '../types';
 import { jsonAuthHeaders, authHeaders, parseJsonOrThrow } from '../lib/api';
+import { upsertById } from '../lib/collections';
 import { useLoading } from '../contexts/LoadingContext';
 import { useNotification } from '../contexts/NotificationContext';
 
 interface UseUserActionsParams {
   token: string;
-  fetchAdminData: () => Promise<void>;
   setUsers: Dispatch<SetStateAction<PublicUser[]>>;
 }
 
@@ -17,7 +17,7 @@ const DEFAULT_USER_FORM = {
   displayName: '',
 };
 
-export function useUserActions({ token, fetchAdminData }: UseUserActionsParams) {
+export function useUserActions({ token, setUsers }: UseUserActionsParams) {
   const [showUserModal, setShowUserModal] = useState<boolean>(false);
   const [editingUser, setEditingUser] = useState<PublicUser | null>(null);
   const [userFormData, setUserFormData] = useState(DEFAULT_USER_FORM);
@@ -40,12 +40,12 @@ export function useUserActions({ token, fetchAdminData }: UseUserActionsParams) 
           headers: jsonAuthHeaders(token),
           body: JSON.stringify(body)
         });
-        await parseJsonOrThrow(res);
+        const savedUser = await parseJsonOrThrow(res);
+        setUsers(prev => upsertById(prev, savedUser)); // POST appends server-side (db.users.push)
         notifySuccess(editingUser ? 'Perubahan user berhasil disimpan!' : 'User baru berhasil ditambahkan!');
         setShowUserModal(false);
         setEditingUser(null);
         setUserFormData(DEFAULT_USER_FORM);
-        fetchAdminData();
       } catch (err: any) {
         notifyError(`Gagal menyimpan user: ${err.message}`);
       }
@@ -61,7 +61,7 @@ export function useUserActions({ token, fetchAdminData }: UseUserActionsParams) 
           headers: authHeaders(token)
         });
         await parseJsonOrThrow(res);
-        fetchAdminData();
+        setUsers(prev => prev.filter(u => u.id !== user.id));
       } catch (err: any) {
         notifyError(`Gagal menghapus user: ${err.message}`);
       }
@@ -76,8 +76,8 @@ export function useUserActions({ token, fetchAdminData }: UseUserActionsParams) 
           headers: jsonAuthHeaders(token),
           body: JSON.stringify({ active: user.active === false ? true : false })
         });
-        await parseJsonOrThrow(res);
-        fetchAdminData();
+        const updatedUser = await parseJsonOrThrow(res);
+        setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
       } catch (err: any) {
         notifyError(`Gagal mengubah status user: ${err.message}`);
       }

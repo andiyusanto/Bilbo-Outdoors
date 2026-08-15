@@ -421,10 +421,12 @@
 
   <h3 class="sub">Alat bantu pencarian &amp; filter</h3>
   <ul class="plain">
-    <li>Kotak pencarian <span class="ui">Cari nama / WhatsApp...</span></li>
+    <li>Kolom pertama <span class="ui">No. Order</span> menampilkan ID unik tiap pesanan &mdash; nomor yang sama dengan yang tercetak di resi pelanggan.</li>
+    <li>Kotak pencarian <span class="ui">Cari nama / WhatsApp...</span> juga menyaring berdasarkan No. Order.</li>
     <li>Filter status: Semua Status / Pending / Approved-Paid / Item Picked Up / Returned-Completed / Expired.</li>
     <li>Filter tanggal <span class="ui">Dari</span> / <span class="ui">Sampai</span> (default bulan berjalan).</li>
-    <li><span class="ui">Unduh Excel</span> &mdash; mengekspor daftar pesanan yang sedang tampil (sesuai filter aktif) ke file CSV berisi kolom Nama Penyewa, WhatsApp, Tanggal Mulai, Tanggal Selesai, Durasi, Total Biaya, Denda, Hari Terlambat, Denda Kerusakan/Kehilangan, Sudah Dibayar, Sisa Pembayaran, dan Status. Tombol ini otomatis nonaktif jika daftar sedang kosong.</li>
+    <li>Kolom <span class="ui">Tanggal Pemesanan</span>, <span class="ui">Tanggal Sewa</span>, dan <span class="ui">Status</span> bisa diurutkan &mdash; klik judul kolom untuk urut naik, klik lagi untuk urut turun, klik ketiga kali untuk kembali ke urutan semula (pesanan terbaru di atas). Urutan Status mengikuti alur pesanan (Pending &rarr; Approved/Paid &rarr; Item Picked Up &rarr; Item Returned/Completed), bukan abjad, dengan Expired selalu di posisi terakhir.</li>
+    <li><span class="ui">Unduh Excel</span> &mdash; mengekspor daftar pesanan yang sedang tampil (sesuai filter dan urutan aktif) ke file CSV berisi kolom No. Order, Nama Penyewa, WhatsApp, Tanggal Pemesanan, Tanggal Mulai, Tanggal Selesai, Durasi, Total Biaya, Denda, Hari Terlambat, Denda Kerusakan/Kehilangan, Sudah Dibayar, Sisa Pembayaran, dan Status. Tombol ini otomatis nonaktif jika daftar sedang kosong.</li>
     <li>Kolom <span class="ui">Diubah Terakhir Oleh</span> menampilkan staf dan waktu perubahan status/edit terakhir pada pesanan tersebut (strip &mdash; berarti belum pernah diubah). Riwayat lengkap semua perubahan ada di bagian <span class="ui">Riwayat Status</span> pada panel Detail Order, termasuk perubahan otomatis oleh sistem (misalnya kedaluwarsa) yang tercatat sebagai &ldquo;Sistem (Otomatis)&rdquo;.</li>
   </ul>
 

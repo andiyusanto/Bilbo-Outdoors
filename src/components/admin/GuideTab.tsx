@@ -230,10 +230,21 @@ export default function GuideTab() {
 
       <Section id="g-1-5" num="1.5" title="Manajemen Order" kicker="Menu utama untuk memproses seluruh pesanan pelanggan.">
         <ul className="list-disc pl-5 space-y-1.5 text-xs text-zinc-800">
-          <li>Pencarian <Ui>Cari nama / WhatsApp...</Ui>, filter status, filter tanggal <Ui>Dari</Ui>/<Ui>Sampai</Ui>.</li>
           <li>
-            <Ui>Unduh Excel</Ui> &mdash; ekspor daftar pesanan yang sedang tampil (sesuai filter aktif) ke CSV. Nonaktif
-            jika daftar kosong.
+            Kolom pertama <Ui>No. Order</Ui> menampilkan ID unik tiap pesanan &mdash; nomor yang sama dengan yang
+            tercetak di resi pelanggan. Bisa dicari lewat kotak <Ui>Cari nama / WhatsApp...</Ui>, yang juga menyaring
+            berdasarkan No. Order, filter status, filter tanggal <Ui>Dari</Ui>/<Ui>Sampai</Ui>.
+          </li>
+          <li>
+            Kolom <Ui>Tanggal Pemesanan</Ui>, <Ui>Tanggal Sewa</Ui>, dan <Ui>Status</Ui> bisa diurutkan &mdash; klik
+            judul kolom untuk urut naik, klik lagi untuk urut turun, klik ketiga kali untuk kembali ke urutan semula
+            (pesanan terbaru di atas). Urutan <Ui>Status</Ui> mengikuti alur pesanan (Pending &rarr; Approved/Paid
+            &rarr; Item Picked Up &rarr; Item Returned/Completed), bukan abjad, dengan Expired selalu di posisi
+            terakhir.
+          </li>
+          <li>
+            <Ui>Unduh Excel</Ui> &mdash; ekspor daftar pesanan yang sedang tampil (sesuai filter dan urutan aktif) ke
+            CSV, termasuk kolom No. Order. Nonaktif jika daftar kosong.
           </li>
           <li>
             Kolom <Ui>Diubah Terakhir Oleh</Ui> menampilkan staf dan waktu perubahan status/edit terakhir pada pesanan

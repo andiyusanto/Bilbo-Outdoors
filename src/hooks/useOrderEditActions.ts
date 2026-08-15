@@ -18,9 +18,10 @@ interface UseOrderEditActionsParams {
 }
 
 // Mirrors useAvailability.ts's date-change-triggers-availability-refetch
-// pattern, but for editing an existing Pending order's items/dates instead of
-// building a new cart - the key difference is excludeOrderId, so the order's
-// own current allocation never counts as "unavailable" against itself.
+// pattern, but for editing an existing Pending/Approved-Paid order's
+// items/dates instead of building a new cart - the key difference is
+// excludeOrderId, so the order's own current allocation never counts as
+// "unavailable" against itself.
 export function useOrderEditActions({ token, selectedOrder, setOrders, setSelectedOrder, fetchAdminData }: UseOrderEditActionsParams) {
   const [showEditOrder, setShowEditOrder] = useState<boolean>(false);
   const [editStartDate, setEditStartDate] = useState<string>('');

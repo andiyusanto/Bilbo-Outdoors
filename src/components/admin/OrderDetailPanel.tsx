@@ -243,7 +243,7 @@ export default function OrderDetailPanel({
               </div>
             )}
 
-            {order.status === 'Pending' && !showEditOrder && (
+            {(order.status === 'Pending' || order.status === 'Approved/Paid') && !showEditOrder && (
               <div className="border-t-2 border-black pt-3">
                 <button
                   type="button"
@@ -320,10 +320,20 @@ export default function OrderDetailPanel({
                 ) : editFilteredProducts.map((prod) => {
                   const qty = editItems[prod.id] || 0;
                   const maxQty = editAvailability[prod.id]?.remaining ?? prod.stock;
+                  const attrLine = (prod.varian || prod.size || prod.color)
+                    ? [
+                        prod.varian && `Varian: ${prod.varian}`,
+                        prod.size && `Ukuran: ${prod.size}`,
+                        prod.color && `Warna: ${prod.color}`,
+                      ].filter(Boolean).join('   •   ')
+                    : null;
                   return (
                     <div key={prod.id} className="p-2.5 flex items-center justify-between gap-2">
                       <div className="min-w-0">
                         <p className="text-[11px] font-black text-black uppercase truncate">{prod.name}</p>
+                        {attrLine && (
+                          <p className="text-[9px] text-zinc-500 font-bold uppercase truncate">{attrLine}</p>
+                        )}
                         <p className="text-[9px] text-zinc-500 font-bold uppercase">Tersisa: {maxQty}</p>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">

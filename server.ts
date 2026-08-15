@@ -828,10 +828,11 @@ app.get('/api/orders/:id', authenticateUser, asyncHandler(async (req, res) => {
 
 // Admin: edit a Pending order's items and/or rental dates - staff correcting
 // a booking (add/remove/swap items, change quantities, reschedule) without
-// cancelling and recreating it. Only while still Pending - once approved,
-// items/dates are considered locked in. Sends the full replacement items
-// array (not a delta), same shape as the client-side cart, so add/remove/
-// swap/change-quantity are all covered by one save.
+// cancelling and recreating it. Allowed up through Approved/Paid - once the
+// item is physically handed over (Item Picked Up), items/dates are considered
+// locked in. Sends the full replacement items array (not a delta), same shape
+// as the client-side cart, so add/remove/swap/change-quantity are all covered
+// by one save.
 app.put('/api/orders/:id/edit', authenticateUser, asyncHandler(async (req, res) => {
   await withDbLock(async () => {
     const { id } = req.params;
@@ -842,8 +843,8 @@ app.put('/api/orders/:id/edit', authenticateUser, asyncHandler(async (req, res) 
       return res.status(404).json({ error: 'Order not found.' });
     }
     const order = db.orders[orderIndex];
-    if (order.status !== 'Pending') {
-      return res.status(400).json({ error: 'Hanya pesanan berstatus Pending yang bisa diedit.' });
+    if (order.status !== 'Pending' && order.status !== 'Approved/Paid') {
+      return res.status(400).json({ error: 'Pesanan hanya bisa diedit sebelum barang diambil (status Pending atau Approved/Paid).' });
     }
     if (!startDate || !endDate || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Tanggal dan minimal satu item wajib diisi.' });

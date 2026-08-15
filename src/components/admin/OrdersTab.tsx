@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Search, ChevronRight, FileSpreadsheet } from 'lucide-react';
-import { OrderListItem, Product, StoreSettings } from '../../types';
+import { Search, ChevronRight, FileSpreadsheet, ArrowUpDown, ChevronUp, ChevronDown } from 'lucide-react';
+import { OrderListItem, OrderStatus, Product, StoreSettings } from '../../types';
 import { useOrderActions } from '../../hooks/useOrderActions';
 import { useOrderEditActions } from '../../hooks/useOrderEditActions';
 import { formatDateLabel, formatDateTimeLabel, getDefaultDateRange } from '../../lib/date';
@@ -8,7 +8,7 @@ import { getAmountPaid, getRemainingBalance, getPenaltyTotal } from '../../prici
 import OrderDetailPanel from './OrderDetailPanel';
 import DateInput from '../DateInput';
 
-const CSV_COLUMNS = ['Nama Penyewa', 'WhatsApp', 'Tanggal Pemesanan', 'Tanggal Mulai', 'Tanggal Selesai', 'Durasi (Hari)', 'Total Biaya (Rp)', 'Denda (Rp)', 'Hari Terlambat', 'Denda Kerusakan/Kehilangan (Rp)', 'Sudah Dibayar (Rp)', 'Sisa Pembayaran (Rp)', 'Status'] as const;
+const CSV_COLUMNS = ['No. Order', 'Nama Penyewa', 'WhatsApp', 'Tanggal Pemesanan', 'Tanggal Mulai', 'Tanggal Selesai', 'Durasi (Hari)', 'Total Biaya (Rp)', 'Denda (Rp)', 'Hari Terlambat', 'Denda Kerusakan/Kehilangan (Rp)', 'Sudah Dibayar (Rp)', 'Sisa Pembayaran (Rp)', 'Status'] as const;
 
 // Excel/CSV requires quoting any field containing a comma, quote, or newline -
 // and doubling internal quotes - or the file silently misparses into the wrong
@@ -20,6 +20,7 @@ function csvField(value: string | number): string {
 
 function ordersToCsv(orders: OrderListItem[]): string {
   const rows = orders.map(o => [
+    o.id,
     o.customerName,
     o.customerWhatsApp,
     formatDateLabel(o.createdAt.split('T')[0]),
@@ -39,6 +40,26 @@ function ordersToCsv(orders: OrderListItem[]): string {
   return String.fromCharCode(0xFEFF) + [CSV_COLUMNS, ...rows].map(row => row.map(csvField).join(',')).join('\r\n');
 }
 
+type SortColumn = 'createdAt' | 'startDate' | 'status';
+
+// Status isn't naturally alphabetical - rank by the app's own workflow
+// sequence (same order StatusFlow uses in GuideTab.tsx) so sorting is
+// actually useful, with Expired ranked last as the branch case.
+const STATUS_SORT_ORDER: Record<OrderStatus, number> = {
+  'Pending': 0,
+  'Approved/Paid': 1,
+  'Item Picked Up': 2,
+  'Item Returned/Completed': 3,
+  'Expired': 4,
+};
+
+function SortIcon({ active, direction }: { active: boolean; direction: 'asc' | 'desc' }) {
+  if (!active) return <ArrowUpDown className="w-3 h-3 ml-1 text-zinc-300 inline" />;
+  return direction === 'asc'
+    ? <ChevronUp className="w-3 h-3 ml-1 text-black inline" />
+    : <ChevronDown className="w-3 h-3 ml-1 text-black inline" />;
+}
+
 interface OrdersTabProps {
   orders: OrderListItem[];
   products: Product[];
@@ -53,6 +74,25 @@ export default function OrdersTab({ orders, products, settings, orderActions, or
   const [orderStatusFilter, setOrderStatusFilter] = useState<string>('All');
   const [orderDateFrom, setOrderDateFrom] = useState<string>(() => getDefaultDateRange().from);
   const [orderDateTo, setOrderDateTo] = useState<string>(() => getDefaultDateRange().to);
+  const [sortColumn, setSortColumn] = useState<SortColumn | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  // 3-state cycle per column: click = asc, click again = desc, click again =
+  // back to default (insertion) order. Clicking a different column resets to
+  // that column ascending. Only one column sorted at a time.
+  const handleSort = (col: SortColumn) => {
+    if (sortColumn !== col) {
+      setSortColumn(col);
+      setSortDirection('asc');
+      return;
+    }
+    if (sortDirection === 'asc') {
+      setSortDirection('desc');
+      return;
+    }
+    setSortColumn(null);
+    setSortDirection('asc');
+  };
 
   const {
     selectedOrder,
@@ -87,7 +127,8 @@ export default function OrdersTab({ orders, products, settings, orderActions, or
   const filteredOrders = orders.filter(o => {
     const matchesSearch =
       o.customerName.toLowerCase().includes(orderSearch.toLowerCase()) ||
-      o.customerWhatsApp.includes(orderSearch);
+      o.customerWhatsApp.includes(orderSearch) ||
+      o.id.toLowerCase().includes(orderSearch.toLowerCase());
     const matchesStatus = orderStatusFilter === 'All' || o.status === orderStatusFilter;
     // Filters by when the order was placed (createdAt), not the rental period -
     // matches the "Tanggal Pemesanan" column below and the same field
@@ -102,10 +143,21 @@ export default function OrdersTab({ orders, products, settings, orderActions, or
     return matchesSearch && matchesStatus && matchesDateFrom && matchesDateTo;
   });
 
-  // Exports exactly what's currently on screen (filteredOrders), not the full
-  // unfiltered orders list - so search/status/date filters narrow the export too.
+  const sortedOrders = [...filteredOrders];
+  if (sortColumn) {
+    sortedOrders.sort((a, b) => {
+      const cmp = sortColumn === 'status'
+        ? STATUS_SORT_ORDER[a.status] - STATUS_SORT_ORDER[b.status]
+        : a[sortColumn].localeCompare(b[sortColumn]);
+      return sortDirection === 'asc' ? cmp : -cmp;
+    });
+  }
+
+  // Exports exactly what's currently on screen (sortedOrders), not the full
+  // unfiltered orders list - so search/status/date filters and the active
+  // column sort narrow/order the export too.
   const handleDownloadCsv = () => {
-    const csv = ordersToCsv(filteredOrders);
+    const csv = ordersToCsv(sortedOrders);
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const dateSuffix = orderDateFrom || orderDateTo ? `_${orderDateFrom || 'awal'}_sd_${orderDateTo || 'akhir'}` : '';
@@ -185,26 +237,45 @@ export default function OrdersTab({ orders, products, settings, orderActions, or
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-zinc-50 border-b-2 border-black">
+                <th className="px-5 py-3.5 text-[10px] font-black text-black uppercase tracking-wider">No. Order</th>
                 <th className="px-5 py-3.5 text-[10px] font-black text-black uppercase tracking-wider">Penyewa / WhatsApp</th>
-                <th className="px-5 py-3.5 text-[10px] font-black text-black uppercase tracking-wider">Tanggal Pemesanan</th>
-                <th className="px-5 py-3.5 text-[10px] font-black text-black uppercase tracking-wider">Tanggal Sewa</th>
+                <th
+                  onClick={() => handleSort('createdAt')}
+                  className="px-5 py-3.5 text-[10px] font-black text-black uppercase tracking-wider cursor-pointer select-none hover:bg-zinc-100"
+                >
+                  <span className="inline-flex items-center">Tanggal Pemesanan<SortIcon active={sortColumn === 'createdAt'} direction={sortDirection} /></span>
+                </th>
+                <th
+                  onClick={() => handleSort('startDate')}
+                  className="px-5 py-3.5 text-[10px] font-black text-black uppercase tracking-wider cursor-pointer select-none hover:bg-zinc-100"
+                >
+                  <span className="inline-flex items-center">Tanggal Sewa<SortIcon active={sortColumn === 'startDate'} direction={sortDirection} /></span>
+                </th>
                 <th className="px-5 py-3.5 text-[10px] font-black text-black uppercase tracking-wider">Durasi</th>
                 <th className="px-5 py-3.5 text-[10px] font-black text-black uppercase tracking-wider">Total Biaya</th>
-                <th className="px-5 py-3.5 text-[10px] font-black text-black uppercase tracking-wider">Status</th>
+                <th
+                  onClick={() => handleSort('status')}
+                  className="px-5 py-3.5 text-[10px] font-black text-black uppercase tracking-wider cursor-pointer select-none hover:bg-zinc-100"
+                >
+                  <span className="inline-flex items-center">Status<SortIcon active={sortColumn === 'status'} direction={sortDirection} /></span>
+                </th>
                 <th className="px-5 py-3.5 text-[10px] font-black text-black uppercase tracking-wider">Diubah Terakhir Oleh</th>
                 <th className="px-5 py-3.5 text-[10px] font-black text-black uppercase tracking-wider text-right">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y-2 divide-black">
-              {filteredOrders.length === 0 ? (
+              {sortedOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-5 py-12 text-center text-xs text-zinc-500 font-bold uppercase tracking-wider">
+                  <td colSpan={9} className="px-5 py-12 text-center text-xs text-zinc-500 font-bold uppercase tracking-wider">
                     Belum ada pesanan penyewaan camping yang cocok.
                   </td>
                 </tr>
               ) : (
-                filteredOrders.map((order) => (
+                sortedOrders.map((order) => (
                   <tr key={order.id} className="hover:bg-brand/5 transition-colors">
+                    <td className="px-5 py-4">
+                      <span className="font-mono text-[10px] text-zinc-500 font-bold">{order.id}</span>
+                    </td>
                     <td className="px-5 py-4">
                       <p className="font-black text-black text-xs uppercase">{order.customerName}</p>
                       <p className="text-[10px] text-zinc-500 font-mono font-bold mt-0.5">{order.customerWhatsApp}</p>

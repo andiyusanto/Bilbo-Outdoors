@@ -264,19 +264,26 @@ export default function GuideTab() {
             </>,
           ]}
         />
+        <Note label="Kalkulator Denda hanya muncul saat Item Picked Up">
+          Denda keterlambatan hanya bisa dihitung setelah barang benar-benar diambil pelanggan &mdash; tombol{' '}
+          <Ui>Kalkulator Denda</Ui> tidak akan tampil (dan permintaan hitung ditolak server) selama pesanan masih
+          Pending/Approved-Paid, supaya tidak ada denda yang tercatat sebelum masa sewa berjalan.
+        </Note>
         <p className="font-bold text-xs mt-3">Pembayaran sebagian (DP)</p>
         <p>
           Baris <Ui>Sudah Dibayar</Ui> menampilkan nominal yang sudah diterima; baris <Ui>Sisa Pembayaran</Ui> muncul
           otomatis selama masih ada tagihan tersisa. Gunakan tautan <Ui>Edit</Ui> di samping <Ui>Sudah Dibayar</Ui>{' '}
           kapan saja untuk mencatat pelunasan tambahan sebelum barang diambil atau dikembalikan.
         </p>
-        <p className="font-bold text-xs mt-3">Edit Pesanan (khusus status Pending)</p>
+        <p className="font-bold text-xs mt-3">Edit Pesanan (status Pending atau Approved/Paid)</p>
         <p>
-          Tombol <Ui>Edit Pesanan (Item &amp; Tanggal)</Ui> hanya muncul selama pesanan masih Pending. Gunakan untuk
-          menambah, mengurangi, atau mengganti alat yang disewa, maupun menjadwalkan ulang tanggal sewa &mdash; tanpa
-          perlu membatalkan dan membuat pesanan baru. Total biaya dan ketersediaan stok dihitung ulang otomatis; stok
-          milik pesanan ini sendiri tidak ikut dihitung sebagai &ldquo;terpakai&rdquo; saat mengecek ketersediaan.
-          Perubahan ini tercatat di <Ui>Riwayat Status</Ui>.
+          Tombol <Ui>Edit Pesanan (Item &amp; Tanggal)</Ui> muncul selama pesanan masih Pending atau Approved/Paid
+          &mdash; terkunci begitu barang diambil (Item Picked Up), karena sejak itu item/tanggal dianggap final.
+          Gunakan untuk menambah, mengurangi, atau mengganti alat yang disewa, maupun menjadwalkan ulang tanggal sewa
+          &mdash; tanpa perlu membatalkan dan membuat pesanan baru. Total biaya dan ketersediaan stok dihitung ulang
+          otomatis; stok milik pesanan ini sendiri tidak ikut dihitung sebagai &ldquo;terpakai&rdquo; saat mengecek
+          ketersediaan. Daftar alat pada langkah ini juga menampilkan Varian/Ukuran/Warna produk (jika diisi), sama
+          seperti di halaman katalog publik. Perubahan ini tercatat di <Ui>Riwayat Status</Ui>.
         </p>
         <p className="font-bold text-xs mt-3">Denda Kerusakan &amp; Kehilangan</p>
         <p>
@@ -284,6 +291,22 @@ export default function GuideTab() {
           <Ui>+ Tambah Denda Kerusakan/Kehilangan</Ui> pada panel yang sama. Pilih jenis (<Ui>Kerusakan</Ui> atau{' '}
           <Ui>Kehilangan</Ui>), alat yang terkait, alasan singkat (wajib diisi), dan nominal denda. Alasan hanya
           terlihat oleh staf/owner &mdash; tidak dicetak di resi pelanggan, yang hanya menampilkan total gabungan.
+        </p>
+        <p className="font-bold text-xs mt-3">Menghapus Denda (khusus Owner)</p>
+        <p>
+          Owner melihat tautan <Ui>Hapus</Ui> tambahan di dua tempat pada panel Detail Order: di samping baris{' '}
+          <Ui>Denda Terlambat</Ui> (mereset denda keterlambatan kembali ke Rp 0), dan di setiap baris Denda
+          Kerusakan/Kehilangan. Karyawan hanya bisa menghapus denda Kerusakan/Kehilangan sebelum pesanan selesai;
+          Owner bisa menghapus denda jenis apa pun kapan saja, termasuk setelah pesanan Selesai &mdash; berguna untuk
+          membetulkan kesalahan input tanpa perlu mengubah data lain di pesanan tersebut.
+        </p>
+        <p className="font-bold text-xs mt-3">Menghapus Pesanan (khusus Owner)</p>
+        <p>
+          Blok <Ui>Zona Berbahaya (Owner)</Ui> di bagian bawah panel Detail Order menampilkan tautan{' '}
+          <Ui>Hapus Pesanan Ini</Ui>, hanya untuk Owner dan hanya selama pesanan belum berstatus Item
+          Returned/Completed &mdash; sekali pesanan selesai, datanya terkunci demi menjaga riwayat omset tetap utuh.
+          Dipakai untuk kasus seperti kesalahan input ganda (double booking); stok yang teralokasi ke pesanan tersebut
+          langsung terbebas begitu dihapus. Tindakan ini permanen dan tidak bisa dibatalkan.
         </p>
       </Section>
 
@@ -437,6 +460,11 @@ export default function GuideTab() {
           dipakai bersamaan. Tekan <Ui>Pilih Alat</Ui> untuk menambah 1 unit ke keranjang, lalu gunakan{' '}
           <Ui>-</Ui>/<Ui>+</Ui> untuk mengubah jumlah &mdash; dibatasi sisa stok pada rentang tanggal yang dipilih.
         </p>
+        <Note label="Alat berstok kosong otomatis pindah ke bawah">
+          Begitu tanggal sewa terisi, alat yang berlabel <Ui>Stok Kosong</Ui> untuk rentang tanggal tersebut otomatis
+          ditampilkan paling akhir dalam urutan katalog, supaya pelanggan tidak perlu menggulir melewati alat yang
+          memang tidak bisa dipesan sebelum menemukan yang masih tersedia.
+        </Note>
       </Section>
 
       <Section id="g-2-5" num="2.5" title="Ringkasan Keranjang (Current Selection)" kicker="Kotak yang menampilkan rincian alat yang sudah dipilih.">

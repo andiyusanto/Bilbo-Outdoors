@@ -456,14 +456,25 @@
 
   <p>Pesanan berstatus Item Returned/Completed menampilkan banner konfirmasi &ldquo;Transaksi Selesai &amp; Peralatan Kembali&rdquo; dan tidak memiliki aksi lanjutan.</p>
 
+  <div class="note">
+    <span class="note-label">Kalkulator Denda hanya muncul saat Item Picked Up</span>
+    Denda keterlambatan hanya bisa dihitung setelah barang benar-benar diambil pelanggan &mdash; tombol <span class="ui">Kalkulator Denda</span> tidak akan tampil (dan permintaan hitung ditolak server) selama pesanan masih Pending/Approved-Paid, supaya tidak ada denda yang tercatat sebelum masa sewa berjalan.
+  </div>
+
   <h3 class="sub">Pembayaran sebagian (DP)</h3>
   <p>Baris <span class="ui">Sudah Dibayar</span> menampilkan nominal yang sudah diterima; baris <span class="ui">Sisa Pembayaran</span> muncul otomatis selama masih ada tagihan tersisa. Gunakan tautan <span class="ui">Edit</span> di samping <span class="ui">Sudah Dibayar</span> kapan saja untuk mencatat pelunasan tambahan sebelum barang diambil atau dikembalikan.</p>
 
-  <h3 class="sub">Edit Pesanan (khusus status Pending)</h3>
-  <p>Tombol <span class="ui">Edit Pesanan (Item &amp; Tanggal)</span> hanya muncul selama pesanan masih Pending. Gunakan untuk menambah, mengurangi, atau mengganti alat yang disewa, maupun menjadwalkan ulang tanggal sewa &mdash; tanpa perlu membatalkan dan membuat pesanan baru. Total biaya dan ketersediaan stok dihitung ulang otomatis; stok milik pesanan ini sendiri tidak ikut dihitung sebagai &ldquo;terpakai&rdquo; saat mengecek ketersediaan. Perubahan ini tercatat di <span class="ui">Riwayat Status</span>.</p>
+  <h3 class="sub">Edit Pesanan (status Pending atau Approved/Paid)</h3>
+  <p>Tombol <span class="ui">Edit Pesanan (Item &amp; Tanggal)</span> muncul selama pesanan masih Pending atau Approved/Paid &mdash; terkunci begitu barang diambil (Item Picked Up), karena sejak itu item/tanggal dianggap final. Gunakan untuk menambah, mengurangi, atau mengganti alat yang disewa, maupun menjadwalkan ulang tanggal sewa &mdash; tanpa perlu membatalkan dan membuat pesanan baru. Total biaya dan ketersediaan stok dihitung ulang otomatis; stok milik pesanan ini sendiri tidak ikut dihitung sebagai &ldquo;terpakai&rdquo; saat mengecek ketersediaan. Daftar alat pada langkah ini juga menampilkan Varian/Ukuran/Warna produk (jika diisi), sama seperti di halaman katalog publik. Perubahan ini tercatat di <span class="ui">Riwayat Status</span>.</p>
 
   <h3 class="sub">Denda Kerusakan &amp; Kehilangan</h3>
   <p>Selain denda keterlambatan, staf bisa mencatat denda untuk alat yang rusak atau hilang lewat tautan <span class="ui">+ Tambah Denda Kerusakan/Kehilangan</span> pada panel yang sama. Pilih jenis (<span class="ui">Kerusakan</span> atau <span class="ui">Kehilangan</span>), alat yang terkait, alasan singkat (wajib diisi), dan nominal denda. Alasan hanya terlihat oleh staf/owner &mdash; tidak dicetak di resi pelanggan, yang hanya menampilkan total gabungan.</p>
+
+  <h3 class="sub">Menghapus Denda (khusus Owner)</h3>
+  <p>Owner melihat tautan <span class="ui">Hapus</span> tambahan di dua tempat pada panel Detail Order: di samping baris <span class="ui">Denda Terlambat</span> (mereset denda keterlambatan kembali ke Rp 0), dan di setiap baris Denda Kerusakan/Kehilangan. Karyawan hanya bisa menghapus denda Kerusakan/Kehilangan sebelum pesanan selesai; Owner bisa menghapus denda jenis apa pun kapan saja, termasuk setelah pesanan Selesai &mdash; berguna untuk membetulkan kesalahan input tanpa perlu mengubah data lain di pesanan tersebut.</p>
+
+  <h3 class="sub">Menghapus Pesanan (khusus Owner)</h3>
+  <p>Blok <span class="ui">Zona Berbahaya (Owner)</span> di bagian bawah panel Detail Order menampilkan tautan <span class="ui">Hapus Pesanan Ini</span>, hanya untuk Owner dan hanya selama pesanan belum berstatus Item Returned/Completed &mdash; sekali pesanan selesai, datanya terkunci demi menjaga riwayat omset tetap utuh. Dipakai untuk kasus seperti kesalahan input ganda (double booking); stok yang teralokasi ke pesanan tersebut langsung terbebas begitu dihapus. Tindakan ini permanen dan tidak bisa dibatalkan.</p>
 </section>
 
 <section class="chapter">
@@ -644,6 +655,11 @@
   <p>Kotak <span class="ui">Cari nama alat sewa...</span> di atas tab kategori menyaring katalog berdasarkan nama, kategori, deskripsi, varian, ukuran, atau warna. Tab filter kategori (Tent &amp; Shelter, Sleeping System, Carrier &amp; Backpack, Cooking Gear, Lighting &amp; Power, Hiking Essentials, Camp Support, Apparel &amp; Personal Gear, dan kategori tambahan lain) mempersempit tampilan lebih lanjut &mdash; keduanya bisa dipakai bersamaan. Setiap kartu alat menunjukkan foto, kategori, sisa stok (setelah tanggal dipilih), nama, deskripsi, harga per hari, serta catatan hemat jika alat tersebut memiliki diskon untuk sewa 5 hari.</p>
 
   <p>Tekan <span class="ui">Pilih Alat</span> untuk menambahkan 1 unit ke keranjang. Setelah masuk keranjang, gunakan tombol <span class="ui">-</span>/<span class="ui">+</span> untuk mengubah jumlah &mdash; dibatasi oleh sisa stok yang tersedia untuk rentang tanggal yang dipilih.</p>
+
+  <div class="note">
+    <span class="note-label">Alat berstok kosong otomatis pindah ke bawah</span>
+    Begitu tanggal sewa terisi, alat yang berlabel <span class="ui">Stok Kosong</span> untuk rentang tanggal tersebut otomatis ditampilkan paling akhir dalam urutan katalog, supaya pelanggan tidak perlu menggulir melewati alat yang memang tidak bisa dipesan sebelum menemukan yang masih tersedia.
+  </div>
 </section>
 
 <section class="chapter">

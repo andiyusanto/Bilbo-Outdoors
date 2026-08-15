@@ -139,8 +139,12 @@ export default function ClientPortal({ onAdminToggle, runningText }: ClientPorta
   // surface discounted items first (highest discount first) - items with no
   // discount all tie at 0 and keep their existing relative order via the
   // stable sort. Search matches customer-relevant fields only (not
-  // rates/prices, unlike the admin-only Manajemen Stok search).
+  // rates/prices, unlike the admin-only Manajemen Stok search). Once dates
+  // are picked, out-of-stock items (same "remaining <= 0" check EquipmentGrid
+  // uses for its "Stok Kosong" badge) sink to the bottom regardless of
+  // discount, so customers aren't scanning past gear they can't book.
   const hasActiveFilter = activeCategory !== 'ALL' || productSearch.trim() !== '';
+  const hasDates = !!(startDate && endDate);
   const filteredProducts = products
     .filter(p => activeCategory === 'ALL' || p.category === activeCategory)
     .filter(p => {
@@ -149,7 +153,14 @@ export default function ClientPortal({ onAdminToggle, runningText }: ClientPorta
       return [p.name, p.category, p.description, p.varian, p.size, p.color]
         .some(field => field?.toLowerCase().includes(q));
     })
-    .sort((a, b) => calculateSavingsFor5Days(b.rates) - calculateSavingsFor5Days(a.rates));
+    .sort((a, b) => {
+      if (hasDates) {
+        const aOut = (stockDetails[a.id]?.remaining ?? 1) <= 0 ? 1 : 0;
+        const bOut = (stockDetails[b.id]?.remaining ?? 1) <= 0 ? 1 : 0;
+        if (aOut !== bOut) return aOut - bOut;
+      }
+      return calculateSavingsFor5Days(b.rates) - calculateSavingsFor5Days(a.rates);
+    });
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-12 pb-24">

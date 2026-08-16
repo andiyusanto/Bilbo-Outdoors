@@ -9,7 +9,7 @@ import { defaultProducts } from './db/defaultProducts';
 import { defaultSettings } from './db/defaultSettings';
 import { defaultUsers } from './db/defaultUsers';
 import { defaultJobPriceList } from './db/defaultJobPriceList';
-import { initPostgresPool, seedPostgresIfEmpty, readDBPostgres, writeDBPostgres, findUserByUsernamePostgres, findUserBySessionTokenPostgres, findUserByIdPostgres, updateUserAuthFieldsPostgres } from './db/postgres';
+import { initPostgresPool, seedPostgresIfEmpty, readDBPostgres, writeDBPostgres, findUserByUsernamePostgres, findUserBySessionTokenPostgres, findUserByIdPostgres, updateUserAuthFieldsPostgres, readProductsPostgres, readOrdersPostgres, readSettingsPostgres, readUsersPostgres, readJobPriceListPostgres, readJobEntriesPostgres, writeOrdersPostgres } from './db/postgres';
 import { calculateRentalCost, calculateLegacyRentalCost, getAmountPaid, getRemainingBalance, getPenaltyTotal } from './src/pricing';
 import { hashPassword, verifyPassword, generateSessionToken } from './src/auth';
 import { formatDateLabel, getTodayDateString } from './src/lib/date';
@@ -117,6 +117,18 @@ let findUserByUsername: (username: string) => Promise<AppUser | null>;
 let findUserBySessionToken: (token: string) => Promise<AppUser | null>;
 let findUserById: (userId: string) => Promise<AppUser | null>;
 let updateUserAuthFields: (userId: string, fields: { sessionToken: string | null; passwordHash?: string; passwordSalt?: string }) => Promise<void>;
+// Narrow, single-table peers of readDB/writeDB for the read-only GET routes
+// that only ever need one table - see db/postgres.ts's comment above
+// readProductsPostgres for why (fetchAdminData now fires all of these
+// concurrently, and readDB()'s full 7-query fan-out multiplies badly under
+// that concurrency against the connection pool's limit).
+let readProducts: () => Promise<Product[]>;
+let readOrders: () => Promise<Order[]>;
+let readJobPriceList: () => Promise<JobPriceListItem[]>;
+let readJobEntries: () => Promise<JobEntry[]>;
+let readSettings: () => Promise<StoreSettings>;
+let readUsers: () => Promise<AppUser[]>;
+let writeOrders: (orders: Order[]) => Promise<void>;
 
 function seedJsonFileIfMissing(): void {
   if (!fs.existsSync(DB_FILE)) {
@@ -145,6 +157,13 @@ async function initDatabase(): Promise<void> {
     findUserBySessionToken = findUserBySessionTokenPostgres;
     findUserById = findUserByIdPostgres;
     updateUserAuthFields = updateUserAuthFieldsPostgres;
+    readProducts = readProductsPostgres;
+    readOrders = readOrdersPostgres;
+    readJobPriceList = readJobPriceListPostgres;
+    readJobEntries = readJobEntriesPostgres;
+    readSettings = readSettingsPostgres;
+    readUsers = readUsersPostgres;
+    writeOrders = writeOrdersPostgres;
     console.log('Persistence: Postgres (DATABASE_URL detected).');
   } else {
     seedJsonFileIfMissing();
@@ -196,6 +215,17 @@ async function initDatabase(): Promise<void> {
         if (fields.passwordHash !== undefined) user.passwordHash = fields.passwordHash;
         if (fields.passwordSalt !== undefined) user.passwordSalt = fields.passwordSalt;
       }
+      await writeDB(db);
+    };
+    readProducts = async () => (await readDB()).products;
+    readOrders = async () => (await readDB()).orders;
+    readJobPriceList = async () => (await readDB()).jobPriceList;
+    readJobEntries = async () => (await readDB()).jobEntries;
+    readSettings = async () => (await readDB()).settings;
+    readUsers = async () => (await readDB()).users;
+    writeOrders = async (orders: Order[]) => {
+      const db = await readDB();
+      db.orders = orders;
       await writeDB(db);
     };
     console.log('Persistence: local JSON file (server_db.json).');
@@ -314,8 +344,8 @@ app.post('/api/auth/change-password', authenticateUser, asyncHandler(async (req,
 
 // Owner-only: list users (public-safe projection, never sends hashes/tokens)
 app.get('/api/users', authenticateUser, requireOwner, asyncHandler(async (req, res) => {
-  const db = await readDB();
-  res.json(db.users.map(toPublicUser));
+  const users = await readUsers();
+  res.json(users.map(toPublicUser));
 }));
 
 // Owner-only: create a new user (owner or karyawan)
@@ -438,8 +468,8 @@ app.delete('/api/users/:id', authenticateUser, requireOwner, asyncHandler(async 
 
 // Get Products (available to both clients and admins)
 app.get('/api/products', asyncHandler(async (req, res) => {
-  const db = await readDB();
-  res.json(db.products);
+  const products = await readProducts();
+  res.json(products);
 }));
 
 // Admin CRUD: Create Product
@@ -669,11 +699,11 @@ function calculateAllocatedStock(orders: Order[], products: Product[], startDate
 // on an Expired order afterwards (see PUT /api/orders/:id/status's
 // validStatuses) - expiring never revokes stock, it just stops reserving it,
 // and remains reversible.
-function expireStaleOrders(db: DbShape): boolean {
+function expireStaleOrders(orders: Order[], pendingExpiryHours: number): boolean {
   const now = Date.now();
-  const expiryMs = (db.settings.pendingExpiryHours ?? 2) * 60 * 60 * 1000;
+  const expiryMs = (pendingExpiryHours ?? 2) * 60 * 60 * 1000;
   let changed = false;
-  for (const order of db.orders) {
+  for (const order of orders) {
     if (order.status === 'Pending' && now - new Date(order.createdAt).getTime() > expiryMs) {
       order.status = 'Expired';
       order.statusHistory = order.statusHistory || [];
@@ -698,7 +728,7 @@ app.post('/api/check-availability', asyncHandler(async (req, res) => {
 
   await withDbLock(async () => {
     const db = await readDB();
-    if (expireStaleOrders(db)) {
+    if (expireStaleOrders(db.orders, db.settings.pendingExpiryHours)) {
       await writeDB(db);
     }
     const allocatedMap = calculateAllocatedStock(db.orders, db.products, startDate, endDate, excludeOrderId);
@@ -744,7 +774,7 @@ app.post('/api/orders', asyncHandler(async (req, res) => {
     }
 
     const db = await readDB();
-    if (expireStaleOrders(db)) {
+    if (expireStaleOrders(db.orders, db.settings.pendingExpiryHours)) {
       await writeDB(db);
     }
 
@@ -838,11 +868,11 @@ app.get('/api/orders/confirm/:token', asyncHandler(async (req, res) => {
 // doesn't grow with every order's photo forever.
 app.get('/api/orders', authenticateUser, asyncHandler(async (req, res) => {
   await withDbLock(async () => {
-    const db = await readDB();
-    if (expireStaleOrders(db)) {
-      await writeDB(db);
+    const [orders, settings] = await Promise.all([readOrders(), readSettings()]);
+    if (expireStaleOrders(orders, settings.pendingExpiryHours)) {
+      await writeOrders(orders);
     }
-    const orderList: OrderListItem[] = db.orders.map((o: Order) => {
+    const orderList: OrderListItem[] = orders.map((o: Order) => {
       const { personalPhotoBase64, ...rest } = o;
       return rest;
     });
@@ -854,8 +884,8 @@ app.get('/api/orders', authenticateUser, asyncHandler(async (req, res) => {
 // by OrderDetailPanel when opened, since the list above omits the photo.
 app.get('/api/orders/:id', authenticateUser, asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const db = await readDB();
-  const order = db.orders.find((o: Order) => o.id === id);
+  const orders = await readOrders();
+  const order = orders.find((o: Order) => o.id === id);
   if (!order) {
     return res.status(404).json({ error: 'Order not found.' });
   }
@@ -1273,8 +1303,8 @@ app.get('/api/store-info', asyncHandler(async (req, res) => {
 // Admin: Get/Update store settings (late-return tolerance, weekly operating hours,
 // public footer text, marquee running text)
 app.get('/api/settings', authenticateUser, requireOwner, asyncHandler(async (req, res) => {
-  const db = await readDB();
-  res.json(db.settings);
+  const settings = await readSettings();
+  res.json(settings);
 }));
 
 app.put('/api/settings', authenticateUser, requireOwner, asyncHandler(async (req, res) => {
@@ -1290,11 +1320,10 @@ app.put('/api/settings', authenticateUser, requireOwner, asyncHandler(async (req
 // Admin: Get Dashboard Stats
 app.get('/api/stats', authenticateUser, requireOwner, asyncHandler(async (req, res) => {
   await withDbLock(async () => {
-    const db = await readDB();
-    if (expireStaleOrders(db)) {
-      await writeDB(db);
+    const [orders, settings] = await Promise.all([readOrders(), readSettings()]);
+    if (expireStaleOrders(orders, settings.pendingExpiryHours)) {
+      await writeOrders(orders);
     }
-    const orders: Order[] = db.orders;
 
     const todayStr = getTodayDateString();
 
@@ -1333,8 +1362,8 @@ app.get('/api/stats', authenticateUser, requireOwner, asyncHandler(async (req, r
 // Job price list: any logged-in user can read it (karyawan needs it to fill
 // the Operational form); only owner manages it (from the Pengaturan tab).
 app.get('/api/job-prices', authenticateUser, asyncHandler(async (req, res) => {
-  const db = await readDB();
-  res.json(db.jobPriceList);
+  const jobPriceList = await readJobPriceList();
+  res.json(jobPriceList);
 }));
 
 app.post('/api/job-prices', authenticateUser, requireOwner, asyncHandler(async (req, res) => {
@@ -1406,10 +1435,10 @@ app.delete('/api/job-prices/:id', authenticateUser, requireOwner, asyncHandler(a
 
 // Job entries: owner sees everyone's, karyawan sees only their own.
 app.get('/api/job-entries', authenticateUser, asyncHandler(async (req, res) => {
-  const db = await readDB();
+  const jobEntries = await readJobEntries();
   const entries = req.currentUser!.role === 'owner'
-    ? db.jobEntries
-    : db.jobEntries.filter((e: JobEntry) => e.employeeUserId === req.currentUser!.id);
+    ? jobEntries
+    : jobEntries.filter((e: JobEntry) => e.employeeUserId === req.currentUser!.id);
   res.json(entries);
 }));
 

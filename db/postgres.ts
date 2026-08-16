@@ -242,43 +242,69 @@ function rowToJobEntry(row: any): JobEntry {
   };
 }
 
-export async function readDBPostgres(): Promise<{ products: Product[]; orders: Order[]; settings: StoreSettings; users: AppUser[]; jobPriceList: JobPriceListItem[]; jobEntries: JobEntry[] }> {
-  // These 7 queries don't depend on each other - run them concurrently rather
-  // than sequentially. Each pool.query() round trip to the Supabase pooler
-  // measured ~0.6-0.7s in this environment (see buildValuesClause below), so
-  // awaiting them one at a time was paying that cost 7x on every single
-  // readDB() call (e.g. GET /api/products, which only needs `products`).
-  const [productsRes, ordersRes, itemsRes, settingsRes, usersRes, jobPriceListRes, jobEntriesRes] = await Promise.all([
-    pool.query('SELECT * FROM products ORDER BY category ASC, id ASC'),
+// Narrow, single-table reads - used by the read-only GET routes that only
+// ever need one table (server.ts's GET /api/products, /api/settings, etc.)
+// instead of readDB()'s full 7-query fan-out. Same rationale as the auth
+// accessors above: once the frontend fires several of these GET routes
+// concurrently (see useAdminData.ts's fetchAdminData), each one calling the
+// full readDB() multiplies into far more simultaneous queries than
+// initPostgresPool's max:5 connections can serve at once, turning a handful
+// of sub-KB responses into multi-second waits from pool queueing alone.
+export async function readProductsPostgres(): Promise<Product[]> {
+  const res = await pool.query('SELECT * FROM products ORDER BY category ASC, id ASC');
+  return res.rows.map(rowToProduct);
+}
+
+export async function readOrdersPostgres(): Promise<Order[]> {
+  const [ordersRes, itemsRes] = await Promise.all([
     pool.query('SELECT * FROM orders ORDER BY created_at DESC'),
     pool.query('SELECT * FROM order_items'),
-    pool.query('SELECT * FROM settings WHERE id = 1'),
-    pool.query('SELECT * FROM users ORDER BY created_at ASC'),
-    pool.query('SELECT * FROM job_price_list ORDER BY item_name ASC'),
-    pool.query('SELECT * FROM job_entries ORDER BY created_at DESC'),
   ]);
-
-  const products = productsRes.rows.map(rowToProduct);
-
   const itemsByOrderId = new Map<string, OrderItem[]>();
   for (const itemRow of itemsRes.rows) {
     const list = itemsByOrderId.get(itemRow.order_id) || [];
     list.push(rowToOrderItem(itemRow));
     itemsByOrderId.set(itemRow.order_id, list);
   }
+  return ordersRes.rows.map((row) => rowToOrder(row, itemsByOrderId.get(row.id) || []));
+}
 
-  const orders = ordersRes.rows.map((row) => rowToOrder(row, itemsByOrderId.get(row.id) || []));
-
+export async function readSettingsPostgres(): Promise<StoreSettings> {
+  const res = await pool.query('SELECT * FROM settings WHERE id = 1');
   // Defensive fallback (never crash) if the settings row hasn't been seeded yet on
   // this connection - mirrors the same fallback the JSON-file mode does for an
   // old server_db.json predating this feature.
-  const settings = settingsRes.rows[0] ? rowToSettings(settingsRes.rows[0]) : defaultSettings;
+  return res.rows[0] ? rowToSettings(res.rows[0]) : defaultSettings;
+}
 
-  const users = usersRes.rows.length > 0 ? usersRes.rows.map(rowToUser) : defaultUsers;
+export async function readUsersPostgres(): Promise<AppUser[]> {
+  const res = await pool.query('SELECT * FROM users ORDER BY created_at ASC');
+  return res.rows.length > 0 ? res.rows.map(rowToUser) : defaultUsers;
+}
 
-  const jobPriceList = jobPriceListRes.rows.length > 0 ? jobPriceListRes.rows.map(rowToJobPriceItem) : defaultJobPriceList;
+export async function readJobPriceListPostgres(): Promise<JobPriceListItem[]> {
+  const res = await pool.query('SELECT * FROM job_price_list ORDER BY item_name ASC');
+  return res.rows.length > 0 ? res.rows.map(rowToJobPriceItem) : defaultJobPriceList;
+}
 
-  const jobEntries = jobEntriesRes.rows.map(rowToJobEntry);
+export async function readJobEntriesPostgres(): Promise<JobEntry[]> {
+  const res = await pool.query('SELECT * FROM job_entries ORDER BY created_at DESC');
+  return res.rows.map(rowToJobEntry);
+}
+
+export async function readDBPostgres(): Promise<{ products: Product[]; orders: Order[]; settings: StoreSettings; users: AppUser[]; jobPriceList: JobPriceListItem[]; jobEntries: JobEntry[] }> {
+  // These don't depend on each other - run them concurrently rather than
+  // sequentially. Composed from the narrow readers above so the full-dataset
+  // contract (fetchAdminData, and every write handler's readDB() call) stays
+  // byte-for-byte identical to before this was split apart.
+  const [products, orders, settings, users, jobPriceList, jobEntries] = await Promise.all([
+    readProductsPostgres(),
+    readOrdersPostgres(),
+    readSettingsPostgres(),
+    readUsersPostgres(),
+    readJobPriceListPostgres(),
+    readJobEntriesPostgres(),
+  ]);
 
   return { products, orders, settings, users, jobPriceList, jobEntries };
 }
@@ -345,6 +371,125 @@ function buildValuesClause(rowCount: number, colsPerRow: number): string {
     rows.push(`(${placeholders.join(', ')})`);
   }
   return rows.join(', ');
+}
+
+// Orders + order_items batched upsert/prune, sharing an already-open
+// transaction client - factored out so both the full writeDBPostgres below
+// and the narrow writeOrdersPostgres (used by GET /api/orders and GET
+// /api/stats's expire-stale-orders path, so they don't need to write every
+// other table just to persist an Expired status flip) run the identical SQL.
+async function writeOrdersWithClient(client: pg.PoolClient, orders: Order[]): Promise<void> {
+  if (orders.length > 0) {
+    const params: any[] = [];
+    orders.forEach((o) => {
+      params.push(
+        o.id,
+        o.customerName,
+        o.customerWhatsApp,
+        o.startDate,
+        o.endDate,
+        Number(o.rentDuration),
+        Number(o.totalPrice),
+        o.personalPhotoBase64 || '',
+        o.status,
+        o.createdAt,
+        Number(o.lateDays || 0),
+        Number(o.lateFee || 0),
+        o.confirmationToken ?? null,
+        o.returnedAt ?? null,
+        o.pickupIdType ?? null,
+        o.amountPaid ?? null,
+        JSON.stringify(o.statusHistory ?? []),
+        JSON.stringify(o.penalties ?? [])
+      );
+    });
+    await client.query(
+      `INSERT INTO orders (id, customer_name, customer_whatsapp, start_date, end_date, rent_duration, total_price, id_card_base64, status, created_at, late_days, late_fee, confirmation_token, returned_at, pickup_id_type, amount_paid, status_history, penalties)
+       VALUES ${buildValuesClause(orders.length, 18)}
+       ON CONFLICT (id) DO UPDATE SET
+         customer_name = EXCLUDED.customer_name,
+         customer_whatsapp = EXCLUDED.customer_whatsapp,
+         start_date = EXCLUDED.start_date,
+         end_date = EXCLUDED.end_date,
+         rent_duration = EXCLUDED.rent_duration,
+         total_price = EXCLUDED.total_price,
+         id_card_base64 = EXCLUDED.id_card_base64,
+         status = EXCLUDED.status,
+         created_at = EXCLUDED.created_at,
+         late_days = EXCLUDED.late_days,
+         late_fee = EXCLUDED.late_fee,
+         confirmation_token = EXCLUDED.confirmation_token,
+         returned_at = EXCLUDED.returned_at,
+         pickup_id_type = EXCLUDED.pickup_id_type,
+         amount_paid = EXCLUDED.amount_paid,
+         status_history = EXCLUDED.status_history,
+         penalties = EXCLUDED.penalties`,
+      params
+    );
+  }
+
+  // Order items: full-replace per present order (delete all, then batched re-insert),
+  // in one round trip each rather than one delete+insert pair per order.
+  const orderIds = orders.map((o) => o.id);
+  if (orderIds.length > 0) {
+    await client.query('DELETE FROM order_items WHERE order_id = ANY($1::varchar[])', [orderIds]);
+  }
+  // Carries BOTH the new rate-table columns and the legacy pre-migration columns
+  // on every row, regardless of which set a given item actually has - this is a
+  // full delete+reinsert of ALL order_items on every write (see comment above),
+  // so omitting either set here would permanently null out that data on the
+  // very next unrelated write. Only one set is ever non-null per row in practice.
+  const flatItems = orders.flatMap((o) => o.items.map((item) => ({ orderId: o.id, item })));
+  if (flatItems.length > 0) {
+    const params: any[] = [];
+    flatItems.forEach(({ orderId, item }) => {
+      params.push(
+        orderId,
+        item.productId,
+        item.productName,
+        Number(item.quantity),
+        item.ratesSnapshot ? Number(item.ratesSnapshot.day1Price) : null,
+        item.ratesSnapshot ? Number(item.ratesSnapshot.day2Price) : null,
+        item.ratesSnapshot ? Number(item.ratesSnapshot.day3Price) : null,
+        item.ratesSnapshot ? Number(item.ratesSnapshot.day4Price) : null,
+        item.ratesSnapshot ? Number(item.ratesSnapshot.day5Price) : null,
+        item.ratesSnapshot ? Number(item.ratesSnapshot.extraDayRate) : null,
+        item.legacyPricePerDay !== undefined ? Number(item.legacyPricePerDay) : null,
+        item.legacyIncrementalPrice !== undefined ? Number(item.legacyIncrementalPrice) : null,
+        item.legacyDiscountThresholdDays !== undefined ? Number(item.legacyDiscountThresholdDays) : null,
+      );
+    });
+    await client.query(
+      `INSERT INTO order_items (order_id, product_id, product_name, quantity, day1_price, day2_price, day3_price, day4_price, day5_price, extra_day_rate, price_per_day, incremental_price, discount_threshold_days)
+       VALUES ${buildValuesClause(flatItems.length, 13)}`,
+      params
+    );
+  }
+
+  // Prune orders no longer present (cascades their order_items via FK, though
+  // those were already excluded above since they're not in data.orders)
+  await client.query(
+    orderIds.length > 0 ? 'DELETE FROM orders WHERE id <> ALL($1::varchar[])' : 'DELETE FROM orders',
+    orderIds.length > 0 ? [orderIds] : []
+  );
+}
+
+export async function writeOrdersPostgres(orders: Order[]): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await writeOrdersWithClient(client, orders);
+    await client.query('COMMIT');
+  } catch (err) {
+    try {
+      await client.query('ROLLBACK');
+    } catch (rollbackErr) {
+      console.error('Rollback failed:', rollbackErr);
+    }
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 export async function writeDBPostgres(data: { products: Product[]; orders: Order[]; settings: StoreSettings; users: AppUser[]; jobPriceList: JobPriceListItem[]; jobEntries: JobEntry[] }): Promise<void> {
@@ -486,100 +631,7 @@ export async function writeDBPostgres(data: { products: Product[]; orders: Order
       productIds.length > 0 ? [productIds] : []
     );
 
-    // Orders: batched upsert of everything present, then prune anything removed
-    if (data.orders.length > 0) {
-      const params: any[] = [];
-      data.orders.forEach((o) => {
-        params.push(
-          o.id,
-          o.customerName,
-          o.customerWhatsApp,
-          o.startDate,
-          o.endDate,
-          Number(o.rentDuration),
-          Number(o.totalPrice),
-          o.personalPhotoBase64 || '',
-          o.status,
-          o.createdAt,
-          Number(o.lateDays || 0),
-          Number(o.lateFee || 0),
-          o.confirmationToken ?? null,
-          o.returnedAt ?? null,
-          o.pickupIdType ?? null,
-          o.amountPaid ?? null,
-          JSON.stringify(o.statusHistory ?? []),
-          JSON.stringify(o.penalties ?? [])
-        );
-      });
-      await client.query(
-        `INSERT INTO orders (id, customer_name, customer_whatsapp, start_date, end_date, rent_duration, total_price, id_card_base64, status, created_at, late_days, late_fee, confirmation_token, returned_at, pickup_id_type, amount_paid, status_history, penalties)
-         VALUES ${buildValuesClause(data.orders.length, 18)}
-         ON CONFLICT (id) DO UPDATE SET
-           customer_name = EXCLUDED.customer_name,
-           customer_whatsapp = EXCLUDED.customer_whatsapp,
-           start_date = EXCLUDED.start_date,
-           end_date = EXCLUDED.end_date,
-           rent_duration = EXCLUDED.rent_duration,
-           total_price = EXCLUDED.total_price,
-           id_card_base64 = EXCLUDED.id_card_base64,
-           status = EXCLUDED.status,
-           created_at = EXCLUDED.created_at,
-           late_days = EXCLUDED.late_days,
-           late_fee = EXCLUDED.late_fee,
-           confirmation_token = EXCLUDED.confirmation_token,
-           returned_at = EXCLUDED.returned_at,
-           pickup_id_type = EXCLUDED.pickup_id_type,
-           amount_paid = EXCLUDED.amount_paid,
-           status_history = EXCLUDED.status_history,
-           penalties = EXCLUDED.penalties`,
-        params
-      );
-    }
-
-    // Order items: full-replace per present order (delete all, then batched re-insert),
-    // in one round trip each rather than one delete+insert pair per order.
-    const orderIds = data.orders.map((o) => o.id);
-    if (orderIds.length > 0) {
-      await client.query('DELETE FROM order_items WHERE order_id = ANY($1::varchar[])', [orderIds]);
-    }
-    // Carries BOTH the new rate-table columns and the legacy pre-migration columns
-    // on every row, regardless of which set a given item actually has - this is a
-    // full delete+reinsert of ALL order_items on every write (see comment above),
-    // so omitting either set here would permanently null out that data on the
-    // very next unrelated write. Only one set is ever non-null per row in practice.
-    const flatItems = data.orders.flatMap((o) => o.items.map((item) => ({ orderId: o.id, item })));
-    if (flatItems.length > 0) {
-      const params: any[] = [];
-      flatItems.forEach(({ orderId, item }) => {
-        params.push(
-          orderId,
-          item.productId,
-          item.productName,
-          Number(item.quantity),
-          item.ratesSnapshot ? Number(item.ratesSnapshot.day1Price) : null,
-          item.ratesSnapshot ? Number(item.ratesSnapshot.day2Price) : null,
-          item.ratesSnapshot ? Number(item.ratesSnapshot.day3Price) : null,
-          item.ratesSnapshot ? Number(item.ratesSnapshot.day4Price) : null,
-          item.ratesSnapshot ? Number(item.ratesSnapshot.day5Price) : null,
-          item.ratesSnapshot ? Number(item.ratesSnapshot.extraDayRate) : null,
-          item.legacyPricePerDay !== undefined ? Number(item.legacyPricePerDay) : null,
-          item.legacyIncrementalPrice !== undefined ? Number(item.legacyIncrementalPrice) : null,
-          item.legacyDiscountThresholdDays !== undefined ? Number(item.legacyDiscountThresholdDays) : null,
-        );
-      });
-      await client.query(
-        `INSERT INTO order_items (order_id, product_id, product_name, quantity, day1_price, day2_price, day3_price, day4_price, day5_price, extra_day_rate, price_per_day, incremental_price, discount_threshold_days)
-         VALUES ${buildValuesClause(flatItems.length, 13)}`,
-        params
-      );
-    }
-
-    // Prune orders no longer present (cascades their order_items via FK, though
-    // those were already excluded above since they're not in data.orders)
-    await client.query(
-      orderIds.length > 0 ? 'DELETE FROM orders WHERE id <> ALL($1::varchar[])' : 'DELETE FROM orders',
-      orderIds.length > 0 ? [orderIds] : []
-    );
+    await writeOrdersWithClient(client, data.orders);
 
     await client.query('COMMIT');
   } catch (err) {

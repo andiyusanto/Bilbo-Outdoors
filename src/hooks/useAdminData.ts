@@ -155,6 +155,22 @@ export function useAdminData({ isLoggedIn, token, role, onUnauthorized }: UseAdm
     return () => clearInterval(interval);
   }, [isLoggedIn, token]);
 
+  // Background refresh of everything else (products, job-prices, job-entries,
+  // settings, users, stats - orders too, though that's redundant with the
+  // faster poll above) so a long-open admin session doesn't drift from
+  // changes made elsewhere (another staff member editing a product, price
+  // list, etc.) without anyone noticing or remembering to click "Refresh
+  // Data". 15 minutes is deliberately much slower than the orders poll -
+  // this data changes far less often, and calling fetchAdminData() (not
+  // withLoading(fetchAdminData)) keeps this non-blocking, just a brief spin
+  // of the refresh icon, same as clicking the button manually.
+  const FULL_DATA_POLL_INTERVAL_MS = 15 * 60 * 1000;
+  useEffect(() => {
+    if (!isLoggedIn || !token) return;
+    const interval = setInterval(fetchAdminData, FULL_DATA_POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [isLoggedIn, token]);
+
   return {
     orders,
     setOrders,

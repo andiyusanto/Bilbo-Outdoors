@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Clock, Save, Megaphone } from 'lucide-react';
 import { StoreSettings, WeeklyHours } from '../../types';
 import { useSettingsActions } from '../../hooks/useSettingsActions';
@@ -22,8 +22,25 @@ export default function SettingsTab({ settings, settingsActions }: SettingsTabPr
   const { isSaving, handleUpdateSettings } = settingsActions;
   const [formState, setFormState] = useState<StoreSettings>(settings);
 
+  // Unlike the modal-based edit forms elsewhere (product/user/job-price/job-
+  // entry), Settings is an always-mounted page, not something that opens
+  // fresh per edit - so it can't just seed once and be done. It still needs
+  // to pick up the real settings once they arrive after the initial
+  // DEFAULT_SETTINGS placeholder (see useAdminData.ts), and ideally stay
+  // live if the admin has this tab open without touching anything. But a
+  // background refresh (the 15-minute poll, or another admin's own save)
+  // must never silently overwrite unsaved in-progress edits - so only
+  // auto-resync while formState is still "pristine" (unchanged since the
+  // last sync), tracked via what we last synced from rather than comparing
+  // against the incoming settings directly (which would always look
+  // "different" the moment the admin edits anything, defeating the check).
+  const lastSyncedSettingsRef = useRef<StoreSettings>(settings);
   useEffect(() => {
-    setFormState(settings);
+    setFormState(prev => {
+      const isPristine = JSON.stringify(prev) === JSON.stringify(lastSyncedSettingsRef.current);
+      lastSyncedSettingsRef.current = settings;
+      return isPristine ? settings : prev;
+    });
   }, [settings]);
 
   const updateDayHours = (day: keyof WeeklyHours, field: 'open' | 'close', value: string) => {

@@ -35,6 +35,16 @@ export function useOrderActions({ token, orders, setOrders, fetchStats }: UseOrd
     if (!selectedOrder) return;
     const latest = orders.find(o => o.id === selectedOrder.id);
     if (!latest) return;
+    // Skip the update (and the new object reference it would create) if
+    // nothing about this order actually changed - a background poll refires
+    // this effect on every tick regardless, and an unconditional new
+    // reference would cascade into anything keyed on selectedOrder by
+    // reference (e.g. useOrderEditActions' availability-check effect),
+    // re-triggering it needlessly - or worse, flickering shown numbers -
+    // while an admin has this exact order open and is mid-edit.
+    const latestKeys = Object.keys(latest) as (keyof OrderListItem)[];
+    const changed = latestKeys.some((key) => JSON.stringify(selectedOrder[key]) !== JSON.stringify(latest[key]));
+    if (!changed) return;
     setSelectedOrder(prev => prev ? { ...prev, ...latest } : prev);
   }, [orders]);
 

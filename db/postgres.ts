@@ -25,7 +25,16 @@ export function initPostgresPool(connectionString: string): void {
   pool = new pg.Pool({
     connectionString,
     ssl: { rejectUnauthorized: false },
-    max: 5,
+    // Now that reads are narrowed to single-table queries (see
+    // readProductsPostgres et al.), peak concurrent query count is ~11 (7
+    // login-time GET routes, 2 of which - orders/stats - fan out into 2-3
+    // queries each) rather than the ~49 a single readDB() call used to cause
+    // under concurrent requests. Supabase's free tier (Nano compute) allows
+    // 60 direct Postgres connections and 200 pooler client connections -
+    // this app is the sole consumer of its database, so 15 leaves generous
+    // headroom over the measured peak while still using well under a
+    // quarter of the free-tier ceiling.
+    max: 15,
   });
 
   // Mandatory: an error on an idle pooled connection (e.g. Supabase dropping a

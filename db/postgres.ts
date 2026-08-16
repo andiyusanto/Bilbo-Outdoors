@@ -35,6 +35,20 @@ export function initPostgresPool(connectionString: string): void {
     // headroom over the measured peak while still using well under a
     // quarter of the free-tier ceiling.
     max: 15,
+    // node-postgres's default (10s) was closing pooled connections between
+    // distinct admin logins/actions, forcing the next request to eat a fresh
+    // TCP+TLS+Postgres-auth handshake before its query even ran - a flat tax
+    // that dominates the fast single-table routes' actual query time far
+    // more than it does orders/stats's already-slower ones (observed as the
+    // fast routes randomly jumping from ~300ms to ~800-900ms between one
+    // production reload and the next, while orders/stats stayed flat).
+    // 60s matches the orders-list background poll (useAdminData.ts), so at
+    // least that connection stays warm continuously during an open session.
+    idleTimeoutMillis: 60000,
+    // TCP keepalive so a longer-lived idle connection doesn't get silently
+    // dropped by a NAT/firewall in between Supabase and this box, which would
+    // otherwise surface as a hidden query failure instead of a clean reconnect.
+    keepAlive: true,
   });
 
   // Mandatory: an error on an idle pooled connection (e.g. Supabase dropping a

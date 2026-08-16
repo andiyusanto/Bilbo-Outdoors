@@ -48,6 +48,30 @@ export function useAdminData({ isLoggedIn, token, role, onUnauthorized }: UseAdm
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const { withLoading } = useLoading();
 
+  // Shared shape behind every fetch* below: GET a URL, hand the parsed body
+  // to a setter, and on failure log + (for authenticated requests) trigger
+  // onUnauthorized on a 401 - factored out since all 7 admin-data fetches
+  // repeated this identically. `auth: false` is only for /api/products,
+  // the one public endpoint in this set (no headers, no 401 handling).
+  const fetchResource = async <T,>(
+    url: string,
+    setter: (data: T) => void,
+    errorLabel: string,
+    options?: { auth?: boolean }
+  ) => {
+    const auth = options?.auth ?? true;
+    try {
+      const res = auth ? await fetch(url, { headers: authHeaders(token) }) : await fetch(url);
+      const data = auth ? await parseJsonOrThrow(res, errorLabel) : await res.json();
+      setter(data);
+    } catch (err: any) {
+      console.error(err);
+      if (auth && err.message.includes('Unauthorized')) {
+        onUnauthorized();
+      }
+    }
+  };
+
   // Narrow refresh for just the Overview stats - the only cached value that
   // an order write can change without already being returned by that write's
   // own response (stats is a server-computed aggregate over db.orders, see
@@ -56,16 +80,7 @@ export function useAdminData({ isLoggedIn, token, role, onUnauthorized }: UseAdm
   // re-download products/job-prices/job-entries/users/settings.
   const fetchStats = async () => {
     if (role !== 'owner') return;
-    try {
-      const res = await fetch('/api/stats', { headers: authHeaders(token) });
-      const data = await parseJsonOrThrow(res, 'Failed to fetch stats');
-      setStats(data);
-    } catch (err: any) {
-      console.error(err);
-      if (err.message.includes('Unauthorized')) {
-        onUnauthorized();
-      }
-    }
+    await fetchResource<DashboardStats>('/api/stats', setStats, 'Failed to fetch stats');
   };
 
   // Narrow refresh for just the orders list - polled periodically below
@@ -75,63 +90,48 @@ export function useAdminData({ isLoggedIn, token, role, onUnauthorized }: UseAdm
   // to surface without the admin having to notice and click "Refresh Data"
   // manually - a flat-rate poll of this one lightweight endpoint is far
   // cheaper than the old "refetch everything on every admin write" pattern.
-  const fetchOrders = async () => {
-    try {
-      const res = await fetch('/api/orders', { headers: authHeaders(token) });
-      const data = await parseJsonOrThrow(res, 'Failed to fetch orders');
-      setOrders(data);
-    } catch (err: any) {
-      console.error(err);
-      if (err.message.includes('Unauthorized')) {
-        onUnauthorized();
-      }
-    }
+  const fetchOrders = async () => fetchResource<OrderListItem[]>('/api/orders', setOrders, 'Failed to fetch orders');
+
+  const fetchProducts = async () => fetchResource<Product[]>('/api/products', setProducts, 'Failed to fetch products', { auth: false });
+
+  const fetchJobPriceList = async () => fetchResource<JobPriceListItem[]>('/api/job-prices', setJobPriceList, 'Failed to fetch job prices');
+
+  // Owner + karyawan (server filters to own entries for karyawan).
+  const fetchJobEntries = async () => fetchResource<JobEntry[]>('/api/job-entries', setJobEntries, 'Failed to fetch job entries');
+
+  // Owner-only - never fetched as karyawan, avoids a spurious 403 being
+  // mistaken for an expired session.
+  const fetchSettings = async () => {
+    if (role !== 'owner') return;
+    await fetchResource<StoreSettings>('/api/settings', setSettings, 'Failed to fetch settings');
   };
 
+  const fetchUsers = async () => {
+    if (role !== 'owner') return;
+    await fetchResource<PublicUser[]>('/api/users', setUsers, 'Failed to fetch users');
+  };
+
+  // Fetches everything the admin panel needs in one shot (login, manual
+  // "Refresh Data"). Each entity above is independent of the others, so they
+  // run concurrently rather than as a sequential waterfall - awaiting them
+  // one at a time was turning N cheap requests into N stacked latencies
+  // (measured ~37s total in production for a login that should take a few
+  // seconds). Every fetch* function already catches and logs its own errors
+  // (including calling onUnauthorized on a 401), so there's nothing left for
+  // this function to catch - it just waits for all of them and clears the
+  // loading flag.
   const fetchAdminData = async () => {
     setIsLoading(true);
-    try {
-      const headers = authHeaders(token);
-
-      // Fetch Orders (owner + karyawan)
-      await fetchOrders();
-
-      // Fetch Products (public)
-      const productsRes = await fetch('/api/products');
-      const productsData = await productsRes.json();
-      setProducts(productsData);
-
-      // Fetch Job Price List (owner + karyawan - karyawan needs it for the Operational form)
-      const jobPricesRes = await fetch('/api/job-prices', { headers });
-      const jobPricesData = await parseJsonOrThrow(jobPricesRes, 'Failed to fetch job prices');
-      setJobPriceList(jobPricesData);
-
-      // Fetch Job Entries (owner + karyawan - server filters to own entries for karyawan)
-      const jobEntriesRes = await fetch('/api/job-entries', { headers });
-      const jobEntriesData = await parseJsonOrThrow(jobEntriesRes, 'Failed to fetch job entries');
-      setJobEntries(jobEntriesData);
-
-      // Owner-only data - never fetched as karyawan, avoids a spurious 403
-      // being mistaken for an expired session (see onUnauthorized below).
-      await fetchStats();
-      if (role === 'owner') {
-        const settingsRes = await fetch('/api/settings', { headers });
-        const settingsData = await parseJsonOrThrow(settingsRes, 'Failed to fetch settings');
-        setSettings(settingsData);
-
-        const usersRes = await fetch('/api/users', { headers });
-        const usersData = await parseJsonOrThrow(usersRes, 'Failed to fetch users');
-        setUsers(usersData);
-      }
-
-    } catch (err: any) {
-      console.error(err);
-      if (err.message.includes('Unauthorized')) {
-        onUnauthorized();
-      }
-    } finally {
-      setIsLoading(false);
-    }
+    await Promise.all([
+      fetchOrders(),
+      fetchProducts(),
+      fetchJobPriceList(),
+      fetchJobEntries(),
+      fetchStats(),
+      fetchSettings(),
+      fetchUsers(),
+    ]);
+    setIsLoading(false);
   };
 
   // Fetch all admin data once on login. Mutation hooks patch their own slice

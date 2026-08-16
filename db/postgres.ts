@@ -283,6 +283,53 @@ export async function readDBPostgres(): Promise<{ products: Product[]; orders: O
   return { products, orders, settings, users, jobPriceList, jobEntries };
 }
 
+// Narrow, single-row auth operations - used by authenticateUser and the
+// login/logout/change-password routes instead of the full readDB()/writeDB()
+// round trip. authenticateUser runs on every authenticated request, and
+// readDB() reads all 7 tables (even parallelized, that's a full round trip
+// for a query that only needs one users row); writeDB() is worse, since its
+// ~12+ upsert/prune statements across every table run sequentially (unlike
+// readDBPostgres's Promise.all above), so a login/logout/password-change was
+// paying that entire cost just to touch 1-3 columns on one row.
+//
+// This is a deliberate, narrow exception to CLAUDE.md's "don't add a second
+// abstraction layer on top of readDB/writeDB - extend the existing one"
+// rule: that rule protects the coarse product/order contract (pricing/
+// late-fee correctness depends on every handler seeing the same shape of
+// data), which none of this touches - it's a single-table, single-row
+// accessor for the users table only, justified by a measured perf problem
+// the original seam can't solve without breaking its own "full dataset"
+// semantics. If this pattern needs to grow beyond auth, revisit whether it
+// should become the general seam instead of a carve-out.
+function findUserByColumn(column: 'username' | 'session_token' | 'id') {
+  return async (value: string): Promise<AppUser | null> => {
+    const res = await pool.query(`SELECT * FROM users WHERE ${column} = $1 LIMIT 1`, [value]);
+    return res.rows[0] ? rowToUser(res.rows[0]) : null;
+  };
+}
+
+export const findUserByUsernamePostgres = findUserByColumn('username');
+export const findUserBySessionTokenPostgres = findUserByColumn('session_token');
+export const findUserByIdPostgres = findUserByColumn('id');
+
+export async function updateUserAuthFieldsPostgres(
+  userId: string,
+  fields: { sessionToken: string | null; passwordHash?: string; passwordSalt?: string }
+): Promise<void> {
+  const sets = ['session_token = $1'];
+  const params: any[] = [fields.sessionToken];
+  if (fields.passwordHash !== undefined) {
+    params.push(fields.passwordHash);
+    sets.push(`password_hash = $${params.length}`);
+  }
+  if (fields.passwordSalt !== undefined) {
+    params.push(fields.passwordSalt);
+    sets.push(`password_salt = $${params.length}`);
+  }
+  params.push(userId);
+  await pool.query(`UPDATE users SET ${sets.join(', ')} WHERE id = $${params.length}`, params);
+}
+
 // Builds a `VALUES ($1,$2,...),($n+1,$n+2,...),...` clause plus the flattened
 // params array for a multi-row INSERT, so a full-dataset sync costs a handful of
 // round trips instead of one per row. On a connection with real network latency

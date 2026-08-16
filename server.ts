@@ -9,7 +9,7 @@ import { defaultProducts } from './db/defaultProducts';
 import { defaultSettings } from './db/defaultSettings';
 import { defaultUsers } from './db/defaultUsers';
 import { defaultJobPriceList } from './db/defaultJobPriceList';
-import { initPostgresPool, seedPostgresIfEmpty, readDBPostgres, writeDBPostgres } from './db/postgres';
+import { initPostgresPool, seedPostgresIfEmpty, readDBPostgres, writeDBPostgres, findUserByUsernamePostgres, findUserBySessionTokenPostgres, findUserByIdPostgres, updateUserAuthFieldsPostgres } from './db/postgres';
 import { calculateRentalCost, calculateLegacyRentalCost, getAmountPaid, getRemainingBalance, getPenaltyTotal } from './src/pricing';
 import { hashPassword, verifyPassword, generateSessionToken } from './src/auth';
 import { formatDateLabel, getTodayDateString } from './src/lib/date';
@@ -110,6 +110,13 @@ type DbShape = {
 
 let readDB: () => Promise<DbShape>;
 let writeDB: (data: DbShape) => Promise<void>;
+// Narrow, single-row peers of readDB/writeDB for the session-token/password
+// auth path - see db/postgres.ts's comment above findUserByUsernamePostgres
+// for why this exists instead of routing auth through the full-dataset pair.
+let findUserByUsername: (username: string) => Promise<AppUser | null>;
+let findUserBySessionToken: (token: string) => Promise<AppUser | null>;
+let findUserById: (userId: string) => Promise<AppUser | null>;
+let updateUserAuthFields: (userId: string, fields: { sessionToken: string | null; passwordHash?: string; passwordSalt?: string }) => Promise<void>;
 
 function seedJsonFileIfMissing(): void {
   if (!fs.existsSync(DB_FILE)) {
@@ -134,6 +141,10 @@ async function initDatabase(): Promise<void> {
     await seedPostgresIfEmpty();
     readDB = readDBPostgres;
     writeDB = writeDBPostgres;
+    findUserByUsername = findUserByUsernamePostgres;
+    findUserBySessionToken = findUserBySessionTokenPostgres;
+    findUserById = findUserByIdPostgres;
+    updateUserAuthFields = updateUserAuthFieldsPostgres;
     console.log('Persistence: Postgres (DATABASE_URL detected).');
   } else {
     seedJsonFileIfMissing();
@@ -160,6 +171,32 @@ async function initDatabase(): Promise<void> {
     };
     writeDB = async (data: any) => {
       fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
+    };
+    // Thin wrappers over the same readDB()/writeDB() - JSON mode is already
+    // synchronous fs I/O, so there's no latency problem to solve here (and
+    // per this session's local_testing_must_use_json_file_db rule, this path
+    // never touches real production data anyway).
+    findUserByUsername = async (username: string) => {
+      const db = await readDB();
+      return db.users.find((u: AppUser) => u.username === username) || null;
+    };
+    findUserBySessionToken = async (token: string) => {
+      const db = await readDB();
+      return db.users.find((u: AppUser) => u.sessionToken === token) || null;
+    };
+    findUserById = async (userId: string) => {
+      const db = await readDB();
+      return db.users.find((u: AppUser) => u.id === userId) || null;
+    };
+    updateUserAuthFields = async (userId: string, fields: { sessionToken: string | null; passwordHash?: string; passwordSalt?: string }) => {
+      const db = await readDB();
+      const user = db.users.find((u: AppUser) => u.id === userId);
+      if (user) {
+        user.sessionToken = fields.sessionToken ?? undefined;
+        if (fields.passwordHash !== undefined) user.passwordHash = fields.passwordHash;
+        if (fields.passwordSalt !== undefined) user.passwordSalt = fields.passwordSalt;
+      }
+      await writeDB(db);
     };
     console.log('Persistence: local JSON file (server_db.json).');
   }
@@ -198,8 +235,7 @@ function authenticateUser(req: express.Request, res: express.Response, next: exp
   if (!token) {
     return res.status(401).json({ error: 'Unauthorized. Please log in.' });
   }
-  readDB().then((db) => {
-    const user = db.users.find((u: AppUser) => u.sessionToken === token);
+  findUserBySessionToken(token).then((user) => {
     // A deactivated account's still-valid session token must stop working
     // immediately, not just block future logins - otherwise "deactivate"
     // wouldn't actually revoke access until the token happened to change.
@@ -225,27 +261,23 @@ function requireOwner(req: express.Request, res: express.Response, next: express
 app.post('/api/auth/login', asyncHandler(async (req, res) => {
   await withDbLock(async () => {
     const { username, password } = req.body;
-    const db = await readDB();
-    const user = db.users.find((u: AppUser) => u.username === username);
+    const user = await findUserByUsername(username);
     // Deliberately the same generic error for "no such user", "wrong
     // password", and "deactivated account" - a deactivated account's status
     // shouldn't be discoverable to whoever is attempting the login.
     if (!user || !verifyPassword(password, user.passwordSalt, user.passwordHash) || user.active === false) {
       return res.status(401).json({ error: 'Username atau password salah.' });
     }
-    user.sessionToken = generateSessionToken();
-    await writeDB(db);
-    res.json({ token: user.sessionToken, role: user.role, displayName: user.displayName });
+    const sessionToken = generateSessionToken();
+    await updateUserAuthFields(user.id, { sessionToken });
+    res.json({ token: sessionToken, role: user.role, displayName: user.displayName });
   });
 }));
 
 // Staff Logout - invalidates the session token server-side
 app.post('/api/auth/logout', authenticateUser, asyncHandler(async (req, res) => {
   await withDbLock(async () => {
-    const db = await readDB();
-    const user = db.users.find((u: AppUser) => u.id === req.currentUser!.id);
-    if (user) user.sessionToken = undefined;
-    await writeDB(db);
+    await updateUserAuthFields(req.currentUser!.id, { sessionToken: null });
     res.json({ message: 'Logged out.' });
   });
 }));
@@ -257,22 +289,26 @@ app.post('/api/auth/change-password', authenticateUser, asyncHandler(async (req,
     if (!newPassword || String(newPassword).length < 6) {
       return res.status(400).json({ error: 'Password baru minimal 6 karakter.' });
     }
-    const db = await readDB();
-    const user = db.users.find((u: AppUser) => u.id === req.currentUser!.id);
+    // Deliberately re-read inside the lock rather than trusting req.currentUser
+    // (a snapshot taken by authenticateUser before this request even queued for
+    // the lock) - withDbLock is a single global queue shared by every write
+    // endpoint, so a slow unrelated write ahead of this one can leave enough of
+    // a gap for another change-password call to land first. Verifying against
+    // a stale pre-lock hash here would let a second, now-outdated "current
+    // password" still pass and silently overwrite the first change.
+    const user = await findUserById(req.currentUser!.id);
     if (!user || !verifyPassword(currentPassword, user.passwordSalt, user.passwordHash)) {
       return res.status(401).json({ error: 'Password saat ini salah.' });
     }
     const { hash, salt } = hashPassword(newPassword);
-    user.passwordHash = hash;
-    user.passwordSalt = salt;
     // Rotate the session token too - an attacker holding a previously-leaked
     // token for this account (the scenario a password change is meant to
     // recover from) must not stay authenticated after it. Mirrors how logout
     // clears sessionToken; here we issue a fresh one so this same request's
     // caller doesn't get logged out by their own password change.
-    user.sessionToken = generateSessionToken();
-    await writeDB(db);
-    res.json({ message: 'Password berhasil diubah.', token: user.sessionToken });
+    const sessionToken = generateSessionToken();
+    await updateUserAuthFields(user.id, { sessionToken, passwordHash: hash, passwordSalt: salt });
+    res.json({ message: 'Password berhasil diubah.', token: sessionToken });
   });
 }));
 

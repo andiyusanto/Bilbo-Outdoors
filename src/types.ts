@@ -54,6 +54,7 @@ export interface Order {
   status: OrderStatus;
   createdAt: string;
   returnedAt?: string; // ISO datetime, set once when status transitions into 'Item Returned/Completed'
+  pickedUpAt?: string; // ISO datetime, set once when status transitions into 'Item Picked Up' - anchors the late-fee deadline (pickedUpAt + rentDuration*24h), see calculate-late in server.ts
   pickupIdType?: string; // type of physical ID card left as collateral in person (KTP/SIM/KTA/KIP/Kartu Pelajar/etc.), admin-entered at the Approved/Paid -> Item Picked Up transition
   lateDays?: number;
   lateFee?: number;

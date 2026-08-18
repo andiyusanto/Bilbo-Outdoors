@@ -201,6 +201,7 @@ function rowToOrder(row: any, items: OrderItem[]): Order {
     status: row.status,
     createdAt: row.created_at,
     returnedAt: row.returned_at ?? undefined,
+    pickedUpAt: row.picked_up_at ?? undefined,
     pickupIdType: row.pickup_id_type ?? undefined,
     lateDays: Number(row.late_days || 0),
     lateFee: Number(row.late_fee || 0),
@@ -420,6 +421,7 @@ async function writeOrdersWithClient(client: pg.PoolClient, orders: Order[]): Pr
         Number(o.lateFee || 0),
         o.confirmationToken ?? null,
         o.returnedAt ?? null,
+        o.pickedUpAt ?? null,
         o.pickupIdType ?? null,
         o.amountPaid ?? null,
         JSON.stringify(o.statusHistory ?? []),
@@ -427,8 +429,8 @@ async function writeOrdersWithClient(client: pg.PoolClient, orders: Order[]): Pr
       );
     });
     await client.query(
-      `INSERT INTO orders (id, customer_name, customer_whatsapp, start_date, end_date, rent_duration, total_price, id_card_base64, status, created_at, late_days, late_fee, confirmation_token, returned_at, pickup_id_type, amount_paid, status_history, penalties)
-       VALUES ${buildValuesClause(orders.length, 18)}
+      `INSERT INTO orders (id, customer_name, customer_whatsapp, start_date, end_date, rent_duration, total_price, id_card_base64, status, created_at, late_days, late_fee, confirmation_token, returned_at, picked_up_at, pickup_id_type, amount_paid, status_history, penalties)
+       VALUES ${buildValuesClause(orders.length, 19)}
        ON CONFLICT (id) DO UPDATE SET
          customer_name = EXCLUDED.customer_name,
          customer_whatsapp = EXCLUDED.customer_whatsapp,
@@ -443,6 +445,7 @@ async function writeOrdersWithClient(client: pg.PoolClient, orders: Order[]): Pr
          late_fee = EXCLUDED.late_fee,
          confirmation_token = EXCLUDED.confirmation_token,
          returned_at = EXCLUDED.returned_at,
+         picked_up_at = EXCLUDED.picked_up_at,
          pickup_id_type = EXCLUDED.pickup_id_type,
          amount_paid = EXCLUDED.amount_paid,
          status_history = EXCLUDED.status_history,

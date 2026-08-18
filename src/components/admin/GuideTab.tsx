@@ -398,6 +398,12 @@ export default function GuideTab() {
           mengembalikan dalam jam toleransi <strong>dan</strong> toko masih buka. Tabel <Ui>Jam Operasional Toko</Ui> mengatur
           jam open/close per hari (Senin&ndash;Minggu). Tekan <Ui>Simpan Pengaturan</Ui> setelah mengubah.
         </p>
+        <Note label="Batas waktu pengembalian dihitung dari saat barang diambil">
+          Sewa &ldquo;1 hari&rdquo; berarti 24 jam sejak barang diserahkan ke penyewa (<Ui>Item Picked Up</Ui>), bukan
+          sampai jam tutup toko pada tanggal selesai sewa yang dibooking. Contoh: sewa 1 hari diambil jam 10:00 &rarr;
+          batas waktu pengembalian jam 10:00 keesokan harinya. Toleransi dan aturan &ldquo;toko harus buka&rdquo; di
+          atas tetap berlaku, hanya titik awal hitungannya yang berubah.
+        </Note>
         <p className="font-bold text-xs mt-3">Footer &amp; Teks Berjalan</p>
         <p>
           Kartu <Ui>Footer &amp; Teks Berjalan</Ui> mengatur teks yang tampil di halaman publik: Deskripsi, Alamat,

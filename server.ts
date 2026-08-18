@@ -987,6 +987,14 @@ app.put('/api/orders/:id/status', authenticateUser, asyncHandler(async (req, res
         changedByName: req.currentUser!.displayName,
       });
     }
+    // Stamp the actual pickup time once, on the transition into Item Picked
+    // Up - this is what calculate-late now anchors the late-fee deadline on
+    // (pickedUpAt + rentDuration*24h), mirroring returnedAt's exact "set once"
+    // pattern below. Kept separate from the pickupIdType capture just below,
+    // which intentionally has no such guard (it can be resent/overwritten).
+    if (status === 'Item Picked Up' && previousStatus !== 'Item Picked Up') {
+      db.orders[orderIndex].pickedUpAt = new Date().toISOString();
+    }
     // Record which physical ID card was left as collateral in person, on the
     // transition into Item Picked Up.
     if (status === 'Item Picked Up' && pickupIdType) {
@@ -1175,14 +1183,28 @@ app.post('/api/orders/:id/calculate-late', authenticateUser, asyncHandler(async 
       return res.status(400).json({ error: 'Denda keterlambatan hanya bisa dihitung setelah barang diambil.' });
     }
 
-    // Both sides parsed as local-time literals (no 'Z' suffix) so they compare
-    // correctly against each other regardless of the server's timezone offset -
-    // same class of UTC-vs-local mismatch this project has been bitten by before
+    // actualReturn is parsed as a local-time literal (no 'Z' suffix) so it
+    // compares correctly regardless of the server's timezone offset - same
+    // class of UTC-vs-local mismatch this project has been bitten by before
     // with DATE columns (see db/postgres.ts's DATE-oid override comment).
     const actualReturn = returnDateTime ? new Date(returnDateTime) : new Date();
-    const endDateDow = new Date(`${order.endDate}T00:00:00`).getDay();
-    const closeTime = db.settings.operatingHours[WEEKDAY_KEYS[endDateDow]].close;
-    const deadline = new Date(`${order.endDate}T${closeTime}:00`);
+
+    // Deadline = actual pickup time + the full rented duration (owner's
+    // requested rule: "a day" is 24 hours from hand-over, not a calendar
+    // day) - not the booked endDate's closing time. pickedUpAt is a full UTC
+    // ISO instant (.toISOString()), so .getTime() arithmetic here is
+    // unambiguous, unlike endDate (a bare calendar-date string).
+    let deadline: Date;
+    if (order.pickedUpAt) {
+      deadline = new Date(new Date(order.pickedUpAt).getTime() + order.rentDuration * 24 * 60 * 60 * 1000);
+    } else {
+      // Legacy fallback for an order that reached Item Picked Up before this
+      // field existed - same "fall back gracefully" treatment already given
+      // to returnedAt-less legacy orders elsewhere (calculateAllocatedStock).
+      const endDateDow = new Date(`${order.endDate}T00:00:00`).getDay();
+      const closeTime = db.settings.operatingHours[WEEKDAY_KEYS[endDateDow]].close;
+      deadline = new Date(`${order.endDate}T${closeTime}:00`);
+    }
 
     // Tolerance only forgives a return that both (a) happens within
     // `lateToleranceHours` of closing time, AND (b) happens while the store is
@@ -1197,16 +1219,11 @@ app.post('/api/orders/:id/calculate-late', authenticateUser, asyncHandler(async 
       && isStoreOpenAt(actualReturn, db.settings.operatingHours);
     const lateDays = hoursLate === 0 || withinTolerance ? 0 : Math.ceil(hoursLate / 24);
 
-    if (lateDays === 0) {
-      return res.json({
-        lateDays: 0,
-        lateFee: 0,
-        breakdown: [],
-        deadline: deadline.toISOString()
-      });
-    }
-
-    // Calculate late fee per item.
+    // Calculate late fee per item - skipped when on-time (lateFeeTotal/
+    // breakdown just stay at their zero defaults below), but persistence
+    // always runs regardless of lateDays, so a recalculation that comes back
+    // on-time actually clears a previously-persisted non-zero fee instead of
+    // leaving it silently out of sync with what this response says.
     // INVARIANT: this loop must only read order.items' snapshotted fields
     // (ratesSnapshot, or the legacy pricePerDay-equivalent fields), never
     // db.products. A later admin edit to the live product must NOT retroactively
@@ -1219,39 +1236,42 @@ app.post('/api/orders/:id/calculate-late', authenticateUser, asyncHandler(async 
     // needed. Same trick works for legacy (pre-migration) OrderItems using the old
     // formula's own notion of cumulative cost.
     let lateFeeTotal = 0;
-    const breakdown = order.items.map(item => {
-      let itemLateCost: number;
+    let breakdown: { productName: string; quantity: number; dailyRateBreakdown: string; itemTotalLateCost: number }[] = [];
+    if (lateDays > 0) {
+      breakdown = order.items.map(item => {
+        let itemLateCost: number;
 
-      if (item.ratesSnapshot) {
-        itemLateCost = calculateRentalCost(item.ratesSnapshot, order.rentDuration + lateDays)
-          - calculateRentalCost(item.ratesSnapshot, order.rentDuration);
-      } else {
-        const basePrice = item.legacyPricePerDay!;
-        const incremental = item.legacyIncrementalPrice ?? 0;
-        const discountThresholdDays = item.legacyDiscountThresholdDays ?? 5;
-        itemLateCost = calculateLegacyRentalCost(basePrice, incremental, discountThresholdDays, order.rentDuration + lateDays)
-          - calculateLegacyRentalCost(basePrice, incremental, discountThresholdDays, order.rentDuration);
-      }
-      itemLateCost = Math.max(0, itemLateCost); // defensive: a mistyped (non-monotonic) rate table could otherwise produce a negative late fee
+        if (item.ratesSnapshot) {
+          itemLateCost = calculateRentalCost(item.ratesSnapshot, order.rentDuration + lateDays)
+            - calculateRentalCost(item.ratesSnapshot, order.rentDuration);
+        } else {
+          const basePrice = item.legacyPricePerDay!;
+          const incremental = item.legacyIncrementalPrice ?? 0;
+          const discountThresholdDays = item.legacyDiscountThresholdDays ?? 5;
+          itemLateCost = calculateLegacyRentalCost(basePrice, incremental, discountThresholdDays, order.rentDuration + lateDays)
+            - calculateLegacyRentalCost(basePrice, incremental, discountThresholdDays, order.rentDuration);
+        }
+        itemLateCost = Math.max(0, itemLateCost); // defensive: a mistyped (non-monotonic) rate table could otherwise produce a negative late fee
 
-      const itemTotalLateCost = itemLateCost * item.quantity;
-      lateFeeTotal += itemTotalLateCost;
+        const itemTotalLateCost = itemLateCost * item.quantity;
+        lateFeeTotal += itemTotalLateCost;
 
-      // Describes the days actually being charged (order.rentDuration+1 through
-      // +lateDays), not a fixed "5 Hari" - the marginal per-day cost only equals
-      // day5Price/extraDayRate when those late days actually fall past day 5; for
-      // a short rental returned late, they don't, and the old hardcoded string
-      // named the wrong tier entirely regardless of what was really charged.
-      const perDayLateRate = Math.round(itemLateCost / lateDays);
-      const dailyRateBreakdown = `Rp${perDayLateRate.toLocaleString('id-ID')}/hari x ${lateDays} hari telat`;
+        // Describes the days actually being charged (order.rentDuration+1 through
+        // +lateDays), not a fixed "5 Hari" - the marginal per-day cost only equals
+        // day5Price/extraDayRate when those late days actually fall past day 5; for
+        // a short rental returned late, they don't, and the old hardcoded string
+        // named the wrong tier entirely regardless of what was really charged.
+        const perDayLateRate = Math.round(itemLateCost / lateDays);
+        const dailyRateBreakdown = `Rp${perDayLateRate.toLocaleString('id-ID')}/hari x ${lateDays} hari telat`;
 
-      return {
-        productName: item.productName,
-        quantity: item.quantity,
-        dailyRateBreakdown,
-        itemTotalLateCost
-      };
-    });
+        return {
+          productName: item.productName,
+          quantity: item.quantity,
+          dailyRateBreakdown,
+          itemTotalLateCost
+        };
+      });
+    }
 
     // Save the late fees back to order
     order.lateDays = lateDays;

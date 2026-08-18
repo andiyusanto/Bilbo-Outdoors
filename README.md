@@ -142,6 +142,7 @@ CREATE TABLE IF NOT EXISTS orders (
   late_fee NUMERIC DEFAULT 0,
   confirmation_token VARCHAR(255),
   returned_at VARCHAR(255),
+  picked_up_at VARCHAR(255),
   pickup_id_type VARCHAR(255),
   amount_paid NUMERIC,
   status_history JSONB,
@@ -257,6 +258,11 @@ CREATE TABLE IF NOT EXISTS job_entries (
 > **Sudah pernah menjalankan Step A sebelum kolom `pickup_id_type` ada?** Jalankan ini sekali di SQL Editor yang sama (aman dijalankan berulang). Kolom `id_card_base64` sekarang menyimpan foto diri pelanggan (bukan scan KTP/SIM), sedangkan `pickup_id_type` mencatat jenis kartu identitas fisik (KTP/SIM/KTA/KIP/Kartu Pelajar/dll.) yang diserahkan langsung di toko sebagai jaminan saat status pesanan berubah ke "Item Picked Up". Nullable, tanpa default - order lama tetap `NULL` selamanya, tidak ada regresi.
 > ```sql
 > ALTER TABLE orders ADD COLUMN IF NOT EXISTS pickup_id_type VARCHAR(255);
+> ```
+
+> **Sudah pernah menjalankan Step A sebelum kolom `picked_up_at` ada?** Jalankan ini sekali di SQL Editor yang sama (aman dijalankan berulang) - nullable, tanpa default, order lama tetap `NULL` selamanya. Menyimpan waktu (ISO datetime) saat status pesanan berubah ke "Item Picked Up", diisi otomatis sekali oleh server (bukan input staf). Sejak fitur ini, batas waktu pengembalian (dipakai kalkulator denda) dihitung dari `picked_up_at + durasi sewa x 24 jam`, bukan lagi dari jam tutup toko pada tanggal selesai sewa yang dibooking - order lama tanpa `picked_up_at` otomatis memakai aturan lama sebagai fallback, tidak ada regresi.
+> ```sql
+> ALTER TABLE orders ADD COLUMN IF NOT EXISTS picked_up_at VARCHAR(255);
 > ```
 
 > **Sudah pernah menjalankan Step A sebelum kolom `amount_paid` di `orders` ada?** Jalankan ini sekali di SQL Editor yang sama (aman dijalankan berulang) - nullable, tanpa default, order lama tetap `NULL` selamanya (tidak ada regresi). Menyimpan total yang sudah benar-benar diterima dari penyewa - bisa berupa DP (down payment) sebagian atau pembayaran penuh, diisi saat staf menekan "Konfirmasi Pembayaran" di menu Manajemen Order, dan otomatis disesuaikan menjadi lunas saat pesanan diselesaikan (barang dikembalikan). Sisa tagihan (`total_price + late_fee - amount_paid`) selalu dihitung on-the-fly, tidak pernah disimpan sebagai kolom terpisah.

@@ -208,6 +208,12 @@ function rowToOrder(row: any, items: OrderItem[]): Order {
     amountPaid: row.amount_paid !== null && row.amount_paid !== undefined ? Number(row.amount_paid) : undefined,
     statusHistory: row.status_history ?? [],
     penalties: row.penalties ?? [],
+    paymentMethod: row.payment_method ?? undefined,
+    paymentChannel: row.payment_channel ?? undefined,
+    paymentInstruction: row.payment_instruction ?? undefined, // JSONB - pg already parses this into a plain object
+    wuzzpayTransactionId: row.wuzzpay_transaction_id ?? undefined,
+    wuzzpayProvider: row.wuzzpay_provider ?? undefined,
+    wuzzpayLastStatus: row.wuzzpay_last_status ?? undefined,
   };
 }
 
@@ -425,12 +431,18 @@ async function writeOrdersWithClient(client: pg.PoolClient, orders: Order[]): Pr
         o.pickupIdType ?? null,
         o.amountPaid ?? null,
         JSON.stringify(o.statusHistory ?? []),
-        JSON.stringify(o.penalties ?? [])
+        JSON.stringify(o.penalties ?? []),
+        o.paymentMethod ?? null,
+        o.paymentChannel ?? null,
+        o.paymentInstruction ? JSON.stringify(o.paymentInstruction) : null,
+        o.wuzzpayTransactionId ?? null,
+        o.wuzzpayProvider ?? null,
+        o.wuzzpayLastStatus ?? null
       );
     });
     await client.query(
-      `INSERT INTO orders (id, customer_name, customer_whatsapp, start_date, end_date, rent_duration, total_price, id_card_base64, status, created_at, late_days, late_fee, confirmation_token, returned_at, picked_up_at, pickup_id_type, amount_paid, status_history, penalties)
-       VALUES ${buildValuesClause(orders.length, 19)}
+      `INSERT INTO orders (id, customer_name, customer_whatsapp, start_date, end_date, rent_duration, total_price, id_card_base64, status, created_at, late_days, late_fee, confirmation_token, returned_at, picked_up_at, pickup_id_type, amount_paid, status_history, penalties, payment_method, payment_channel, payment_instruction, wuzzpay_transaction_id, wuzzpay_provider, wuzzpay_last_status)
+       VALUES ${buildValuesClause(orders.length, 25)}
        ON CONFLICT (id) DO UPDATE SET
          customer_name = EXCLUDED.customer_name,
          customer_whatsapp = EXCLUDED.customer_whatsapp,
@@ -449,7 +461,13 @@ async function writeOrdersWithClient(client: pg.PoolClient, orders: Order[]): Pr
          pickup_id_type = EXCLUDED.pickup_id_type,
          amount_paid = EXCLUDED.amount_paid,
          status_history = EXCLUDED.status_history,
-         penalties = EXCLUDED.penalties`,
+         penalties = EXCLUDED.penalties,
+         payment_method = EXCLUDED.payment_method,
+         payment_channel = EXCLUDED.payment_channel,
+         payment_instruction = EXCLUDED.payment_instruction,
+         wuzzpay_transaction_id = EXCLUDED.wuzzpay_transaction_id,
+         wuzzpay_provider = EXCLUDED.wuzzpay_provider,
+         wuzzpay_last_status = EXCLUDED.wuzzpay_last_status`,
       params
     );
   }

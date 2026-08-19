@@ -415,6 +415,33 @@ export default function OrderDetailPanel({
             </div>
           )}
 
+          {/* WuzzPay gateway info (debugging/support only - read-only, not shown to the customer) */}
+          {(order.paymentMethod || order.wuzzpayTransactionId) && (
+            <div className="border-2 border-black p-4 rounded-none space-y-2 bg-zinc-50 shadow-[2px_2px_0px_rgba(0,0,0,1)]">
+              <h4 className="text-[10px] font-black uppercase text-zinc-400 tracking-wider">Info Payment Gateway (WuzzPay)</h4>
+              <div className="grid grid-cols-2 gap-3 text-[11px]">
+                {order.paymentMethod && (
+                  <div>
+                    <p className="text-[9px] text-zinc-500 font-black uppercase tracking-wider">Metode</p>
+                    <p className="font-black text-black uppercase mt-0.5">{order.paymentMethod}{order.paymentChannel ? ` (${order.paymentChannel})` : ''}</p>
+                  </div>
+                )}
+                {order.wuzzpayLastStatus && (
+                  <div>
+                    <p className="text-[9px] text-zinc-500 font-black uppercase tracking-wider">Status Gateway</p>
+                    <p className="font-black text-black uppercase mt-0.5">{order.wuzzpayLastStatus}</p>
+                  </div>
+                )}
+                {order.wuzzpayTransactionId && (
+                  <div className="col-span-2">
+                    <p className="text-[9px] text-zinc-500 font-black uppercase tracking-wider">ID Transaksi</p>
+                    <p className="font-mono text-black mt-0.5 break-all">{order.wuzzpayTransactionId}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Payment Detail Status bar */}
           <div className="border-2 border-black p-4 rounded-none space-y-4 bg-white shadow-[2px_2px_0px_rgba(0,0,0,1)]">
             <div className="flex justify-between items-baseline font-bold text-xs uppercase text-zinc-700">

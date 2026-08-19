@@ -146,7 +146,13 @@ CREATE TABLE IF NOT EXISTS orders (
   pickup_id_type VARCHAR(255),
   amount_paid NUMERIC,
   status_history JSONB,
-  penalties JSONB
+  penalties JSONB,
+  payment_method VARCHAR(255),
+  payment_channel VARCHAR(255),
+  payment_instruction JSONB,
+  wuzzpay_transaction_id VARCHAR(255),
+  wuzzpay_provider VARCHAR(255),
+  wuzzpay_last_status VARCHAR(255)
 );
 
 -- 3. Membuat Tabel Order Items (Relasi Detail Item dari Order)
@@ -369,6 +375,16 @@ CREATE TABLE IF NOT EXISTS job_entries (
 > **Sudah pernah menjalankan Step A sebelum kolom `pending_expiry_hours` di `settings` ada?** Jalankan ini sekali di SQL Editor yang sama (aman dijalankan berulang) - `DEFAULT 2` otomatis mengisi baris yang sudah ada dengan nilai lama yang sebelumnya hardcode di kode (2 jam), jadi tidak ada regresi perilaku. Menentukan berapa jam pesanan Pending tanpa pembayaran dibiarkan sebelum otomatis berubah jadi Expired (lihat `expireStaleOrders` di `server.ts`), diatur dari menu "Pengaturan" -> Toleransi Keterlambatan.
 > ```sql
 > ALTER TABLE settings ADD COLUMN IF NOT EXISTS pending_expiry_hours INTEGER NOT NULL DEFAULT 2;
+> ```
+
+> **Sudah pernah menjalankan Step A sebelum kolom-kolom payment gateway (`payment_method`/`payment_channel`/`payment_instruction`/`wuzzpay_transaction_id`/`wuzzpay_provider`/`wuzzpay_last_status`) di `orders` ada?** Jalankan ini sekali di SQL Editor yang sama (aman dijalankan berulang) - semuanya nullable tanpa default, order lama tetap `NULL` selamanya, tidak ada regresi. Menyimpan hasil integrasi WuzzPay (payment gateway aggregator): `payment_method` (`qris`/`va`/`emoney`) dan `payment_channel` (kode bank atau e-wallet) yang dipilih pelanggan, `payment_instruction` (JSONB - nomor VA/string QRIS/waktu kedaluwarsa mentah dari `POST /v1/charge`, dipakai halaman konfirmasi pesanan untuk render ulang setelah reload tanpa charge ulang), dan tiga kolom debugging admin-only (`wuzzpay_transaction_id`, `wuzzpay_provider`, `wuzzpay_last_status`) yang **tidak pernah dikirim** ke endpoint publik `GET /api/orders/confirm/:token` (lihat `PublicOrder` di `src/types.ts`). Status pembayaran tidak pernah dipercaya dari body webhook - server selalu memverifikasi ulang lewat `GET /v1/transactions/{id}` miliknya sendiri sebelum mengubah status pesanan (lihat `verifyAndSettleOrderPayment` di `server.ts`).
+> ```sql
+> ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_method VARCHAR(255);
+> ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_channel VARCHAR(255);
+> ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_instruction JSONB;
+> ALTER TABLE orders ADD COLUMN IF NOT EXISTS wuzzpay_transaction_id VARCHAR(255);
+> ALTER TABLE orders ADD COLUMN IF NOT EXISTS wuzzpay_provider VARCHAR(255);
+> ALTER TABLE orders ADD COLUMN IF NOT EXISTS wuzzpay_last_status VARCHAR(255);
 > ```
 
 ### Step B: Dapatkan Connection String Supabase Anda

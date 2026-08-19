@@ -61,6 +61,13 @@ export interface Order {
   amountPaid?: number; // total collected so far; undefined/0 while still Pending. remainingBalance is always derived (totalPrice + (lateFee||0)) - amountPaid, never stored.
   statusHistory?: StatusHistoryEntry[]; // audit trail of staff-driven status transitions only - order creation (initial Pending) is not an entry, since that's the customer, not staff
   penalties?: PenaltyEntry[]; // damage/loss charges assessed at return, admin-entered per incident; folded into the invoice total alongside lateFee (see src/pricing.ts)
+  // --- WuzzPay payment gateway fields (see server.ts's wuzzpayRequest/verifyAndSettleOrderPayment) ---
+  paymentMethod?: 'qris' | 'va' | 'emoney'; // chosen product_id at charge time
+  paymentChannel?: string; // bank_code (va) or wallet code (emoney), e.g. "014" or "ovo" - unused for qris
+  paymentInstruction?: Record<string, unknown>; // raw payment_instruction object from POST /v1/charge (va_number/qr string/expires_at/...), stored so the confirmation page can re-render on reload without re-charging
+  wuzzpayTransactionId?: string; // WuzzPay's own transaction id - used to poll GET /v1/transactions/{id}. Admin/internal only, never sent to the public confirm/:token projection.
+  wuzzpayProvider?: string; // used_provider echoed back from /v1/charge, for admin debugging. Admin/internal only.
+  wuzzpayLastStatus?: string; // last known raw status string from WuzzPay, for admin debugging. Admin/internal only.
 }
 
 export interface StatusHistoryEntry {
@@ -85,8 +92,11 @@ export interface PenaltyEntry {
 // Omit-based so any future Order field is included by default unless excluded here.
 // statusHistory (staff display names) and penalties (internal damage/loss
 // notes, explicitly admin-only - see PenaltyEntry.description) must never
-// reach this unauthenticated endpoint.
-export type PublicOrder = Omit<Order, 'personalPhotoBase64' | 'statusHistory' | 'penalties'>;
+// reach this unauthenticated endpoint. wuzzpayTransactionId/wuzzpayLastStatus
+// are internal gateway debugging fields with no customer-facing purpose - the
+// customer's own polling response is a separate, intentionally narrow object
+// (see GET /api/orders/confirm/:token/payment-status), not this projection.
+export type PublicOrder = Omit<Order, 'personalPhotoBase64' | 'statusHistory' | 'penalties' | 'wuzzpayTransactionId' | 'wuzzpayLastStatus'>;
 
 // List-view projection - the orders array fetched on login/refresh never
 // needs personalPhotoBase64 (only OrderDetailPanel does, via a dedicated

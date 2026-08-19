@@ -76,7 +76,7 @@ export default function SettingsTab({ settings, settingsActions }: SettingsTabPr
           className="bg-white border-2 border-black px-3 py-2 text-xs font-bold rounded-none focus:outline-none w-32"
         />
         <p className="text-[10px] text-zinc-500 font-semibold normal-case leading-relaxed">
-          Penyewa hanya bebas denda jika mengembalikan dalam jam toleransi ini <strong>DAN</strong> toko masih buka saat itu. Jika sudah lewat jam operasional, otomatis dianggap kembali di hari berikutnya dan tetap kena denda walau belum melewati jumlah jam toleransi.
+          Batas waktu pengembalian (waktu pengambilan barang + durasi sewa) otomatis ditambah jam toleransi ini sekali &mdash; penyewa baru kena denda jika mengembalikan setelah batas waktu + toleransi tersebut.
         </p>
 
         <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-wider pt-2 border-t border-zinc-200">

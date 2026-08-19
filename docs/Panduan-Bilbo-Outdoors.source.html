@@ -568,17 +568,17 @@
 
 <section class="chapter">
   <h2 class="section-title">1.10 Pengaturan Toko <span class="role-tag role-owner">Owner/Master</span></h2>
-  <p class="kicker">Mengatur toleransi keterlambatan dan jam operasional yang menjadi dasar perhitungan denda.</p>
+  <p class="kicker">Mengatur toleransi keterlambatan yang menjadi dasar perhitungan denda, plus jam operasional untuk tampilan publik.</p>
 
   <h3 class="sub">Toleransi Keterlambatan</h3>
-  <p>Masukkan jumlah jam pada kolom <span class="ui">Lama Toleransi Keterlambatan Dalam Satuan Jam</span> (default 4 jam). Penyewa dianggap tidak kena denda hanya jika mengembalikan barang dalam jam toleransi ini <strong>dan</strong> toko masih buka saat itu. Jika sudah melewati jam tutup, pengembalian otomatis dianggap terjadi keesokan harinya dan denda tetap berlaku walau masih dalam hitungan jam toleransi.</p>
+  <p>Masukkan jumlah jam pada kolom <span class="ui">Lama Toleransi Keterlambatan Dalam Satuan Jam</span> (default 4 jam) &mdash; ditambahkan sekali ke batas waktu pengembalian (waktu pengambilan barang + durasi sewa). Penyewa baru dianggap kena denda jika mengembalikan barang setelah batas waktu + toleransi tersebut.</p>
 
   <h3 class="sub">Jam Operasional Toko</h3>
-  <p>Tabel 7 baris (Senin&ndash;Minggu) berisi jam <span class="ui">open</span>/<span class="ui">close</span> untuk tiap hari. Setelah mengubah, tekan <span class="ui">Simpan Pengaturan</span>.</p>
+  <p>Tabel 7 baris (Senin&ndash;Minggu) berisi jam <span class="ui">open</span>/<span class="ui">close</span> untuk tiap hari &mdash; dipakai untuk tampilan halaman publik (lihat catatan footer di bawah), tidak lagi memengaruhi perhitungan denda. Setelah mengubah, tekan <span class="ui">Simpan Pengaturan</span>.</p>
 
   <div class="note">
     <span class="note-label">Batas waktu pengembalian dihitung dari saat barang diambil</span>
-    Sewa &ldquo;1 hari&rdquo; berarti 24 jam sejak barang diserahkan ke penyewa (<span class="ui">Item Picked Up</span>), bukan sampai jam tutup toko pada tanggal selesai sewa yang dibooking. Contoh: sewa 1 hari diambil jam 10:00 &rarr; batas waktu pengembalian jam 10:00 keesokan harinya. Toleransi dan aturan &ldquo;toko harus buka&rdquo; di atas tetap berlaku, hanya titik awal hitungannya yang berubah.
+    Sewa &ldquo;1 hari&rdquo; berarti 24 jam sejak barang diserahkan ke penyewa (<span class="ui">Item Picked Up</span>), bukan sampai jam tutup toko pada tanggal selesai sewa yang dibooking. Contoh: sewa 2 hari diambil 17/08 20:52 &rarr; batas waktu pengembalian 19/08 20:52, ditambah toleransi 4 jam menjadi 20/08 00:52 &mdash; baru kena denda setelah waktu tersebut.
   </div>
 
   <h3 class="sub">Footer &amp; Teks Berjalan</h3>
@@ -586,7 +586,7 @@
 
   <div class="note">
     <span class="note-label">Jam Operasional di Footer Otomatis Mengikuti Tabel di Atas</span>
-    Baris jam buka di footer publik dihitung otomatis dari tabel Jam Operasional Toko &mdash; tidak perlu diisi terpisah, dan tidak akan pernah tidak sinkron dengan jadwal yang dipakai kalkulator denda.
+    Baris jam buka di footer publik dihitung otomatis dari tabel Jam Operasional Toko &mdash; tidak perlu diisi terpisah.
   </div>
 </section>
 

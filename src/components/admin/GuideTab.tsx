@@ -392,17 +392,18 @@ export default function GuideTab() {
         </p>
       </Section>
 
-      <Section id="g-1-10" num="1.10" title="Pengaturan Toko" owner kicker="Toleransi keterlambatan dan jam operasional yang menjadi dasar perhitungan denda.">
+      <Section id="g-1-10" num="1.10" title="Pengaturan Toko" owner kicker="Toleransi keterlambatan yang menjadi dasar perhitungan denda, plus jam operasional untuk tampilan publik.">
         <p>
-          <Ui>Lama Toleransi Keterlambatan Dalam Satuan Jam</Ui> (default 4 jam) &mdash; penyewa bebas denda hanya jika
-          mengembalikan dalam jam toleransi <strong>dan</strong> toko masih buka. Tabel <Ui>Jam Operasional Toko</Ui> mengatur
-          jam open/close per hari (Senin&ndash;Minggu). Tekan <Ui>Simpan Pengaturan</Ui> setelah mengubah.
+          <Ui>Lama Toleransi Keterlambatan Dalam Satuan Jam</Ui> (default 4 jam) &mdash; ditambahkan sekali ke batas
+          waktu pengembalian (waktu pengambilan barang + durasi sewa). Tabel <Ui>Jam Operasional Toko</Ui> mengatur jam
+          open/close per hari (Senin&ndash;Minggu) untuk tampilan halaman publik, tidak lagi memengaruhi perhitungan
+          denda. Tekan <Ui>Simpan Pengaturan</Ui> setelah mengubah.
         </p>
         <Note label="Batas waktu pengembalian dihitung dari saat barang diambil">
           Sewa &ldquo;1 hari&rdquo; berarti 24 jam sejak barang diserahkan ke penyewa (<Ui>Item Picked Up</Ui>), bukan
-          sampai jam tutup toko pada tanggal selesai sewa yang dibooking. Contoh: sewa 1 hari diambil jam 10:00 &rarr;
-          batas waktu pengembalian jam 10:00 keesokan harinya. Toleransi dan aturan &ldquo;toko harus buka&rdquo; di
-          atas tetap berlaku, hanya titik awal hitungannya yang berubah.
+          sampai jam tutup toko pada tanggal selesai sewa yang dibooking. Contoh: sewa 2 hari diambil 17/08 20:52
+          &rarr; batas waktu pengembalian 19/08 20:52, ditambah toleransi 4 jam menjadi 20/08 00:52 &mdash; baru kena
+          denda setelah waktu tersebut.
         </Note>
         <p className="font-bold text-xs mt-3">Footer &amp; Teks Berjalan</p>
         <p>

@@ -43,16 +43,6 @@ function hasOtherActiveOwner(db: DbShape, excludingUserId: string): boolean {
   return db.users.some((u: AppUser) => u.id !== excludingUserId && u.role === 'owner' && u.active !== false);
 }
 
-// Whether the store is physically open at the given moment, per its own
-// weekday's operating hours (which may differ from the order's endDate weekday
-// once a late return crosses into a new calendar day).
-function isStoreOpenAt(dateTime: Date, operatingHours: StoreSettings['operatingHours']): boolean {
-  const dayKey = WEEKDAY_KEYS[dateTime.getDay()];
-  const hours = operatingHours[dayKey];
-  const hhmm = `${String(dateTime.getHours()).padStart(2, '0')}:${String(dateTime.getMinutes()).padStart(2, '0')}`;
-  return hhmm >= hours.open && hhmm < hours.close;
-}
-
 // ---------------- TELEGRAM BOOKING NOTIFICATIONS ----------------
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_BOOKING_CHAT_ID = process.env.TELEGRAM_BOOKING_CHAT_ID;
@@ -1313,18 +1303,22 @@ app.post('/api/orders/:id/calculate-late', authenticateUser, asyncHandler(async 
       deadline = new Date(`${order.endDate}T${closeTime}:00`);
     }
 
-    // Tolerance only forgives a return that both (a) happens within
-    // `lateToleranceHours` of closing time, AND (b) happens while the store is
-    // actually open at that moment. Once the return moment falls outside
-    // operating hours, the customer can only physically return the item at the
-    // store's next opening - which, for this store's schedule (close-to-reopen
-    // gaps always longer than the tolerance), always means "tomorrow" and an
-    // automatic penalty, regardless of how few hours have technically elapsed.
-    const hoursLate = Math.max(0, (actualReturn.getTime() - deadline.getTime()) / (1000 * 60 * 60));
-    const withinTolerance = hoursLate > 0
-      && hoursLate <= db.settings.lateToleranceHours
-      && isStoreOpenAt(actualReturn, db.settings.operatingHours);
-    const lateDays = hoursLate === 0 || withinTolerance ? 0 : Math.ceil(hoursLate / 24);
+    // Tolerance is a flat grace buffer added ONCE to the deadline - not
+    // re-applied per elapsed day. Owner correction (2026-08-19): the previous
+    // version only used lateToleranceHours to decide whether hoursLate counted
+    // as zero days late; once past that window, lateDays was computed from
+    // the raw pre-tolerance deadline, so the tolerance's benefit evaporated
+    // entirely the moment it was exceeded instead of just shifting the whole
+    // clock forward once (e.g. 24h05m past the raw deadline rounded up to 2
+    // days late, even though that's only ~20h past the tolerance-adjusted
+    // deadline). Also drops the previous "store must be physically open"
+    // condition on the tolerance - that rule's rationale only made sense under
+    // the old closing-time-anchored deadline (past closing = store obviously
+    // shut); it doesn't carry over now that the deadline is pickup-time
+    // anchored and can fall at any hour (owner confirmed via AskUserQuestion).
+    const effectiveDeadline = new Date(deadline.getTime() + db.settings.lateToleranceHours * 60 * 60 * 1000);
+    const hoursLate = Math.max(0, (actualReturn.getTime() - effectiveDeadline.getTime()) / (1000 * 60 * 60));
+    const lateDays = hoursLate === 0 ? 0 : Math.ceil(hoursLate / 24);
 
     // Calculate late fee per item - skipped when on-time (lateFeeTotal/
     // breakdown just stay at their zero defaults below), but persistence
@@ -1394,7 +1388,7 @@ app.post('/api/orders/:id/calculate-late', authenticateUser, asyncHandler(async 
       lateDays,
       lateFee: lateFeeTotal,
       breakdown,
-      deadline: deadline.toISOString()
+      deadline: effectiveDeadline.toISOString() // the real no-penalty-before-this cutoff (tolerance already included)
     });
   });
 }));

@@ -100,7 +100,7 @@ if (!WUZZPAY_API_KEY || !WUZZPAY_MERCHANT_ID) {
 // charge route below refuses to activate) and client-side (OrderConfirmationPage.tsx).
 // Remove this gate once the channel provisioning issues are resolved and the
 // feature is ready for a real rollout.
-const PAYMENT_GATEWAY_TEST_TRIGGER_NAME = 'TESTING_PAYMENT_ONLINE';
+const PAYMENT_GATEWAY_TEST_TRIGGER_NAME = 'TESTING_PAYMENT';
 
 // Thin authenticated fetch wrapper for the WuzzPay API. Throws explicitly on
 // a non-2xx response (same shape as sendTelegramBookingNotification above) so

@@ -90,7 +90,7 @@ export default function OrderConfirmationPage() {
   // broken/unprovisioned, so the real flow stays invisible to real customers
   // until the order's full name is exactly this trigger string. Remove this
   // once the feature is ready for a real rollout.
-  const isPaymentGatewayTestOrder = order.customerName === 'TESTING_PAYMENT_ONLINE';
+  const isPaymentGatewayTestOrder = order.customerName === 'TESTING_PAYMENT';
   if (!paymentGatewayEnabled || !isPaymentGatewayTestOrder || order.status !== 'Pending') {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">

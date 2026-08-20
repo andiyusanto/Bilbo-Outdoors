@@ -855,13 +855,18 @@ app.post('/api/check-availability', asyncHandler(async (req, res) => {
   }
 
   await withDbLock(async () => {
-    const db = await readDB();
-    if (expireStaleOrders(db.orders, db.settings.pendingExpiryHours)) {
-      await writeDB(db);
+    // Narrow readers, not the full readDB - this route never touches
+    // users/jobPriceList/jobEntries, only writes orders (the occasional
+    // expiry flip), and it's hit constantly while a customer browses/adjusts
+    // their cart, so the full 6-table sync a readDB()/writeDB() round trip
+    // pulls in Postgres mode was pure waste on the app's hottest read path.
+    const [orders, products, settings] = await Promise.all([readOrders(), readProducts(), readSettings()]);
+    if (expireStaleOrders(orders, settings.pendingExpiryHours)) {
+      await writeOrders(orders);
     }
-    const allocatedMap = calculateAllocatedStock(db.orders, db.products, startDate, endDate, excludeOrderId);
+    const allocatedMap = calculateAllocatedStock(orders, products, startDate, endDate, excludeOrderId);
 
-    const availabilityDetails = db.products.map((prod: Product) => {
+    const availabilityDetails = products.map((prod: Product) => {
       const allocated = allocatedMap[prod.id] || 0;
       const remaining = Math.max(0, prod.stock - allocated);
 
@@ -985,8 +990,10 @@ app.post('/api/orders', asyncHandler(async (req, res) => {
 // Get Order Confirmation (Public, by unguessable token - NOT by order.id)
 app.get('/api/orders/confirm/:token', asyncHandler(async (req, res) => {
   const { token } = req.params;
-  const db = await readDB();
-  const order = db.orders.find((o: Order) => o.confirmationToken && o.confirmationToken === token);
+  // Narrow readOrders, not the full readDB - public route, hit on every
+  // order-confirmation page load/reload/poll.
+  const orders = await readOrders();
+  const order = orders.find((o: Order) => o.confirmationToken && o.confirmationToken === token);
 
   if (!order) {
     return res.status(404).json({ error: 'Pesanan tidak ditemukan.' });
@@ -1037,12 +1044,14 @@ app.put('/api/orders/:id/edit', authenticateUser, asyncHandler(async (req, res) 
   await withDbLock(async () => {
     const { id } = req.params;
     const { startDate, endDate, items } = req.body; // items: { productId: string; quantity: number }[]
-    const db = await readDB();
-    const orderIndex = db.orders.findIndex((o: Order) => o.id === id);
+    // Narrow readers, not the full readDB - only ever mutates orders (see
+    // writeOrders below); products is only ever read here, for pricing/stock.
+    const [orders, products] = await Promise.all([readOrders(), readProducts()]);
+    const orderIndex = orders.findIndex((o: Order) => o.id === id);
     if (orderIndex === -1) {
       return res.status(404).json({ error: 'Order not found.' });
     }
-    const order = db.orders[orderIndex];
+    const order = orders[orderIndex];
     if (order.status !== 'Pending' && order.status !== 'Approved/Paid') {
       return res.status(400).json({ error: 'Pesanan hanya bisa diedit sebelum barang diambil (status Pending atau Approved/Paid).' });
     }
@@ -1057,11 +1066,11 @@ app.put('/api/orders/:id/edit', authenticateUser, asyncHandler(async (req, res) 
     // Stock check excluding this order's own current allocation, so
     // re-saving the same items/dates (or a smaller change) isn't rejected
     // for "conflicting" with itself.
-    const allocatedMap = calculateAllocatedStock(db.orders, db.products, startDate, endDate, id);
+    const allocatedMap = calculateAllocatedStock(orders, products, startDate, endDate, id);
     const newItems: OrderItem[] = [];
     let totalPrice = 0;
     for (const it of items) {
-      const product = db.products.find((p: Product) => p.id === it.productId);
+      const product = products.find((p: Product) => p.id === it.productId);
       if (!product) {
         return res.status(400).json({ error: 'Salah satu produk tidak ditemukan di katalog.' });
       }
@@ -1077,17 +1086,17 @@ app.put('/api/orders/:id/edit', authenticateUser, asyncHandler(async (req, res) 
       newItems.push({ productId: product.id, productName: product.name, quantity: qty, ratesSnapshot: { ...product.rates } });
     }
 
-    db.orders[orderIndex] = { ...order, startDate, endDate, rentDuration, items: newItems, totalPrice };
-    db.orders[orderIndex].statusHistory = db.orders[orderIndex].statusHistory || [];
-    db.orders[orderIndex].statusHistory.push({
+    orders[orderIndex] = { ...order, startDate, endDate, rentDuration, items: newItems, totalPrice };
+    orders[orderIndex].statusHistory = orders[orderIndex].statusHistory || [];
+    orders[orderIndex].statusHistory.push({
       status: order.status,
       action: 'Item/Tanggal Diubah',
       changedAt: new Date().toISOString(),
       changedByUserId: req.currentUser!.id,
       changedByName: req.currentUser!.displayName,
     });
-    await writeDB(db);
-    res.json(db.orders[orderIndex]);
+    await writeOrders(orders);
+    res.json(orders[orderIndex]);
   });
 }));
 
@@ -1102,19 +1111,21 @@ app.put('/api/orders/:id/status', authenticateUser, asyncHandler(async (req, res
       return res.status(400).json({ error: 'Invalid order status.' });
     }
 
-    const db = await readDB();
-    const orderIndex = db.orders.findIndex((o: Order) => o.id === id);
+    // Narrow readers/writer, not the full readDB/writeDB - this route only
+    // ever touches a single order.
+    const orders = await readOrders();
+    const orderIndex = orders.findIndex((o: Order) => o.id === id);
     if (orderIndex === -1) {
       return res.status(404).json({ error: 'Order not found.' });
     }
 
-    const previousStatus = db.orders[orderIndex].status;
-    db.orders[orderIndex].status = status;
+    const previousStatus = orders[orderIndex].status;
+    orders[orderIndex].status = status;
     // Audit trail of who made this transition - skip no-op resends of the
     // same status so the history only records real changes.
     if (previousStatus !== status) {
-      db.orders[orderIndex].statusHistory = db.orders[orderIndex].statusHistory || [];
-      db.orders[orderIndex].statusHistory.push({
+      orders[orderIndex].statusHistory = orders[orderIndex].statusHistory || [];
+      orders[orderIndex].statusHistory.push({
         status,
         changedAt: new Date().toISOString(),
         changedByUserId: req.currentUser!.id,
@@ -1127,27 +1138,27 @@ app.put('/api/orders/:id/status', authenticateUser, asyncHandler(async (req, res
     // pattern below. Kept separate from the pickupIdType capture just below,
     // which intentionally has no such guard (it can be resent/overwritten).
     if (status === 'Item Picked Up' && previousStatus !== 'Item Picked Up') {
-      db.orders[orderIndex].pickedUpAt = new Date().toISOString();
+      orders[orderIndex].pickedUpAt = new Date().toISOString();
     }
     // Record which physical ID card was left as collateral in person, on the
     // transition into Item Picked Up.
     if (status === 'Item Picked Up' && pickupIdType) {
-      db.orders[orderIndex].pickupIdType = pickupIdType;
+      orders[orderIndex].pickupIdType = pickupIdType;
     }
     // First confirmation of payment - captures how much was actually collected
     // (a down payment or the full amount), defaulting to the full totalPrice
     // when the client sends nothing, so the common no-DP case is unchanged.
     // Late fee isn't known yet at this point, so the cap is just totalPrice.
     if (status === 'Approved/Paid' && previousStatus !== 'Approved/Paid') {
-      const total = db.orders[orderIndex].totalPrice;
+      const total = orders[orderIndex].totalPrice;
       if (amountPaid !== undefined) {
         const paid = Number(amountPaid);
         if (isNaN(paid) || paid < 0 || paid > total) {
           return res.status(400).json({ error: 'Jumlah pembayaran tidak valid.' });
         }
-        db.orders[orderIndex].amountPaid = paid;
+        orders[orderIndex].amountPaid = paid;
       } else {
-        db.orders[orderIndex].amountPaid = total;
+        orders[orderIndex].amountPaid = total;
       }
     }
     // Stamp the actual return time once, on the transition into Completed - this
@@ -1156,11 +1167,11 @@ app.put('/api/orders/:id/status', authenticateUser, asyncHandler(async (req, res
     // damage/loss penalties) here, matching the real-world flow: the renter
     // pays off the rest on return.
     if (status === 'Item Returned/Completed' && previousStatus !== 'Item Returned/Completed') {
-      db.orders[orderIndex].returnedAt = new Date().toISOString();
-      db.orders[orderIndex].amountPaid = db.orders[orderIndex].totalPrice + (db.orders[orderIndex].lateFee || 0) + getPenaltyTotal(db.orders[orderIndex]);
+      orders[orderIndex].returnedAt = new Date().toISOString();
+      orders[orderIndex].amountPaid = orders[orderIndex].totalPrice + (orders[orderIndex].lateFee || 0) + getPenaltyTotal(orders[orderIndex]);
     }
-    await writeDB(db);
-    res.json(db.orders[orderIndex]);
+    await writeOrders(orders);
+    res.json(orders[orderIndex]);
   });
 }));
 
@@ -1171,20 +1182,21 @@ app.put('/api/orders/:id/payment', authenticateUser, asyncHandler(async (req, re
   await withDbLock(async () => {
     const { id } = req.params;
     const { amountPaid } = req.body;
-    const db = await readDB();
-    const idx = db.orders.findIndex((o: Order) => o.id === id);
+    // Narrow readers/writer, not the full readDB/writeDB.
+    const orders = await readOrders();
+    const idx = orders.findIndex((o: Order) => o.id === id);
     if (idx === -1) {
       return res.status(404).json({ error: 'Order not found.' });
     }
-    const order = db.orders[idx];
+    const order = orders[idx];
     const cap = order.totalPrice + (order.lateFee || 0) + getPenaltyTotal(order);
     const paid = Number(amountPaid);
     if (isNaN(paid) || paid < 0 || paid > cap) {
       return res.status(400).json({ error: 'Jumlah pembayaran tidak valid.' });
     }
-    db.orders[idx].amountPaid = paid;
-    await writeDB(db);
-    res.json(db.orders[idx]);
+    orders[idx].amountPaid = paid;
+    await writeOrders(orders);
+    res.json(orders[idx]);
   });
 }));
 
@@ -1196,8 +1208,9 @@ app.post('/api/orders/:id/penalties', authenticateUser, asyncHandler(async (req,
   await withDbLock(async () => {
     const { id } = req.params;
     const { type, productId, description, amount } = req.body;
-    const db = await readDB();
-    const order = db.orders.find((o: Order) => o.id === id);
+    // Narrow readers/writer, not the full readDB/writeDB.
+    const orders = await readOrders();
+    const order = orders.find((o: Order) => o.id === id);
     if (!order) {
       return res.status(404).json({ error: 'Order not found.' });
     }
@@ -1229,7 +1242,7 @@ app.post('/api/orders/:id/penalties', authenticateUser, asyncHandler(async (req,
       amount: numAmount,
       createdAt: new Date().toISOString(),
     });
-    await writeDB(db);
+    await writeOrders(orders);
     res.json(order);
   });
 }));
@@ -1238,8 +1251,9 @@ app.post('/api/orders/:id/penalties', authenticateUser, asyncHandler(async (req,
 app.delete('/api/orders/:id/penalties/:penaltyId', authenticateUser, asyncHandler(async (req, res) => {
   await withDbLock(async () => {
     const { id, penaltyId } = req.params;
-    const db = await readDB();
-    const order = db.orders.find((o: Order) => o.id === id);
+    // Narrow readers/writer, not the full readDB/writeDB.
+    const orders = await readOrders();
+    const order = orders.find((o: Order) => o.id === id);
     if (!order) {
       return res.status(404).json({ error: 'Order not found.' });
     }
@@ -1251,7 +1265,7 @@ app.delete('/api/orders/:id/penalties/:penaltyId', authenticateUser, asyncHandle
       return res.status(400).json({ error: 'Denda hanya bisa diubah sebelum pesanan diselesaikan.' });
     }
     order.penalties = (order.penalties || []).filter((p: PenaltyEntry) => p.id !== penaltyId);
-    await writeDB(db);
+    await writeOrders(orders);
     res.json(order);
   });
 }));
@@ -1259,22 +1273,26 @@ app.delete('/api/orders/:id/penalties/:penaltyId', authenticateUser, asyncHandle
 // Admin (owner-only): permanently delete an order - e.g. an erroneous
 // double-booking. Not allowed once Item Returned/Completed, so a settled
 // order's revenue can never silently disappear from stats/reports. No
-// Postgres-specific sync code needed - writeDBPostgres already prunes any
+// Postgres-specific sync code needed - writeOrdersPostgres already prunes any
 // order (and cascade-deletes its order_items) no longer present in the
-// dataset on every write, same mechanism DELETE /api/products/:id relies on.
+// dataset on every write, same mechanism DELETE /api/products/:id relies on
+// for its own table.
 app.delete('/api/orders/:id', authenticateUser, requireOwner, asyncHandler(async (req, res) => {
   await withDbLock(async () => {
     const { id } = req.params;
-    const db = await readDB();
-    const order = db.orders.find((o: Order) => o.id === id);
+    // Narrow readers/writer, not the full readDB/writeDB - this was the
+    // route reported slow (2026-08-20): a full 6-table transactional sync
+    // for deleting one row from one table.
+    let orders = await readOrders();
+    const order = orders.find((o: Order) => o.id === id);
     if (!order) {
       return res.status(404).json({ error: 'Order not found.' });
     }
     if (order.status === 'Item Returned/Completed') {
       return res.status(400).json({ error: 'Pesanan yang sudah selesai tidak bisa dihapus.' });
     }
-    db.orders = db.orders.filter((o: Order) => o.id !== id);
-    await writeDB(db);
+    orders = orders.filter((o: Order) => o.id !== id);
+    await writeOrders(orders);
     res.json({ message: 'Order deleted successfully.' });
   });
 }));
@@ -1287,14 +1305,15 @@ app.delete('/api/orders/:id', authenticateUser, requireOwner, asyncHandler(async
 app.delete('/api/orders/:id/late-fee', authenticateUser, requireOwner, asyncHandler(async (req, res) => {
   await withDbLock(async () => {
     const { id } = req.params;
-    const db = await readDB();
-    const order = db.orders.find((o: Order) => o.id === id);
+    // Narrow readers/writer, not the full readDB/writeDB.
+    const orders = await readOrders();
+    const order = orders.find((o: Order) => o.id === id);
     if (!order) {
       return res.status(404).json({ error: 'Order not found.' });
     }
     order.lateDays = 0;
     order.lateFee = 0;
-    await writeDB(db);
+    await writeOrders(orders);
     res.json(order);
   });
 }));
@@ -1305,8 +1324,11 @@ app.post('/api/orders/:id/calculate-late', authenticateUser, asyncHandler(async 
     const { id } = req.params;
     const { returnDateTime } = req.body; // "YYYY-MM-DDTHH:mm" local string (defaults to now if not provided)
 
-    const db = await readDB();
-    const order = db.orders.find((o: Order) => o.id === id);
+    // Narrow readers, not the full readDB - only ever needs orders+settings
+    // (never users/products/jobPriceList/jobEntries), and only ever writes
+    // the one order (see writeOrders below).
+    const [orders, settings] = await Promise.all([readOrders(), readSettings()]);
+    const order = orders.find((o: Order) => o.id === id);
     if (!order) {
       return res.status(404).json({ error: 'Order not found.' });
     }
@@ -1336,7 +1358,7 @@ app.post('/api/orders/:id/calculate-late', authenticateUser, asyncHandler(async 
       // field existed - same "fall back gracefully" treatment already given
       // to returnedAt-less legacy orders elsewhere (calculateAllocatedStock).
       const endDateDow = new Date(`${order.endDate}T00:00:00`).getDay();
-      const closeTime = db.settings.operatingHours[WEEKDAY_KEYS[endDateDow]].close;
+      const closeTime = settings.operatingHours[WEEKDAY_KEYS[endDateDow]].close;
       deadline = new Date(`${order.endDate}T${closeTime}:00`);
     }
 
@@ -1353,7 +1375,7 @@ app.post('/api/orders/:id/calculate-late', authenticateUser, asyncHandler(async 
     // the old closing-time-anchored deadline (past closing = store obviously
     // shut); it doesn't carry over now that the deadline is pickup-time
     // anchored and can fall at any hour (owner confirmed via AskUserQuestion).
-    const effectiveDeadline = new Date(deadline.getTime() + db.settings.lateToleranceHours * 60 * 60 * 1000);
+    const effectiveDeadline = new Date(deadline.getTime() + settings.lateToleranceHours * 60 * 60 * 1000);
     const hoursLate = Math.max(0, (actualReturn.getTime() - effectiveDeadline.getTime()) / (1000 * 60 * 60));
     const lateDays = hoursLate === 0 ? 0 : Math.ceil(hoursLate / 24);
 
@@ -1417,9 +1439,9 @@ app.post('/api/orders/:id/calculate-late', authenticateUser, asyncHandler(async 
 
     // Note: We don't save DB immediately, user can confirm returning, then status updates and saves,
     // but let's save these calculated values now so they stick to the order.
-    const orderIndex = db.orders.findIndex((o: Order) => o.id === id);
-    db.orders[orderIndex] = order;
-    await writeDB(db);
+    const orderIndex = orders.findIndex((o: Order) => o.id === id);
+    orders[orderIndex] = order;
+    await writeOrders(orders);
 
     res.json({
       lateDays,
@@ -1712,11 +1734,15 @@ app.post('/api/webhooks/wuzzpay', asyncHandler(async (req, res) => {
 // GET /api/settings (the admin's own Pengaturan view) still shows the raw saved
 // value, blank or not, so the owner always sees exactly what they actually saved.
 app.get('/api/store-info', asyncHandler(async (req, res) => {
-  const db = await readDB();
-  const savedFooter = db.settings.footer || defaultSettings.footer;
-  const savedRunningText = db.settings.runningText;
+  // Narrow readSettings, not the full readDB - this route only ever needs
+  // settings, and it's public + hit on every single page load, so the
+  // unconditional 6-table sync a full readDB() pulls in Postgres mode was
+  // pure waste here.
+  const settings = await readSettings();
+  const savedFooter = settings.footer || defaultSettings.footer;
+  const savedRunningText = settings.runningText;
   res.json({
-    operatingHours: db.settings.operatingHours,
+    operatingHours: settings.operatingHours,
     footer: {
       description: savedFooter.description || defaultSettings.footer.description,
       address: savedFooter.address || defaultSettings.footer.address,

@@ -418,7 +418,7 @@ export default function OrderDetailPanel({
           {/* WuzzPay gateway info (debugging/support only - read-only, not shown to the customer) */}
           {(order.paymentMethod || order.wuzzpayTransactionId) && (
             <div className="border-2 border-black p-4 rounded-none space-y-2 bg-zinc-50 shadow-[2px_2px_0px_rgba(0,0,0,1)]">
-              <h4 className="text-[10px] font-black uppercase text-zinc-400 tracking-wider">Info Payment Gateway (WuzzPay)</h4>
+              <h4 className="text-[10px] font-black uppercase text-zinc-400 tracking-wider">Info Metode Pembayaran</h4>
               <div className="grid grid-cols-2 gap-3 text-[11px]">
                 {order.paymentMethod && (
                   <div>

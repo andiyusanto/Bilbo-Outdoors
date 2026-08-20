@@ -43,7 +43,7 @@ export default function OrderSuccessScreen({ completedOrder, onReset }: OrderSuc
         <div className="w-16 h-16 bg-brand text-black border-2 border-black flex items-center justify-center mx-auto shadow-[3px_3px_0px_rgba(0,0,0,1)]">
           <Check className="w-8 h-8 stroke-[3]" />
         </div>
-        <h2 className="text-3xl font-display font-black text-black uppercase tracking-tighter">PESANAN BERHASIL DIKIRIM!</h2>
+        <h2 className="text-3xl font-display font-black text-black uppercase tracking-tighter">PESANAN BERHASIL!</h2>
         <div className="bg-emerald-100 text-emerald-800 border-2 border-emerald-800 inline-block px-4 py-1.5 text-xs font-mono font-black uppercase tracking-wider">
           ID PESANAN: {completedOrder.id}
         </div>

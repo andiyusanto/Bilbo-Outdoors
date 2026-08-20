@@ -1576,6 +1576,36 @@ app.post('/api/orders/confirm/:token/charge', asyncHandler(async (req, res) => {
   res.json(result);
 }));
 
+// Public, same token boundary as /charge - lets a customer choose to pay
+// cash in person at pickup instead of online. No WuzzPay involvement
+// whatsoever (no outbound call, nothing to poll) - this just tags the order
+// so staff know to expect cash rather than an already-completed online
+// transfer (visible in Manajemen Order / OrderDetailPanel). The existing
+// manual "Konfirmasi Pembayaran" action remains the actual
+// payment-confirmation step, unchanged - staff still confirm once cash is
+// physically received, exactly as they already do for every other order.
+app.post('/api/orders/confirm/:token/cash', asyncHandler(async (req, res) => {
+  const { token } = req.params;
+  const result = await withDbLock(async () => {
+    const db = await readDB();
+    const order = db.orders.find((o: Order) => o.confirmationToken && o.confirmationToken === token);
+    if (!order) return { kind: 'not-found' as const };
+    // Same testing gate as /charge (see PAYMENT_GATEWAY_TEST_TRIGGER_NAME) -
+    // this whole payment-method-picker UI is invisible to real customers
+    // until the WuzzPay channel issues are resolved, and the cash option
+    // lives inside that same picker.
+    if (order.customerName !== PAYMENT_GATEWAY_TEST_TRIGGER_NAME) return { kind: 'not-configured' as const };
+    if (order.status !== 'Pending') return { kind: 'not-chargeable' as const };
+    order.paymentMethod = 'cash';
+    await writeDB(db);
+    return { kind: 'ok' as const };
+  });
+  if (result.kind === 'not-found') return res.status(404).json({ error: 'Pesanan tidak ditemukan.' });
+  if (result.kind === 'not-configured') return res.status(503).json({ error: 'Payment gateway belum dikonfigurasi.' });
+  if (result.kind === 'not-chargeable') return res.status(400).json({ error: 'Pesanan ini sudah tidak bisa diubah metode pembayarannya.' });
+  res.json({ paymentMethod: 'cash' });
+}));
+
 // Public, same token boundary - the client polls this directly, so
 // correctness never depends on the webhook (below) actually arriving. Always
 // re-verifies against WuzzPay's own API before responding; never trusts

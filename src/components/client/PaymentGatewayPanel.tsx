@@ -78,7 +78,7 @@ interface PaymentGatewayPanelProps {
   onSettled: () => void; // called once the poll confirms Approved/Paid, so the parent can refresh the full order
 }
 
-type MethodTab = 'qris' | 'va' | 'emoney';
+type MethodTab = 'qris' | 'va' | 'emoney' | 'cash';
 
 // Per-channel "how to pay" steps - WuzzPay's docs (and their merchant
 // dashboard) don't provide any customer-facing payment tutorial at all, only
@@ -275,6 +275,12 @@ export default function PaymentGatewayPanel({ order, token, onSettled }: Payment
   const [instruction, setInstruction] = useState<Record<string, any> | null>(order.paymentInstruction ?? null);
   const [expired, setExpired] = useState(false);
   const [settled, setSettled] = useState(order.status !== 'Pending');
+  const [cashConfirming, setCashConfirming] = useState(false);
+  const [cashError, setCashError] = useState('');
+  // Survives a reload - if the customer already picked cash on a previous
+  // visit (order.paymentMethod persisted server-side), re-enter that state
+  // directly instead of showing the method picker again.
+  const [cashSelected, setCashSelected] = useState(order.paymentMethod === 'cash' && order.status === 'Pending');
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stoppedRef = useRef(false);
 
@@ -382,6 +388,23 @@ export default function PaymentGatewayPanel({ order, token, onSettled }: Payment
     }
   };
 
+  const handleCashConfirm = async () => {
+    setCashConfirming(true);
+    setCashError('');
+    try {
+      const res = await fetch(`/api/orders/confirm/${token}/cash`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || 'Gagal menyimpan pilihan bayar tunai.');
+      }
+      setCashSelected(true);
+    } catch (err: any) {
+      setCashError(err.message || 'Gagal menyimpan pilihan bayar tunai.');
+    } finally {
+      setCashConfirming(false);
+    }
+  };
+
   if (settled) {
     return (
       <div className="bg-emerald-50 border-2 border-emerald-700 p-8 rounded-none text-center space-y-3">
@@ -406,20 +429,33 @@ export default function PaymentGatewayPanel({ order, token, onSettled }: Payment
     );
   }
 
+  if (cashSelected) {
+    return (
+      <div className="bg-white border-2 border-black p-6 rounded-none space-y-3 text-center shadow-[4px_4px_0px_rgba(0,0,0,1)]">
+        <h3 className="text-sm font-display font-black text-black uppercase tracking-tight">Bayar Tunai Saat Pengambilan</h3>
+        <p className="text-xs font-bold text-zinc-600 normal-case leading-relaxed">
+          Silakan datang ke toko kami dan siapkan uang tunai sejumlah{' '}
+          <strong className="text-black">Rp {order.totalPrice.toLocaleString('id-ID')}</strong> saat mengambil
+          barang. Staf kami akan mengonfirmasi pembayaran Anda saat itu.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {!instruction ? (
         <div className="bg-white border-2 border-black p-6 rounded-none space-y-4 shadow-[4px_4px_0px_rgba(0,0,0,1)]">
           <h3 className="text-xs font-black uppercase text-black tracking-widest border-b-2 border-brand pb-2">PILIH METODE PEMBAYARAN</h3>
-          <div className="grid grid-cols-3 gap-2">
-            {(['qris', 'va', 'emoney'] as MethodTab[]).map((m) => (
+          <div className="grid grid-cols-2 gap-2">
+            {(['qris', 'va', 'emoney', 'cash'] as MethodTab[]).map((m) => (
               <button
                 key={m}
                 type="button"
-                onClick={() => setMethodTab(m)}
+                onClick={() => { setMethodTab(m); setChargeError(''); setCashError(''); }}
                 className={`py-2.5 text-[11px] font-black uppercase tracking-wider border-2 border-black rounded-none cursor-pointer ${methodTab === m ? 'bg-black text-brand' : 'bg-white text-black hover:bg-zinc-100'}`}
               >
-                {m === 'qris' ? 'QRIS' : m === 'va' ? 'Transfer Bank' : 'E-Wallet'}
+                {m === 'qris' ? 'QRIS' : m === 'va' ? 'Transfer Bank' : m === 'emoney' ? 'E-Wallet' : 'Bayar Tunai'}
               </button>
             ))}
           </div>
@@ -448,17 +484,26 @@ export default function PaymentGatewayPanel({ order, token, onSettled }: Payment
             </select>
           )}
 
-          {chargeError && (
-            <p className="text-[11px] font-bold text-red-600 uppercase">{chargeError}</p>
+          {methodTab === 'cash' && (
+            <p className="text-[11px] text-zinc-600 font-semibold normal-case leading-relaxed bg-zinc-50 border border-zinc-200 p-3">
+              Bayar langsung di toko kami saat mengambil barang. Siapkan uang tunai sejumlah{' '}
+              <strong className="text-black">Rp {order.totalPrice.toLocaleString('id-ID')}</strong> saat kedatangan.
+            </p>
+          )}
+
+          {(methodTab === 'cash' ? cashError : chargeError) && (
+            <p className="text-[11px] font-bold text-red-600 uppercase">{methodTab === 'cash' ? cashError : chargeError}</p>
           )}
 
           <button
             type="button"
-            onClick={handleCharge}
-            disabled={charging}
+            onClick={methodTab === 'cash' ? handleCashConfirm : handleCharge}
+            disabled={methodTab === 'cash' ? cashConfirming : charging}
             className="w-full py-4 bg-black hover:bg-brand hover:text-black text-white font-black text-sm rounded-none border-2 border-black shadow-[4px_4px_0px_var(--brand-color)] transition-colors uppercase tracking-widest cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {charging ? 'Memproses...' : chargeError ? 'Coba Lagi' : 'Buat Pembayaran'}
+            {methodTab === 'cash'
+              ? (cashConfirming ? 'Memproses...' : 'Konfirmasi Bayar Tunai')
+              : (charging ? 'Memproses...' : chargeError ? 'Coba Lagi' : 'Buat Pembayaran')}
           </button>
         </div>
       ) : expired ? (

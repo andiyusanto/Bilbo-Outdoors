@@ -62,7 +62,7 @@ export interface Order {
   statusHistory?: StatusHistoryEntry[]; // audit trail of staff-driven status transitions only - order creation (initial Pending) is not an entry, since that's the customer, not staff
   penalties?: PenaltyEntry[]; // damage/loss charges assessed at return, admin-entered per incident; folded into the invoice total alongside lateFee (see src/pricing.ts)
   // --- WuzzPay payment gateway fields (see server.ts's wuzzpayRequest/verifyAndSettleOrderPayment) ---
-  paymentMethod?: 'qris' | 'va' | 'emoney'; // chosen product_id at charge time
+  paymentMethod?: 'qris' | 'va' | 'emoney' | 'cash'; // chosen product_id at charge time, or 'cash' for pay-on-pickup (no WuzzPay involvement - see POST /api/orders/confirm/:token/cash)
   paymentChannel?: string; // bank_code (va) or wallet code (emoney), e.g. "014" or "ovo" - unused for qris
   paymentInstruction?: Record<string, unknown>; // raw payment_instruction object from POST /v1/charge (va_number/qr string/expires_at/...), stored so the confirmation page can re-render on reload without re-charging
   wuzzpayTransactionId?: string; // WuzzPay's own transaction id - used to poll GET /v1/transactions/{id}. Admin/internal only, never sent to the public confirm/:token projection.

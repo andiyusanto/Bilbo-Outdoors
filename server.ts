@@ -102,6 +102,20 @@ if (!WUZZPAY_API_KEY || !WUZZPAY_MERCHANT_ID) {
 // feature is ready for a real rollout.
 const PAYMENT_GATEWAY_TEST_TRIGGER_NAME = 'TESTING_PAYMENT';
 
+// Thrown by wuzzpayRequest on a non-2xx response - carries the real HTTP
+// status and WuzzPay's own error code so callers can distinguish failure
+// types (e.g. a permanently-stuck reference vs. a transient hiccup) without
+// string-parsing an error message.
+class WuzzpayApiError extends Error {
+  status: number;
+  wuzzpayCode?: string;
+  constructor(message: string, status: number, wuzzpayCode?: string) {
+    super(message);
+    this.status = status;
+    this.wuzzpayCode = wuzzpayCode;
+  }
+}
+
 // Thin authenticated fetch wrapper for the WuzzPay API. Throws explicitly on
 // a non-2xx response (same shape as sendTelegramBookingNotification above) so
 // asyncHandler-wrapped call sites surface the failure instead of silently
@@ -123,7 +137,7 @@ async function wuzzpayRequest(method: string, path: string, body?: unknown, idem
   });
   const data = await res.json().catch(() => null);
   if (!res.ok) {
-    throw new Error(`WuzzPay ${method} ${path} responded ${res.status}: ${JSON.stringify(data)}`);
+    throw new WuzzpayApiError(`WuzzPay ${method} ${path} responded ${res.status}: ${JSON.stringify(data)}`, res.status, data?.code);
   }
   return data;
 }
@@ -1510,6 +1524,20 @@ app.post('/api/orders/confirm/:token/charge', asyncHandler(async (req, res) => {
     }, precheck.orderId);
   } catch (err) {
     console.error(`WuzzPay charge failed for order ${precheck.orderId}:`, err);
+    // partner_reference already used (WuzzPay's own idempotency dedup, code
+    // TRX008) - observed 2026-08-20 to mean this order's reference is
+    // permanently stuck on WuzzPay's side, not just "in flight": even
+    // switching to a different, otherwise-working bank still 409s for the
+    // same order (confirmed directly against WuzzPay, bypassing this app
+    // entirely). Retrying can never succeed here, since Idempotency-Key is
+    // deterministically order.id - only a genuinely new order gets a fresh
+    // reference, so tell the customer that plainly instead of "try again".
+    if (err instanceof WuzzpayApiError && err.status === 409) {
+      return res.status(409).json({
+        error: 'Pesanan ini sudah pernah gagal dibuatkan pembayaran dan tidak bisa dicoba lagi. Silakan buat pesanan baru.',
+        code: 'REFERENCE_STUCK',
+      });
+    }
     return res.status(502).json({ error: 'Gagal membuat instruksi pembayaran. Silakan coba lagi.' });
   }
 

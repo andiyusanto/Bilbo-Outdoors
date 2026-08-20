@@ -79,19 +79,20 @@ export default function OrderConfirmationPage() {
     );
   }
 
-  // Gateway not configured yet - the exact legacy manual QRIS-mock/WhatsApp
-  // flow, untouched. Also the fallback if the customer's own order status is
-  // already past Pending (e.g. an admin manually confirmed it already), since
-  // there's nothing left to charge or poll for at that point.
+  // Gateway not configured at all yet - the exact legacy manual
+  // QRIS-mock/WhatsApp flow, untouched (this is the production kill-switch:
+  // unsetting WUZZPAY_API_KEY reverts every customer to this instantly).
+  // Also the fallback once the order's own status is already past Pending
+  // (e.g. an admin manually confirmed it already), since there's nothing
+  // left to charge or poll for at that point.
   //
-  // TEMPORARY internal testing gate (owner-requested, 2026-08-19, mirrors the
-  // identical check server-side in server.ts's /charge route - see
-  // PAYMENT_GATEWAY_TEST_TRIGGER_NAME there): most WuzzPay channels are still
-  // broken/unprovisioned, so the real flow stays invisible to real customers
-  // until the order's full name is exactly this trigger string. Remove this
-  // once the feature is ready for a real rollout.
-  const isPaymentGatewayTestOrder = order.customerName === 'TESTING_PAYMENT';
-  if (!paymentGatewayEnabled || !isPaymentGatewayTestOrder || order.status !== 'Pending') {
+  // Owner decision (2026-08-20): once the gateway IS configured, this real
+  // payment page now replaces the legacy fake page for EVERY customer, not
+  // just test orders - PaymentGatewayPanel itself disables the online
+  // methods (qris/va/emoney) unless the order matches the internal testing
+  // trigger name (most WuzzPay channels are still broken/unprovisioned), but
+  // cash-on-pickup stays usable for everyone since it never touches WuzzPay.
+  if (!paymentGatewayEnabled || order.status !== 'Pending') {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         <OrderSuccessScreen completedOrder={order} onReset={() => navigate('/')} />

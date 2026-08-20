@@ -266,7 +266,16 @@ function PaymentInstructionDisplay({ instruction }: { instruction: Record<string
 }
 
 export default function PaymentGatewayPanel({ order, token, onSettled }: PaymentGatewayPanelProps) {
-  const [methodTab, setMethodTab] = useState<MethodTab>('qris');
+  // TEMPORARY internal testing gate (owner-requested, mirrors
+  // PAYMENT_GATEWAY_TEST_TRIGGER_NAME server-side in server.ts's /charge
+  // route): most WuzzPay channels are still broken/unprovisioned, so the
+  // online methods stay disabled for real customers until the order's full
+  // name is exactly this trigger string. Cash-on-pickup is deliberately
+  // exempt (see the /cash route's comment) since it never touches WuzzPay.
+  // Client-side disabling is a UX courtesy, not the real security boundary -
+  // /charge independently re-checks this server-side regardless.
+  const isTestOrder = order.customerName === 'TESTING_PAYMENT';
+  const [methodTab, setMethodTab] = useState<MethodTab>(isTestOrder ? 'qris' : 'cash');
   const [selectedBank, setSelectedBank] = useState(BANK_OPTIONS[0].code);
   const [selectedWallet, setSelectedWallet] = useState(WALLET_OPTIONS[0].code);
   const [charging, setCharging] = useState(false);
@@ -448,17 +457,31 @@ export default function PaymentGatewayPanel({ order, token, onSettled }: Payment
         <div className="bg-white border-2 border-black p-6 rounded-none space-y-4 shadow-[4px_4px_0px_rgba(0,0,0,1)]">
           <h3 className="text-xs font-black uppercase text-black tracking-widest border-b-2 border-brand pb-2">PILIH METODE PEMBAYARAN</h3>
           <div className="grid grid-cols-2 gap-2">
-            {(['qris', 'va', 'emoney', 'cash'] as MethodTab[]).map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => { setMethodTab(m); setChargeError(''); setCashError(''); }}
-                className={`py-2.5 text-[11px] font-black uppercase tracking-wider border-2 border-black rounded-none cursor-pointer ${methodTab === m ? 'bg-black text-brand' : 'bg-white text-black hover:bg-zinc-100'}`}
-              >
-                {m === 'qris' ? 'QRIS' : m === 'va' ? 'Transfer Bank' : m === 'emoney' ? 'E-Wallet' : 'Bayar Tunai'}
-              </button>
-            ))}
+            {(['qris', 'va', 'emoney', 'cash'] as MethodTab[]).map((m) => {
+              const isDisabled = m !== 'cash' && !isTestOrder;
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  disabled={isDisabled}
+                  title={isDisabled ? 'Metode ini akan segera tersedia' : undefined}
+                  onClick={() => { setMethodTab(m); setChargeError(''); setCashError(''); }}
+                  className={`py-2.5 text-[11px] font-black uppercase tracking-wider border-2 border-black rounded-none ${
+                    isDisabled
+                      ? 'bg-zinc-100 text-zinc-400 cursor-not-allowed'
+                      : `cursor-pointer ${methodTab === m ? 'bg-black text-brand' : 'bg-white text-black hover:bg-zinc-100'}`
+                  }`}
+                >
+                  {m === 'qris' ? 'QRIS' : m === 'va' ? 'Transfer Bank' : m === 'emoney' ? 'E-Wallet' : 'Bayar Tunai'}
+                </button>
+              );
+            })}
           </div>
+          {!isTestOrder && (
+            <p className="text-[10px] text-zinc-400 font-semibold normal-case text-center">
+              QRIS, Transfer Bank, dan E-Wallet akan segera tersedia. Untuk saat ini, silakan pilih Bayar Tunai.
+            </p>
+          )}
 
           {methodTab === 'va' && (
             <select

@@ -179,23 +179,39 @@ export default function PaymentGatewayPanel({ order, token, onSettled }: Payment
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instruction, settled, token]);
 
+  const chargeRequest = async () => {
+    const body: { productId: MethodTab; bankCode?: string } = { productId: methodTab };
+    if (methodTab === 'va') body.bankCode = selectedBank;
+    if (methodTab === 'emoney') body.bankCode = selectedWallet;
+    const res = await fetch(`/api/orders/confirm/${token}/charge`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    return parseJsonOrThrow(res, 'Gagal membuat instruksi pembayaran.');
+  };
+
   const handleCharge = async () => {
     setCharging(true);
     setChargeError('');
     setExpired(false);
     try {
-      const body: { productId: MethodTab; bankCode?: string } = { productId: methodTab };
-      if (methodTab === 'va') body.bankCode = selectedBank;
-      if (methodTab === 'emoney') body.bankCode = selectedWallet;
-      const res = await fetch(`/api/orders/confirm/${token}/charge`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const data = await parseJsonOrThrow(res, 'Gagal membuat instruksi pembayaran.');
+      const data = await chargeRequest();
       setInstruction(data.paymentInstruction ?? null);
-    } catch (err: any) {
-      setChargeError(err.message || 'Gagal membuat instruksi pembayaran.');
+    } catch {
+      // Auto-retry once, silently, before ever showing an error - confirmed
+      // empirically (2026-08-20) that a charge failure here is typically a
+      // transient provider-side hiccup: an identical replayed request
+      // succeeded immediately with no code change needed. A customer
+      // shouldn't be stuck reading a dead-end error for something that
+      // resolves itself a couple seconds later.
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      try {
+        const data = await chargeRequest();
+        setInstruction(data.paymentInstruction ?? null);
+      } catch (err: any) {
+        setChargeError(err.message || 'Gagal membuat instruksi pembayaran.');
+      }
     } finally {
       setCharging(false);
     }
@@ -265,7 +281,7 @@ export default function PaymentGatewayPanel({ order, token, onSettled }: Payment
             disabled={charging}
             className="w-full py-4 bg-black hover:bg-brand hover:text-black text-white font-black text-sm rounded-none border-2 border-black shadow-[4px_4px_0px_var(--brand-color)] transition-colors uppercase tracking-widest cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {charging ? 'Memproses...' : 'Buat Pembayaran'}
+            {charging ? 'Memproses...' : chargeError ? 'Coba Lagi' : 'Buat Pembayaran'}
           </button>
         </div>
       ) : expired ? (

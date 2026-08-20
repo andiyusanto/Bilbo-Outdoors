@@ -42,24 +42,29 @@ export default function OverviewTab({ orders, products }: OverviewTabProps) {
 
   // Calculate some analytics values for visual dashboard charts - also tracks
   // a per-product breakdown within each category, so clicking a category row
-  // can reveal exactly which items made up that count.
+  // can reveal exactly which items made up that count. Grouped by name +
+  // varian/size/color together, not name alone - two catalog rows sharing a
+  // name but differing in attributes (e.g. two headlamp colors) show as
+  // separate rows instead of silently merging into one combined count.
   const categoryOrderStats = () => {
-    const counts: Record<string, { total: number; items: Record<string, number> }> = {};
+    const counts: Record<string, { total: number; items: Record<string, { productName: string; varian?: string; size?: string; color?: string; quantity: number }> }> = {};
     dateFilteredOrders.forEach(o => {
       o.items.forEach(it => {
         const prod = products.find(p => p.id === it.productId);
         const cat = prod?.category || 'CAMP SUPPORT';
         if (!counts[cat]) counts[cat] = { total: 0, items: {} };
         counts[cat].total += it.quantity;
-        counts[cat].items[it.productName] = (counts[cat].items[it.productName] || 0) + it.quantity;
+        const key = `${it.productName}|${prod?.varian || ''}|${prod?.size || ''}|${prod?.color || ''}`;
+        if (!counts[cat].items[key]) {
+          counts[cat].items[key] = { productName: it.productName, varian: prod?.varian, size: prod?.size, color: prod?.color, quantity: 0 };
+        }
+        counts[cat].items[key].quantity += it.quantity;
       });
     });
     return Object.entries(counts).map(([name, { total, items }]) => ({
       name,
       value: total,
-      items: Object.entries(items)
-        .map(([productName, quantity]) => ({ productName, quantity }))
-        .sort((a, b) => b.quantity - a.quantity),
+      items: Object.values(items).sort((a, b) => b.quantity - a.quantity),
     }));
   };
 
@@ -240,12 +245,24 @@ export default function OverviewTab({ orders, products }: OverviewTabProps) {
                     </button>
                     {isExpanded && (
                       <div className="ml-7 mb-2 space-y-1.5 border-l-2 border-zinc-200 pl-3">
-                        {cat.items.map((item, j) => (
-                          <div key={j} className="flex items-center justify-between normal-case text-[10px] text-zinc-600 font-semibold">
-                            <span>{item.productName}</span>
-                            <span className="font-mono font-black text-zinc-800">{item.quantity} Unit</span>
-                          </div>
-                        ))}
+                        {cat.items.map((item, j) => {
+                          const attrLine = (item.varian || item.size || item.color)
+                            ? [
+                                item.varian && `Varian: ${item.varian}`,
+                                item.size && `Ukuran: ${item.size}`,
+                                item.color && `Warna: ${item.color}`,
+                              ].filter(Boolean).join('   •   ')
+                            : null;
+                          return (
+                            <div key={j} className="flex items-center justify-between normal-case text-[10px] text-zinc-600 font-semibold gap-2">
+                              <div className="min-w-0">
+                                <span className="block truncate">{item.productName}</span>
+                                {attrLine && <span className="block text-zinc-400 text-[9px] truncate">{attrLine}</span>}
+                              </div>
+                              <span className="font-mono font-black text-zinc-800 shrink-0">{item.quantity} Unit</span>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>

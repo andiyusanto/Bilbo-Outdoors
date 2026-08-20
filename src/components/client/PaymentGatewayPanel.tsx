@@ -136,13 +136,15 @@ export default function PaymentGatewayPanel({ order, token, onSettled }: Payment
   const [instruction, setInstruction] = useState<Record<string, any> | null>(order.paymentInstruction ?? null);
   const [expired, setExpired] = useState(false);
   const [settled, setSettled] = useState(order.status !== 'Pending');
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stoppedRef = useRef(false);
 
   const expiresAt = instruction?.expires_at as string | undefined;
 
   const stopPolling = () => {
+    stoppedRef.current = true;
     if (pollRef.current) {
-      clearInterval(pollRef.current);
+      clearTimeout(pollRef.current);
       pollRef.current = null;
     }
   };
@@ -157,7 +159,14 @@ export default function PaymentGatewayPanel({ order, token, onSettled }: Payment
   useEffect(() => {
     checkExpiry();
     if (!instruction || settled) return;
+    stoppedRef.current = false;
 
+    // Self-rescheduling setTimeout, not setInterval - a poll only fires
+    // POLL_INTERVAL_MS after the PREVIOUS one actually finished, never
+    // overlapping it. A server-side incident (2026-08-20) traced back to this
+    // being a plain setInterval: when a poll took longer than the interval
+    // (a slow WuzzPay response), the next tick fired anyway, and overlapping
+    // requests piled up server-side behind a shared lock.
     const poll = async () => {
       try {
         const res = await fetch(`/api/orders/confirm/${token}/payment-status`);
@@ -166,15 +175,18 @@ export default function PaymentGatewayPanel({ order, token, onSettled }: Payment
           setSettled(true);
           stopPolling();
           onSettled();
+          return;
         }
       } catch {
         // transient poll failure - just try again next tick, no need to surface
       }
       checkExpiry();
+      if (!stoppedRef.current) {
+        pollRef.current = setTimeout(poll, POLL_INTERVAL_MS);
+      }
     };
 
     poll();
-    pollRef.current = setInterval(poll, POLL_INTERVAL_MS);
     return stopPolling;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [instruction, settled, token]);

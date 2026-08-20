@@ -128,29 +128,44 @@ async function wuzzpayRequest(method: string, path: string, body?: unknown, idem
   return data;
 }
 
-// Re-verifies an order's payment status directly against WuzzPay (never
-// trusts a webhook body or any client-supplied status) and settles the order
-// if - and only if - WuzzPay itself confirms it as paid. Called from both the
-// public payment-status poll route and the webhook receiver, so correctness
-// never depends on the webhook actually arriving. Deliberately allows the
-// transition from either Pending OR Expired (not just Pending) - see
-// expireStaleOrders above for why a late-arriving confirmed settlement must
-// still recover an order that auto-expired while a real payment was still in
-// flight. Mutates `order` in place; callers persist via writeDB under
-// withDbLock, same as every other order-mutating route.
-async function verifyAndSettleOrderPayment(order: Order): Promise<void> {
-  if (!order.wuzzpayTransactionId) return;
-  if (order.status === 'Approved/Paid' || order.status === 'Item Picked Up' || order.status === 'Item Returned/Completed') return;
-  let data: any;
+// Slow, network-only half of settlement verification - deliberately has NO
+// DB access and takes NO lock, so it's safe to call before/outside withDbLock.
+// Split out 2026-08-20 after a production incident: the combined
+// fetch+read+write used to run entirely inside withDbLock (a single,
+// process-wide, strictly-serialized mutex - see its definition below), and
+// since the client polls payment-status every 5s without waiting for the
+// previous poll to finish, a slow WuzzPay response (this call can take up to
+// WUZZPAY_REQUEST_TIMEOUT_MS) let overlapping polls pile up in that one
+// global queue, starving every OTHER write route (and GET /api/orders, which
+// also takes the lock) for as long as the backlog took to drain. Returns the
+// raw status string (or undefined on any failure - caller decides what "no
+// answer" means, this never throws).
+async function fetchWuzzpaySettlementStatus(wuzzpayTransactionId: string, orderId: string): Promise<string | undefined> {
   try {
-    data = await wuzzpayRequest('GET', `/transactions/${order.wuzzpayTransactionId}`);
+    const data = await wuzzpayRequest('GET', `/transactions/${wuzzpayTransactionId}`);
+    return data?.data?.status;
   } catch (err) {
-    console.error(`WuzzPay transaction status check failed for order ${order.id}:`, err);
-    return;
+    console.error(`WuzzPay transaction status check failed for order ${orderId}:`, err);
+    return undefined;
   }
-  const status = data?.data?.status;
-  if (typeof status === 'string') {
+}
+
+// Fast, DB-only half - call this INSIDE withDbLock, only after
+// fetchWuzzpaySettlementStatus has already resolved outside the lock. Mutates
+// `order` in place and returns whether anything actually changed, so the
+// caller can skip a pointless writeDB() (a full 6-table transactional sync,
+// per writeDBPostgres - not cheap) when a poll comes back with nothing new,
+// which is the common case (most polls just re-confirm "still pending").
+// Deliberately allows the transition from either Pending OR Expired (not just
+// Pending) - see expireStaleOrders above for why a late-arriving confirmed
+// settlement must still recover an order that auto-expired while a real
+// payment was still in flight.
+function applyWuzzpaySettlementStatus(order: Order, status: string | undefined): boolean {
+  if (order.status === 'Approved/Paid' || order.status === 'Item Picked Up' || order.status === 'Item Returned/Completed') return false;
+  let changed = false;
+  if (typeof status === 'string' && status !== order.wuzzpayLastStatus) {
     order.wuzzpayLastStatus = status;
+    changed = true;
   }
   // Exact "paid" status string isn't documented (only "pending" appears in
   // WuzzPay's own example response) - accept the plausible variants until
@@ -167,7 +182,9 @@ async function verifyAndSettleOrderPayment(order: Order): Promise<void> {
       changedByUserId: 'system',
       changedByName: 'WuzzPay (Otomatis)',
     });
+    changed = true;
   }
+  return changed;
 }
 
 const app = express();
@@ -783,13 +800,13 @@ function calculateAllocatedStock(orders: Order[], products: Product[], startDate
 // validStatuses) - expiring never revokes stock, it just stops reserving it,
 // and remains reversible.
 // A Pending order with a live WuzzPay payment_instruction (see
-// verifyAndSettleOrderPayment) is never expired while that instruction's own
+// applyWuzzpaySettlementStatus) is never expired while that instruction's own
 // expires_at is still in the future - don't kill an order while its real
 // payment window is genuinely still open. Falls back to the pure
 // createdAt-based rule for orders with no gateway charge yet, which covers
 // legacy orders and the first few minutes of every order. Even if this guard
 // is bypassed by a stale/missing expires_at, a late-arriving confirmed
-// settlement still recovers an Expired order (verifyAndSettleOrderPayment
+// settlement still recovers an Expired order (applyWuzzpaySettlementStatus
 // allows the Expired -> Approved/Paid transition too) - defense in depth, not
 // a single point of failure.
 function expireStaleOrders(orders: Order[], pendingExpiryHours: number): boolean {
@@ -1433,99 +1450,140 @@ app.post('/api/orders/confirm/:token/charge', asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'Kode e-wallet tidak valid.' });
   }
 
-  await withDbLock(async () => {
-    const { token } = req.params;
+  const { token } = req.params;
+
+  // Quick, lock-protected read + validation - a stale read past this point is
+  // fine, since the actual charge call below is naturally idempotent
+  // (deterministic Idempotency-Key = order.id), so a race against a
+  // concurrent charge attempt is caught by WuzzPay itself (409 in-flight),
+  // not by this check.
+  const precheck = await withDbLock(async () => {
     const db = await readDB();
     const order = db.orders.find((o: Order) => o.confirmationToken && o.confirmationToken === token);
-    if (!order) {
-      return res.status(404).json({ error: 'Pesanan tidak ditemukan.' });
-    }
+    if (!order) return { kind: 'not-found' as const };
     // Testing gate (see PAYMENT_GATEWAY_TEST_TRIGGER_NAME above) - responds
     // identically to "gateway not configured" so a non-test order can't
     // distinguish "feature hidden" from "feature doesn't exist yet".
-    if (order.customerName !== PAYMENT_GATEWAY_TEST_TRIGGER_NAME) {
-      return res.status(503).json({ error: 'Payment gateway belum dikonfigurasi.' });
-    }
+    if (order.customerName !== PAYMENT_GATEWAY_TEST_TRIGGER_NAME) return { kind: 'not-configured' as const };
     // Only a still-Pending order can be charged - not Expired. Allowing a
     // fresh charge into an expired order could let a customer pay for stock
     // the system may have since re-allocated; a payment that was already
     // legitimately in flight before expiry is instead recovered by
-    // verifyAndSettleOrderPayment's separate Expired-transition path, which
+    // applyWuzzpaySettlementStatus's separate Expired-transition path, which
     // only completes an existing transaction, never starts a new one.
-    if (order.status !== 'Pending') {
-      return res.status(400).json({ error: 'Pesanan ini sudah tidak bisa dibuatkan pembayaran baru.' });
-    }
-
+    if (order.status !== 'Pending') return { kind: 'not-chargeable' as const };
     // Idempotent short-circuit: a still-live instruction (not yet expired) is
     // just returned as-is, so a page refresh/double-click doesn't re-charge.
     const existingExpiresAt = order.paymentInstruction?.expires_at;
     if (order.wuzzpayTransactionId && typeof existingExpiresAt === 'string' && new Date(existingExpiresAt).getTime() > Date.now()) {
-      return res.json({
+      return {
+        kind: 'already-live' as const,
         paymentMethod: order.paymentMethod,
         paymentInstruction: order.paymentInstruction,
         wuzzpayTransactionId: order.wuzzpayTransactionId,
-      });
+      };
     }
+    return { kind: 'ok' as const, orderId: order.id, totalPrice: order.totalPrice };
+  });
 
-    let data: any;
-    try {
-      // Idempotency-Key is deterministic (order.id) so a raced/duplicated
-      // request is deduped by WuzzPay itself (409 in-flight, replayed once
-      // completed) - a second layer on top of withDbLock/the short-circuit above.
-      data = await wuzzpayRequest('POST', '/charge', {
-        partner_reference: order.id,
-        amount: { amount: order.totalPrice, currency: 'IDR' },
-        product_id: productId,
-        bank_code: bankCode,
-      }, order.id);
-    } catch (err) {
-      console.error(`WuzzPay charge failed for order ${order.id}:`, err);
-      return res.status(502).json({ error: 'Gagal membuat instruksi pembayaran. Silakan coba lagi.' });
-    }
+  if (precheck.kind === 'not-found') return res.status(404).json({ error: 'Pesanan tidak ditemukan.' });
+  if (precheck.kind === 'not-configured') return res.status(503).json({ error: 'Payment gateway belum dikonfigurasi.' });
+  if (precheck.kind === 'not-chargeable') return res.status(400).json({ error: 'Pesanan ini sudah tidak bisa dibuatkan pembayaran baru.' });
+  if (precheck.kind === 'already-live') {
+    return res.json({ paymentMethod: precheck.paymentMethod, paymentInstruction: precheck.paymentInstruction, wuzzpayTransactionId: precheck.wuzzpayTransactionId });
+  }
 
-    // Transaction id is at data.transaction.ID - nested under a PascalCase
-    // "transaction" object, confirmed empirically against the real sandbox
-    // (Stage 2 of the payment gateway plan). WuzzPay's docs don't show this
-    // shape at all (their VA example response has no "transaction" key and
-    // no id field of any kind), so this was unknown until tested live. Still
-    // falls back to the other plausible names defensively and logs loudly if
-    // even those are absent, rather than silently trusting a guess.
-    const transactionId = data?.data?.transaction?.ID ?? data?.data?.id ?? data?.data?.transaction_id ?? data?.data?.payment_instruction?.id;
-    if (!transactionId) {
-      console.error(`WuzzPay charge response for order ${order.id} has no recognizable transaction id - raw response:`, JSON.stringify(data));
-    }
+  // SLOW outbound call - deliberately outside withDbLock (see
+  // fetchWuzzpaySettlementStatus's comment above for why: this used to run
+  // inside the lock and could starve every other write route for as long as
+  // WuzzPay took to respond).
+  let data: any;
+  try {
+    // Idempotency-Key is deterministic (order.id) so a raced/duplicated
+    // request is deduped by WuzzPay itself (409 in-flight, replayed once
+    // completed) - a second layer on top of the precheck short-circuit above.
+    data = await wuzzpayRequest('POST', '/charge', {
+      partner_reference: precheck.orderId,
+      amount: { amount: precheck.totalPrice, currency: 'IDR' },
+      product_id: productId,
+      bank_code: bankCode,
+    }, precheck.orderId);
+  } catch (err) {
+    console.error(`WuzzPay charge failed for order ${precheck.orderId}:`, err);
+    return res.status(502).json({ error: 'Gagal membuat instruksi pembayaran. Silakan coba lagi.' });
+  }
 
+  // Transaction id is at data.transaction.ID - nested under a PascalCase
+  // "transaction" object, confirmed empirically against the real sandbox
+  // (Stage 2 of the payment gateway plan). WuzzPay's docs don't show this
+  // shape at all (their VA example response has no "transaction" key and
+  // no id field of any kind), so this was unknown until tested live. Still
+  // falls back to the other plausible names defensively and logs loudly if
+  // even those are absent, rather than silently trusting a guess.
+  const transactionId = data?.data?.transaction?.ID ?? data?.data?.id ?? data?.data?.transaction_id ?? data?.data?.payment_instruction?.id;
+  if (!transactionId) {
+    console.error(`WuzzPay charge response for order ${precheck.orderId} has no recognizable transaction id - raw response:`, JSON.stringify(data));
+  }
+
+  // Quick, lock-protected persist - re-reads the order fresh (it may have
+  // changed while the slow call above was in flight) rather than reusing the
+  // precheck snapshot.
+  const result = await withDbLock(async () => {
+    const db = await readDB();
+    const order = db.orders.find((o: Order) => o.id === precheck.orderId);
+    if (!order) return null;
     order.paymentMethod = productId;
     order.paymentChannel = bankCode ?? undefined;
     order.paymentInstruction = data?.data?.payment_instruction ?? undefined;
     order.wuzzpayProvider = data?.data?.used_provider ?? undefined;
     order.wuzzpayTransactionId = transactionId ?? undefined;
     await writeDB(db);
-
-    res.json({
+    return {
       paymentMethod: order.paymentMethod,
       paymentInstruction: order.paymentInstruction,
       wuzzpayTransactionId: order.wuzzpayTransactionId,
-    });
+    };
   });
+  if (!result) return res.status(404).json({ error: 'Pesanan tidak ditemukan.' });
+  res.json(result);
 }));
 
 // Public, same token boundary - the client polls this directly, so
 // correctness never depends on the webhook (below) actually arriving. Always
-// re-verifies against WuzzPay's own API via verifyAndSettleOrderPayment
-// before responding; never trusts anything client-supplied.
+// re-verifies against WuzzPay's own API before responding; never trusts
+// anything client-supplied. The slow network call runs OUTSIDE withDbLock
+// (see fetchWuzzpaySettlementStatus's comment) - critical here specifically,
+// since the client polls this route every few seconds for as long as a
+// payment tab stays open.
 app.get('/api/orders/confirm/:token/payment-status', asyncHandler(async (req, res) => {
-  await withDbLock(async () => {
-    const { token } = req.params;
+  const { token } = req.params;
+  const snapshot = await withDbLock(async () => {
     const db = await readDB();
     const order = db.orders.find((o: Order) => o.confirmationToken && o.confirmationToken === token);
-    if (!order) {
-      return res.status(404).json({ error: 'Pesanan tidak ditemukan.' });
-    }
-    await verifyAndSettleOrderPayment(order);
-    await writeDB(db);
-    res.json({ status: order.status, wuzzpayLastStatus: order.wuzzpayLastStatus });
+    return order ? { wuzzpayTransactionId: order.wuzzpayTransactionId, status: order.status, wuzzpayLastStatus: order.wuzzpayLastStatus } : null;
   });
+  if (!snapshot) {
+    return res.status(404).json({ error: 'Pesanan tidak ditemukan.' });
+  }
+
+  const wuzzpayStatus = snapshot.wuzzpayTransactionId
+    ? await fetchWuzzpaySettlementStatus(snapshot.wuzzpayTransactionId, token)
+    : undefined;
+
+  const result = await withDbLock(async () => {
+    const db = await readDB();
+    const order = db.orders.find((o: Order) => o.confirmationToken && o.confirmationToken === token);
+    if (!order) return null;
+    // Only writes (a full 6-table transactional sync, per writeDBPostgres -
+    // not cheap) when something actually changed, which most polls won't -
+    // "still pending" is by far the common case.
+    if (applyWuzzpaySettlementStatus(order, wuzzpayStatus)) {
+      await writeDB(db);
+    }
+    return { status: order.status, wuzzpayLastStatus: order.wuzzpayLastStatus };
+  });
+  if (!result) return res.status(404).json({ error: 'Pesanan tidak ditemukan.' });
+  res.json(result);
 }));
 
 // Public webhook receiver - no auth, since WuzzPay's own servers call this and
@@ -1533,24 +1591,32 @@ app.get('/api/orders/confirm/:token/payment-status', asyncHandler(async (req, re
 // exhaustively - see the payment gateway plan's Context). Deliberately never
 // trusts the body for anything beyond "which order to re-check": only
 // partner_reference is read, purely to look up the order; the actual status
-// change always comes from verifyAndSettleOrderPayment's own authenticated
-// GET back to WuzzPay, never from this payload. This makes the endpoint
-// replay-safe and spoof-proof by construction - the worst a forged/garbage
-// body can do is trigger a harmless extra re-verification of an order the
-// caller can already see the token for. Always responds 200 quickly
-// regardless of outcome, to avoid retry storms from WuzzPay on our own bugs.
+// change always comes from an authenticated GET back to WuzzPay, never from
+// this payload. This makes the endpoint replay-safe and spoof-proof by
+// construction - the worst a forged/garbage body can do is trigger a harmless
+// extra re-verification of an order the caller can already see the token
+// for. Always responds 200 quickly regardless of outcome, to avoid retry
+// storms from WuzzPay on our own bugs. Same lock-scoping as payment-status
+// above - the slow network call never runs inside withDbLock.
 app.post('/api/webhooks/wuzzpay', asyncHandler(async (req, res) => {
   try {
     const partnerReference = req.body?.partner_reference ?? req.body?.data?.partner_reference;
     if (typeof partnerReference === 'string') {
-      await withDbLock(async () => {
+      const snapshot = await withDbLock(async () => {
         const db = await readDB();
         const order = db.orders.find((o: Order) => o.id === partnerReference);
-        if (order) {
-          await verifyAndSettleOrderPayment(order);
-          await writeDB(db);
-        }
+        return order ? { wuzzpayTransactionId: order.wuzzpayTransactionId } : null;
       });
+      if (snapshot?.wuzzpayTransactionId) {
+        const wuzzpayStatus = await fetchWuzzpaySettlementStatus(snapshot.wuzzpayTransactionId, partnerReference);
+        await withDbLock(async () => {
+          const db = await readDB();
+          const order = db.orders.find((o: Order) => o.id === partnerReference);
+          if (order && applyWuzzpaySettlementStatus(order, wuzzpayStatus)) {
+            await writeDB(db);
+          }
+        });
+      }
     }
   } catch (err) {
     console.error('WuzzPay webhook handling failed:', err);

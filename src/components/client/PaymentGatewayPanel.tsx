@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { Check, Copy, Phone, Clock } from 'lucide-react';
+import { Check, ChevronDown, Copy, Phone, Clock } from 'lucide-react';
 import { PublicOrder } from '../../types';
 import { parseJsonOrThrow } from '../../lib/api';
 import { formatDateTimeLabel } from '../../lib/date';
@@ -67,6 +67,92 @@ interface PaymentGatewayPanelProps {
 
 type MethodTab = 'qris' | 'va' | 'emoney';
 
+// Per-channel "how to pay" steps - WuzzPay's docs (and their merchant
+// dashboard) don't provide any customer-facing payment tutorial at all, only
+// merchant/developer API integration docs (checked exhaustively, same as the
+// webhook-signature research earlier), so these are written for this app.
+// Verified against current published steps (WebSearch, 2026-08-20) rather
+// than guessed from memory - see Sources in the commit this shipped in.
+const QRIS_STEPS = [
+  'Buka aplikasi e-wallet atau Mobile Banking Anda (GoPay, OVO, DANA, ShopeePay, LinkAja, atau bank apa pun yang mendukung QRIS).',
+  'Cari dan pilih menu "Scan" atau "Bayar dengan QR" - beberapa aplikasi juga punya tombol simbol QR di menu utama.',
+  'Arahkan kamera ke kode QR di atas hingga terbaca.',
+  'Periksa nama merchant (BILBO OUTDOORS) dan nominal pembayaran - biasanya sudah terisi otomatis, tapi pastikan sesuai.',
+  'Konfirmasi dan masukkan PIN atau verifikasi sidik jari/wajah untuk menyelesaikan pembayaran.',
+];
+
+// Bank-specific VA menu names, per bank's own current app - these differ
+// meaningfully enough between banks (BRIVA vs Virtual Account Billing vs
+// Multi Payment, etc.) that one generic script would be actively wrong for
+// several of them. Only banks with verified current steps get their own
+// entry; VA_STEPS_GENERIC below covers the rest (BSI/Permata/CIMB/Danamon).
+const VA_STEPS_BY_BANK: Record<string, string[]> = {
+  '014': [ // BCA
+    'Buka aplikasi BCA mobile, login, lalu pada menu utama pilih m-Transfer.',
+    'Pilih Transfer -> Ke Bank Lain (Virtual Account BCA tampil otomatis jika nomornya dikenali, atau masukkan kode bank + nomor VA di atas secara manual).',
+    'Periksa nama merchant dan nominal yang muncul - harus sesuai dengan yang tertera di halaman ini.',
+    'Tekan OK/Kirim, lalu masukkan PIN m-BCA untuk konfirmasi.',
+  ],
+  '002': [ // BRI
+    'Buka aplikasi BRImo dan login.',
+    'Pilih menu Pembayaran, lalu pilih BRIVA.',
+    'Masukkan nomor Virtual Account di atas - nominal tagihan akan muncul otomatis.',
+    'Tekan Konfirmasi, masukkan PIN BRImo, lalu tekan Kirim.',
+  ],
+  '009': [ // BNI
+    'Buka BNI Mobile Banking dan login dengan User ID/password Anda.',
+    'Pilih menu Transfer, lalu pilih Virtual Account Billing dan rekening sumber dana.',
+    'Masukkan nomor Virtual Account di atas pada input baru.',
+    'Periksa tagihan yang muncul di layar konfirmasi, lalu masukkan password transaksi untuk menyelesaikan.',
+  ],
+  '008': [ // Mandiri
+    'Buka aplikasi Livin’ by Mandiri dan login.',
+    'Pilih menu Bayar, lalu pilih Buat Pembayaran Baru -> Multipayment.',
+    'Pilih penyedia jasa terkait, lalu masukkan nomor Virtual Account di atas.',
+    'Periksa nominal tagihan yang muncul otomatis, lalu masukkan MPIN untuk konfirmasi.',
+  ],
+};
+const VA_STEPS_GENERIC = [
+  'Buka aplikasi Mobile Banking dari bank Anda, atau kunjungi ATM terdekat.',
+  'Cari menu Transfer -> Virtual Account (atau "Ke Rekening/Bank Lain" jika menu Virtual Account tidak tersedia terpisah).',
+  'Masukkan nomor Virtual Account di atas.',
+  'Periksa nama merchant dan nominal pembayaran yang muncul otomatis - harus sesuai dengan yang tertera di halaman ini.',
+  'Masukkan PIN/password untuk konfirmasi, lalu simpan bukti transfer sebagai referensi.',
+];
+
+const EMONEY_STEPS = [
+  'Tekan tombol "Buka Aplikasi Pembayaran" di atas jika tersedia - Anda akan diarahkan langsung ke aplikasi e-wallet Anda untuk meninjau transaksi ini.',
+  'Jika tidak diarahkan otomatis, buka aplikasi e-wallet Anda secara manual dan login jika diminta.',
+  'Periksa nama merchant (BILBO OUTDOORS) dan nominal pembayaran sebelum melanjutkan.',
+  'Konfirmasi dengan PIN atau verifikasi sidik jari/wajah untuk menyelesaikan pembayaran.',
+];
+
+function PaymentSteps({ method, bankCode }: { method: MethodTab; bankCode?: string }) {
+  const [open, setOpen] = useState(false);
+  const steps = method === 'qris' ? QRIS_STEPS
+    : method === 'emoney' ? EMONEY_STEPS
+    : (bankCode && VA_STEPS_BY_BANK[bankCode]) || VA_STEPS_GENERIC;
+  return (
+    <div className="border-t-2 border-zinc-100 pt-3 mt-1">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between text-[11px] font-black uppercase text-zinc-600 hover:text-black cursor-pointer"
+      >
+        <span>Cara Bayar</span>
+        <ChevronDown className={`w-3.5 h-3.5 stroke-[2.5] transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <ol className="mt-2.5 space-y-2 list-decimal list-inside">
+          {steps.map((step, i) => (
+            <li key={i} className="text-[11px] text-zinc-600 font-semibold normal-case leading-relaxed">{step}</li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
 // Generic instruction renderer - the exact field names for the qris/emoney
 // response shapes aren't confirmed in WuzzPay's docs (only a VA example is
 // published), so these branches read defensively and fall back to a raw
@@ -101,6 +187,7 @@ function PaymentInstructionDisplay({ instruction }: { instruction: Record<string
             </div>
           </div>
         </div>
+        <PaymentSteps method="va" bankCode={instruction.bank_code} />
       </div>
     );
   }
@@ -127,6 +214,9 @@ function PaymentInstructionDisplay({ instruction }: { instruction: Record<string
         <p className="mt-1 text-sm font-mono text-gray-600 bg-gray-100 px-3 py-1 rounded-full font-semibold">
           Total: Rp {Number(instruction.total_amount ?? instruction.amount).toLocaleString('id-ID')}
         </p>
+        <div className="w-full">
+          <PaymentSteps method="qris" />
+        </div>
       </div>
     );
   }
@@ -157,6 +247,7 @@ function PaymentInstructionDisplay({ instruction }: { instruction: Record<string
           ))}
         </div>
       )}
+      <PaymentSteps method="emoney" />
     </div>
   );
 }

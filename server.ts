@@ -901,16 +901,22 @@ app.post('/api/orders', asyncHandler(async (req, res) => {
       return res.status(400).json({ error: 'Missing required order fields.' });
     }
 
-    const db = await readDB();
-    if (expireStaleOrders(db.orders, db.settings.pendingExpiryHours)) {
-      await writeDB(db);
+    // Narrow readers, not the full readDB - this route only ever needs
+    // orders/products/settings, never touches users/jobPriceList/jobEntries,
+    // and only ever writes orders (see writeOrders below). The full
+    // readDB/writeDB round trip does an unconditional 6-table sync (measured
+    // multiple seconds against production Supabase) that this checkout path
+    // was silently paying on every single booking for no reason.
+    const [orders, products, settings] = await Promise.all([readOrders(), readProducts(), readSettings()]);
+    if (expireStaleOrders(orders, settings.pendingExpiryHours)) {
+      await writeOrders(orders);
     }
 
     // 1. Re-verify stock availability server-side to guarantee integrity
-    const allocatedMap = calculateAllocatedStock(db.orders, db.products, startDate, endDate);
+    const allocatedMap = calculateAllocatedStock(orders, products, startDate, endDate);
 
     for (const item of items) {
-      const product = db.products.find((p: Product) => p.id === item.productId);
+      const product = products.find((p: Product) => p.id === item.productId);
       if (!product) {
         return res.status(400).json({ error: `Product with ID ${item.productId} not found.` });
       }
@@ -935,7 +941,7 @@ app.post('/api/orders', asyncHandler(async (req, res) => {
     // 3. Calculate Item Costs and Total Price
     let totalPrice = 0;
     const orderItems = items.map((it: any) => {
-      const prod = db.products.find((p: Product) => p.id === it.productId)!;
+      const prod = products.find((p: Product) => p.id === it.productId)!;
 
       const itemTotal = calculateRentalCost(prod.rates, rentDuration);
       const itemCost = itemTotal * it.quantity;
@@ -965,8 +971,8 @@ app.post('/api/orders', asyncHandler(async (req, res) => {
       createdAt: new Date().toISOString()
     };
 
-    db.orders.unshift(newOrder); // Add to beginning
-    await writeDB(db);
+    orders.unshift(newOrder); // Add to beginning
+    await writeOrders(orders);
 
     createdOrder = newOrder;
     res.status(201).json(newOrder);
@@ -1472,8 +1478,8 @@ app.post('/api/orders/confirm/:token/charge', asyncHandler(async (req, res) => {
   // concurrent charge attempt is caught by WuzzPay itself (409 in-flight),
   // not by this check.
   const precheck = await withDbLock(async () => {
-    const db = await readDB();
-    const order = db.orders.find((o: Order) => o.confirmationToken && o.confirmationToken === token);
+    const orders = await readOrders();
+    const order = orders.find((o: Order) => o.confirmationToken && o.confirmationToken === token);
     if (!order) return { kind: 'not-found' as const };
     // Testing gate (see PAYMENT_GATEWAY_TEST_TRIGGER_NAME above) - responds
     // identically to "gateway not configured" so a non-test order can't
@@ -1555,17 +1561,22 @@ app.post('/api/orders/confirm/:token/charge', asyncHandler(async (req, res) => {
 
   // Quick, lock-protected persist - re-reads the order fresh (it may have
   // changed while the slow call above was in flight) rather than reusing the
-  // precheck snapshot.
+  // precheck snapshot. Uses the narrow readOrders/writeOrders pair (not the
+  // full readDB/writeDB) - this only ever needs to touch one order, and the
+  // full writeDB does an unconditional 6-table transactional sync (products/
+  // users/settings/job entries/job prices, not just orders) that measured
+  // multiple seconds against production Supabase for no reason relevant here
+  // (see the same fix already applied to payment-status/cash/webhook below).
   const result = await withDbLock(async () => {
-    const db = await readDB();
-    const order = db.orders.find((o: Order) => o.id === precheck.orderId);
+    const orders = await readOrders();
+    const order = orders.find((o: Order) => o.id === precheck.orderId);
     if (!order) return null;
     order.paymentMethod = productId;
     order.paymentChannel = bankCode ?? undefined;
     order.paymentInstruction = data?.data?.payment_instruction ?? undefined;
     order.wuzzpayProvider = data?.data?.used_provider ?? undefined;
     order.wuzzpayTransactionId = transactionId ?? undefined;
-    await writeDB(db);
+    await writeOrders(orders);
     return {
       paymentMethod: order.paymentMethod,
       paymentInstruction: order.paymentInstruction,
@@ -1593,13 +1604,17 @@ app.post('/api/orders/confirm/:token/charge', asyncHandler(async (req, res) => {
 // touches WuzzPay at all and carries none of the channel-provisioning risk.
 app.post('/api/orders/confirm/:token/cash', asyncHandler(async (req, res) => {
   const { token } = req.params;
+  // Narrow readOrders/writeOrders, not the full readDB/writeDB - this only
+  // ever touches one order's one field, and the full writeDB does an
+  // unconditional 6-table transactional sync (measured multiple seconds
+  // against production Supabase - this route was the one that surfaced it).
   const result = await withDbLock(async () => {
-    const db = await readDB();
-    const order = db.orders.find((o: Order) => o.confirmationToken && o.confirmationToken === token);
+    const orders = await readOrders();
+    const order = orders.find((o: Order) => o.confirmationToken && o.confirmationToken === token);
     if (!order) return { kind: 'not-found' as const };
     if (order.status !== 'Pending') return { kind: 'not-chargeable' as const };
     order.paymentMethod = 'cash';
-    await writeDB(db);
+    await writeOrders(orders);
     return { kind: 'ok' as const };
   });
   if (result.kind === 'not-found') return res.status(404).json({ error: 'Pesanan tidak ditemukan.' });
@@ -1617,8 +1632,8 @@ app.post('/api/orders/confirm/:token/cash', asyncHandler(async (req, res) => {
 app.get('/api/orders/confirm/:token/payment-status', asyncHandler(async (req, res) => {
   const { token } = req.params;
   const snapshot = await withDbLock(async () => {
-    const db = await readDB();
-    const order = db.orders.find((o: Order) => o.confirmationToken && o.confirmationToken === token);
+    const orders = await readOrders();
+    const order = orders.find((o: Order) => o.confirmationToken && o.confirmationToken === token);
     return order ? { wuzzpayTransactionId: order.wuzzpayTransactionId, status: order.status, wuzzpayLastStatus: order.wuzzpayLastStatus } : null;
   });
   if (!snapshot) {
@@ -1630,14 +1645,15 @@ app.get('/api/orders/confirm/:token/payment-status', asyncHandler(async (req, re
     : undefined;
 
   const result = await withDbLock(async () => {
-    const db = await readDB();
-    const order = db.orders.find((o: Order) => o.confirmationToken && o.confirmationToken === token);
+    const orders = await readOrders();
+    const order = orders.find((o: Order) => o.confirmationToken && o.confirmationToken === token);
     if (!order) return null;
-    // Only writes (a full 6-table transactional sync, per writeDBPostgres -
-    // not cheap) when something actually changed, which most polls won't -
-    // "still pending" is by far the common case.
+    // Narrow writeOrders, not the full writeDB (a 6-table transactional sync
+    // - not cheap, measured multiple seconds against production Supabase) -
+    // and only called at all when something actually changed, which most
+    // polls won't - "still pending" is by far the common case.
     if (applyWuzzpaySettlementStatus(order, wuzzpayStatus)) {
-      await writeDB(db);
+      await writeOrders(orders);
     }
     return { status: order.status, wuzzpayLastStatus: order.wuzzpayLastStatus };
   });
@@ -1661,18 +1677,20 @@ app.post('/api/webhooks/wuzzpay', asyncHandler(async (req, res) => {
   try {
     const partnerReference = req.body?.partner_reference ?? req.body?.data?.partner_reference;
     if (typeof partnerReference === 'string') {
+      // Narrow readOrders/writeOrders throughout, not the full readDB/writeDB
+      // - same reasoning as payment-status/cash/charge above.
       const snapshot = await withDbLock(async () => {
-        const db = await readDB();
-        const order = db.orders.find((o: Order) => o.id === partnerReference);
+        const orders = await readOrders();
+        const order = orders.find((o: Order) => o.id === partnerReference);
         return order ? { wuzzpayTransactionId: order.wuzzpayTransactionId } : null;
       });
       if (snapshot?.wuzzpayTransactionId) {
         const wuzzpayStatus = await fetchWuzzpaySettlementStatus(snapshot.wuzzpayTransactionId, partnerReference);
         await withDbLock(async () => {
-          const db = await readDB();
-          const order = db.orders.find((o: Order) => o.id === partnerReference);
+          const orders = await readOrders();
+          const order = orders.find((o: Order) => o.id === partnerReference);
           if (order && applyWuzzpaySettlementStatus(order, wuzzpayStatus)) {
-            await writeDB(db);
+            await writeOrders(orders);
           }
         });
       }

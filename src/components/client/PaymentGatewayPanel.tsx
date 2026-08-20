@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { Check, Phone, Clock } from 'lucide-react';
+import { Check, Copy, Phone, Clock } from 'lucide-react';
 import { PublicOrder } from '../../types';
 import { parseJsonOrThrow } from '../../lib/api';
 import { formatDateTimeLabel } from '../../lib/date';
@@ -32,6 +32,33 @@ const WALLET_OPTIONS = [
 
 const POLL_INTERVAL_MS = 5000;
 
+// Copies `value` to the clipboard and briefly confirms with a checkmark -
+// used on the VA number and transfer amount, both of which a customer needs
+// to paste into their banking app rather than retype by hand.
+function CopyButton({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard API unavailable (e.g. insecure context) - no-op, the value
+      // is still selectable/copyable by hand.
+    }
+  };
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-zinc-500 hover:text-black cursor-pointer shrink-0"
+    >
+      {copied ? <Check className="w-3.5 h-3.5 stroke-[3] text-emerald-600" /> : <Copy className="w-3.5 h-3.5 stroke-[2.5]" />}
+      {copied ? 'Tersalin' : 'Salin'}
+    </button>
+  );
+}
+
 interface PaymentGatewayPanelProps {
   order: PublicOrder;
   token: string;
@@ -50,6 +77,7 @@ function PaymentInstructionDisplay({ instruction }: { instruction: Record<string
 
   if (method === 'virtual_account') {
     const bank = BANK_OPTIONS.find(b => b.code === instruction.bank_code);
+    const amount = Number(instruction.total_amount ?? instruction.amount);
     return (
       <div className="bg-white border-2 border-black p-6 rounded-none space-y-4 shadow-[4px_4px_0px_rgba(0,0,0,1)]">
         <h3 className="text-xs font-black uppercase text-black tracking-widest border-b-2 border-brand pb-2">TRANSFER VIRTUAL ACCOUNT</h3>
@@ -60,11 +88,17 @@ function PaymentInstructionDisplay({ instruction }: { instruction: Record<string
           </div>
           <div>
             <p className="text-[10px] text-zinc-400 font-bold uppercase">Nomor Virtual Account</p>
-            <p className="text-xl font-black text-black font-mono tracking-wider mt-0.5">{instruction.va_number}</p>
+            <div className="flex items-center justify-between gap-2 mt-0.5">
+              <p className="text-xl font-black text-black font-mono tracking-wider">{instruction.va_number}</p>
+              <CopyButton value={String(instruction.va_number)} />
+            </div>
           </div>
           <div>
             <p className="text-[10px] text-zinc-400 font-bold uppercase">Jumlah Transfer</p>
-            <p className="text-sm font-black text-black font-mono mt-0.5">Rp {Number(instruction.total_amount ?? instruction.amount).toLocaleString('id-ID')}</p>
+            <div className="flex items-center justify-between gap-2 mt-0.5">
+              <p className="text-sm font-black text-black font-mono">Rp {amount.toLocaleString('id-ID')}</p>
+              <CopyButton value={String(amount)} />
+            </div>
           </div>
         </div>
       </div>

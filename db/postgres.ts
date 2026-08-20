@@ -29,12 +29,25 @@ export function initPostgresPool(connectionString: string): void {
     // readProductsPostgres et al.), peak concurrent query count is ~11 (7
     // login-time GET routes, 2 of which - orders/stats - fan out into 2-3
     // queries each) rather than the ~49 a single readDB() call used to cause
-    // under concurrent requests. Supabase's free tier (Nano compute) allows
-    // 60 direct Postgres connections and 200 pooler client connections -
-    // this app is the sole consumer of its database, so 15 leaves generous
-    // headroom over the measured peak while still using well under a
-    // quarter of the free-tier ceiling.
-    max: 15,
+    // under concurrent requests.
+    //
+    // CORRECTED (2026-08-20, after a production outage): this was previously
+    // set to 15, reasoning that Supabase's free tier "allows 200 pooler
+    // client connections" - that number is real but is the pooler's
+    // client-facing capacity, a different layer from the actual constraint.
+    // Session-mode pooling (which this app uses, per the Session Pooler
+    // connection string CLAUDE.md documents) caps concurrent backend
+    // connections at the project's own "Pool Size" setting (Supabase
+    // dashboard -> Database -> Connection Pooling) - which was ALSO 15 for
+    // this project, confirmed by the literal error this outage produced:
+    // "(EMAXCONNSESSION) max clients reached in session mode - max clients
+    // are limited to pool_size: 15". Setting our own max to exactly match
+    // left zero headroom - a rolling Render deploy briefly runs the old and
+    // new instance simultaneously, each with its own pool, so two instances
+    // at max:15 could demand 30 connections against a 15-connection ceiling.
+    // Lowered to 7 so even two overlapping instances (14 total) stay safely
+    // under it, while still comfortably covering the ~11-query peak above.
+    max: 7,
     // node-postgres's default (10s) was closing pooled connections between
     // distinct admin logins/actions, forcing the next request to eat a fresh
     // TCP+TLS+Postgres-auth handshake before its query even ran - a flat tax

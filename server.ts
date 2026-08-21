@@ -1339,11 +1339,24 @@ app.post('/api/orders/:id/calculate-late', authenticateUser, asyncHandler(async 
       return res.status(400).json({ error: 'Denda keterlambatan hanya bisa dihitung setelah barang diambil.' });
     }
 
-    // actualReturn is parsed as a local-time literal (no 'Z' suffix) so it
-    // compares correctly regardless of the server's timezone offset - same
-    // class of UTC-vs-local mismatch this project has been bitten by before
-    // with DATE columns (see db/postgres.ts's DATE-oid override comment).
-    const actualReturn = returnDateTime ? new Date(returnDateTime) : new Date();
+    // returnDateTime is a bare "YYYY-MM-DDTHH:mm" string typed by the admin in
+    // their own (Asia/Jakarta) browser, with no timezone info attached. Naively
+    // parsing it with `new Date(returnDateTime)` makes JS interpret it using
+    // whatever timezone the SERVER PROCESS itself happens to run in - if that's
+    // not Asia/Jakarta (e.g. a cloud container defaulting to UTC), the literal
+    // is silently read as 7 hours later than the admin actually meant, which is
+    // enough to flip a genuinely on-time return into a false "1 day late" charge
+    // (confirmed against a real owner-reported case: pickup 19-08 21:20, return
+    // 20-08 19:37, tolerance-adjusted deadline 21-08 01:20 - return is ~5h43m
+    // *before* the deadline, but a 7h UTC misread pushes it ~1h17m *past* it).
+    // This didn't matter before the pickup-anchored deadline change, because
+    // both sides of the comparison were naive-parsed the same way and any
+    // server-timezone error canceled out; now pickedUpAt-derived deadlines are
+    // real UTC instants (.toISOString()), so this side must be anchored
+    // explicitly to Asia/Jakarta (fixed UTC+7, no DST) rather than left to the
+    // server's ambient timezone. `new Date()` (no returnDateTime supplied,
+    // "use current time") is unaffected - it's already a real UTC instant.
+    const actualReturn = returnDateTime ? new Date(`${returnDateTime}:00+07:00`) : new Date();
 
     // Deadline = actual pickup time + the full rented duration (owner's
     // requested rule: "a day" is 24 hours from hand-over, not a calendar

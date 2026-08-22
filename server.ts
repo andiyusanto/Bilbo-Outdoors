@@ -18,6 +18,11 @@ declare global {
   namespace Express {
     interface Request {
       currentUser?: AppUser;
+      // Raw request bytes, stashed by express.json()'s verify callback below -
+      // needed by the WuzzPay webhook route to check x-wuzzpay-signature (an
+      // HMAC over the raw body, which can differ from the re-serialized JS
+      // object in key order/whitespace).
+      rawBody?: Buffer;
     }
   }
 }
@@ -95,9 +100,9 @@ const WUZZPAY_MERCHANT_ID = process.env.WUZZPAY_MERCHANT_ID;
 // signature is hex(HMAC-SHA256(secret, `${x-wuzzpay-timestamp}.${rawBody}`)),
 // same scheme Stripe uses. Webhook verification is skipped (not rejected) if
 // this is unset, same "missing config = fall back" convention as elsewhere -
-// verifyAndSettleOrderPayment's own re-check against WuzzPay's API remains the
-// authoritative source of truth regardless, so this is defense in depth, not
-// the only guard.
+// fetchWuzzpaySettlementStatus/applyWuzzpaySettlementStatus's own re-check
+// against WuzzPay's API remains the authoritative source of truth regardless,
+// so this is defense in depth, not the only guard.
 const WUZZPAY_WEBHOOK_SECRET = process.env.WUZZPAY_WEBHOOK_SECRET;
 // Sandbox is the safe default when WUZZPAY_ENV is unset - mirrors the
 // "missing config = the safe path" convention already used for Telegram/image
@@ -252,7 +257,7 @@ const DB_FILE = path.join(process.cwd(), 'server_db.json');
 app.use(express.json({
   limit: '10mb',
   verify: (req: express.Request, _res, buf) => {
-    (req as express.Request & { rawBody?: Buffer }).rawBody = buf;
+    req.rawBody = buf;
   },
 }));
 
@@ -1793,7 +1798,7 @@ function verifyWuzzpaySignature(rawBody: Buffer | undefined, timestamp: unknown,
 // payment-status above - the slow network call never runs inside withDbLock.
 app.post('/api/webhooks/wuzzpay', asyncHandler(async (req, res) => {
   try {
-    const rawBody = (req as express.Request & { rawBody?: Buffer }).rawBody;
+    const rawBody = req.rawBody;
     if (WUZZPAY_WEBHOOK_SECRET && !verifyWuzzpaySignature(rawBody, req.headers['x-wuzzpay-timestamp'], req.headers['x-wuzzpay-signature'])) {
       console.error('WuzzPay webhook received with missing/invalid x-wuzzpay-signature - ignoring.');
       return res.status(200).json({ received: true });

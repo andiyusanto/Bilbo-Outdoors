@@ -463,7 +463,7 @@ export default function PaymentGatewayPanel({ order, token, onSettled, pendingEx
         </p>
         <p className="text-[10px] text-zinc-500 font-bold uppercase flex items-center justify-center gap-1.5">
           <Clock className="w-3.5 h-3.5" />
-          Ambil &amp; bayar sebelum {formatDateTimeLabel(cashDeadline.toISOString())}, atau pesanan otomatis dibatalkan
+          Bayar sebelum {formatDateTimeLabel(cashDeadline.toISOString())}, atau pesanan otomatis dibatalkan
         </p>
       </div>
     );

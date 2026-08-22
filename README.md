@@ -173,6 +173,13 @@ CREATE TABLE IF NOT EXISTS order_items (
   discount_threshold_days INT
 );
 
+-- Postgres does not auto-index a foreign-key-referencing column (only the
+-- referenced side, orders.id, gets one automatically) - order_id is looked
+-- up on every single order write (writeOrdersPostgres deletes/replaces this
+-- order's rows), so without this index that's a sequential scan over the
+-- whole table on every write.
+CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id);
+
 -- 4. Membuat Tabel Settings (Toleransi Keterlambatan + Jam Operasional Toko) - baris tunggal (id selalu 1)
 CREATE TABLE IF NOT EXISTS settings (
   id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
@@ -385,6 +392,11 @@ CREATE TABLE IF NOT EXISTS job_entries (
 > ALTER TABLE orders ADD COLUMN IF NOT EXISTS wuzzpay_transaction_id VARCHAR(255);
 > ALTER TABLE orders ADD COLUMN IF NOT EXISTS wuzzpay_provider VARCHAR(255);
 > ALTER TABLE orders ADD COLUMN IF NOT EXISTS wuzzpay_last_status VARCHAR(255);
+> ```
+
+> **Sudah pernah menjalankan Step A sebelum index `idx_order_items_order_id` ada?** Jalankan ini sekali di SQL Editor yang sama (aman dijalankan berulang, tidak mengubah data apa pun). `order_items.order_id` di-query lewat `WHERE`/`DELETE` di setiap penulisan order (lihat `writeOrdersPostgres` di `db/postgres.ts`), tapi Postgres tidak otomatis membuat index untuk kolom foreign key (hanya sisi yang direferensikan, `orders.id`, yang otomatis ter-index) - tanpa index ini, setiap penulisan order melakukan sequential scan ke seluruh tabel `order_items`.
+> ```sql
+> CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id);
 > ```
 
 ### Step B: Dapatkan Connection String Supabase Anda

@@ -341,6 +341,22 @@ export default function PaymentGatewayPanel({ order, token, onSettled, pendingEx
           onSettled();
           return;
         }
+        // WuzzPay's own reported outcome for this specific attempt - distinct
+        // from the client-clock-based expiresAt check in checkExpiry() below.
+        // Without this, a definitively failed/expired payment (which can
+        // happen well before the instruction's own expires_at) left the
+        // customer staring at "Menunggu konfirmasi..." forever with no
+        // indication anything went wrong. Reuses the exact same terminal UI/
+        // recovery flow as the time-based expiry: resetting to the method
+        // picker and trying again always resolves correctly on its own (the
+        // deterministic Idempotency-Key means any new charge attempt on this
+        // order 409s into referenceStuck - see chargeRequest above), so no
+        // separate state or backend change is needed here.
+        if (data.wuzzpayLastStatus === 'failed' || data.wuzzpayLastStatus === 'expired') {
+          setExpired(true);
+          stopPolling();
+          return;
+        }
       } catch {
         // transient poll failure - just try again next tick, no need to surface
       }
@@ -549,7 +565,7 @@ export default function PaymentGatewayPanel({ order, token, onSettled, pendingEx
         </div>
       ) : expired ? (
         <div className="bg-red-50 border-2 border-red-600 p-6 rounded-none space-y-3 text-center">
-          <p className="text-xs font-black text-red-700 uppercase">Instruksi pembayaran sudah kedaluwarsa.</p>
+          <p className="text-xs font-black text-red-700 uppercase">Pembayaran gagal atau instruksi sudah kedaluwarsa.</p>
           <button
             type="button"
             onClick={() => { setInstruction(null); setExpired(false); }}

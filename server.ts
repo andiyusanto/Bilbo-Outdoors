@@ -248,18 +248,24 @@ const PORT = 3000;
 const DB_FILE = path.join(process.cwd(), 'server_db.json');
 
 // Middleware
-// `verify` stashes the exact raw request bytes on req.rawBody alongside the
-// parsed body - needed only by the WuzzPay webhook route below to check
-// x-wuzzpay-signature (an HMAC over the raw body, not the re-serialized JS
-// object, which could differ in key order/whitespace from what was actually
-// signed). Cheap enough to do unconditionally rather than special-casing one
-// route's body-parser config.
-app.use(express.json({
+// The webhook route needs req.rawBody (the exact raw bytes, not the
+// re-serialized JS object, which could differ in key order/whitespace from
+// what WuzzPay actually signed) to check x-wuzzpay-signature. Scoped to just
+// that path with its own express.json({ verify }) instance, registered
+// BEFORE the site-wide parser below - body-parser skips re-parsing a request
+// it's already consumed, so this doesn't double-parse. Deliberately NOT
+// applied globally: retaining a full raw Buffer *and* the parsed object for
+// every JSON request (checkout included, which is public/unauthenticated)
+// roughly doubles peak per-request memory against the 10mb limit for routes
+// that never needed raw-body capture at all - a real, avoidable memory-usage
+// increase, not just a style preference.
+app.use('/api/webhooks/wuzzpay', express.json({
   limit: '10mb',
   verify: (req: express.Request, _res, buf) => {
     req.rawBody = buf;
   },
 }));
+app.use(express.json({ limit: '10mb' }));
 
 // ---------------- DUAL-MODE PERSISTENCE ----------------
 // If DATABASE_URL is set at boot, all reads/writes go through Postgres exclusively.

@@ -1709,6 +1709,15 @@ app.get('/api/orders/confirm/:token/payment-status', asyncHandler(async (req, re
 // storms from WuzzPay on our own bugs. Same lock-scoping as payment-status
 // above - the slow network call never runs inside withDbLock.
 app.post('/api/webhooks/wuzzpay', asyncHandler(async (req, res) => {
+  // TEMPORARY diagnostic logging (2026-08-21): WuzzPay's docs never
+  // published a webhook payload/signature spec (checked exhaustively - see
+  // the payment gateway plan's Context). Log the raw delivery unconditionally
+  // so the first real callback (e.g. via the dashboard's Payment Simulator)
+  // reveals the actual body shape and whether any signature header is
+  // present, the same "fail loud, log the raw response" approach that
+  // already found the undocumented data.transaction.ID nesting on /charge.
+  // Remove once the shape is confirmed - this doesn't belong long-term.
+  console.log('WuzzPay webhook received - headers:', JSON.stringify(req.headers), 'body:', JSON.stringify(req.body));
   try {
     const partnerReference = req.body?.partner_reference ?? req.body?.data?.partner_reference;
     if (typeof partnerReference === 'string') {

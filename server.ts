@@ -49,23 +49,33 @@ const TELEGRAM_BOOKING_CHAT_ID = process.env.TELEGRAM_BOOKING_CHAT_ID;
 if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_BOOKING_CHAT_ID) {
   console.log('Telegram notifications disabled — set TELEGRAM_BOT_TOKEN/TELEGRAM_BOOKING_CHAT_ID to enable.');
 }
+// Hardcoded to match the same production domain already hardcoded in
+// index.html/robots.txt/llms.txt (canonical URL, sitemap, etc.) - this is a
+// single-domain site with no existing env-configurable base URL, so this
+// follows the established convention rather than introducing a new one.
+const SITE_URL = 'https://www.bilbooutdoors.com';
 
-// Fire-and-forget from the /api/orders call site - never blocks or delays a
-// booking. Always resolves (even the unconfigured no-op path) so `.catch()`
-// at the call site never blows up on `undefined`.
-async function sendTelegramBookingNotification(order: Order): Promise<void> {
+// Shared low-level sender - fetch only rejects on network-level failure,
+// never on HTTP error status, so throw explicitly here so a bad token/chat-id
+// reaches each call site's own `.catch()`.
+async function sendTelegramMessage(text: string): Promise<void> {
   if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_BOOKING_CHAT_ID) return;
-  const itemLines = order.items.map(it => `- ${it.productName} (x${it.quantity})`).join('\n');
-  const text = `Booking baru masuk!\n\nNama: ${order.customerName}\nWhatsApp: ${order.customerWhatsApp}\nPeriode: ${formatDateLabel(order.startDate)} s/d ${formatDateLabel(order.endDate)} (${order.rentDuration} Hari)\n\nPeralatan:\n${itemLines}\n\nTotal: Rp ${order.totalPrice.toLocaleString('id-ID')}`;
   const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ chat_id: TELEGRAM_BOOKING_CHAT_ID, text }),
     signal: AbortSignal.timeout(5000),
   });
-  // fetch only rejects on network-level failure, never on HTTP error status -
-  // throw explicitly so a bad token/chat-id reaches the call site's catch.
   if (!res.ok) throw new Error(`Telegram API responded ${res.status}: ${await res.text().catch(() => '')}`);
+}
+
+// Fire-and-forget from the /api/orders call site - never blocks or delays a
+// booking. Always resolves (even the unconfigured no-op path) so `.catch()`
+// at the call site never blows up on `undefined`.
+async function sendTelegramBookingNotification(order: Order): Promise<void> {
+  const itemLines = order.items.map(it => `- ${it.productName} (x${it.quantity})`).join('\n');
+  const text = `Booking baru masuk!\n\nNama: ${order.customerName}\nWhatsApp: ${order.customerWhatsApp}\nPeriode: ${formatDateLabel(order.startDate)} s/d ${formatDateLabel(order.endDate)} (${order.rentDuration} Hari)\n\nPeralatan:\n${itemLines}\n\nTotal: Rp ${order.totalPrice.toLocaleString('id-ID')}\n\nLink Konfirmasi: ${SITE_URL}/pesanan/${order.confirmationToken}`;
+  await sendTelegramMessage(text);
 }
 
 // ---------------- PRODUCT IMAGE UPLOAD (SUPABASE STORAGE) ----------------
@@ -183,17 +193,22 @@ async function fetchWuzzpaySettlementStatus(wuzzpayTransactionId: string, orderI
 // Pending) - see expireStaleOrders above for why a late-arriving confirmed
 // settlement must still recover an order that auto-expired while a real
 // payment was still in flight.
-function applyWuzzpaySettlementStatus(order: Order, status: string | undefined): boolean {
-  if (order.status === 'Approved/Paid' || order.status === 'Item Picked Up' || order.status === 'Item Returned/Completed') return false;
+// Return shape distinguishes "something changed" (any write worth persisting,
+// including a bare wuzzpayLastStatus update) from "a settlement just landed"
+// (justSettled) - callers use the latter to fire a one-time payment
+// notification without re-notifying on every subsequent poll that just
+// reconfirms the same already-Approved/Paid order (this function returns
+// early with both false once status is no longer Pending/Expired).
+function applyWuzzpaySettlementStatus(order: Order, status: string | undefined): { changed: boolean; justSettled: boolean } {
+  if (order.status === 'Approved/Paid' || order.status === 'Item Picked Up' || order.status === 'Item Returned/Completed') return { changed: false, justSettled: false };
   let changed = false;
   if (typeof status === 'string' && status !== order.wuzzpayLastStatus) {
     order.wuzzpayLastStatus = status;
     changed = true;
   }
-  // Exact "paid" status string isn't documented (only "pending" appears in
-  // WuzzPay's own example response) - accept the plausible variants until
-  // confirmed against a real sandbox response (see the payment gateway plan's
-  // Stage 2).
+  // "success" confirmed 2026-08-22 against a real webhook.test delivery;
+  // "settled"/"paid" kept as plausible variants for other event types until
+  // confirmed too (see the payment gateway plan's Stage 2).
   const settled = status === 'settled' || status === 'paid' || status === 'success';
   if (settled) {
     order.status = 'Approved/Paid';
@@ -207,7 +222,20 @@ function applyWuzzpaySettlementStatus(order: Order, status: string | undefined):
     });
     changed = true;
   }
-  return changed;
+  return { changed, justSettled: settled };
+}
+
+// Fire-and-forget, same pattern as sendTelegramBookingNotification - callers
+// must invoke this AFTER releasing withDbLock, never from inside it (see the
+// 2026-08-20 lock-contention incident: a slow outbound call held inside the
+// lock starved every other write route app-wide for as long as it took).
+async function sendTelegramPaymentNotification(order: Order): Promise<void> {
+  const methodLabel = order.paymentMethod === 'va' ? `Virtual Account${order.paymentChannel ? ` (${order.paymentChannel})` : ''}`
+    : order.paymentMethod === 'qris' ? 'QRIS'
+    : order.paymentMethod === 'emoney' ? `E-Wallet${order.paymentChannel ? ` (${order.paymentChannel})` : ''}`
+    : order.paymentMethod ?? 'WuzzPay';
+  const text = `Pembayaran diterima!\n\nNama: ${order.customerName}\nWhatsApp: ${order.customerWhatsApp}\nMetode: ${methodLabel}\nTotal: Rp ${order.totalPrice.toLocaleString('id-ID')}\n\nLink Konfirmasi: ${SITE_URL}/pesanan/${order.confirmationToken}`;
+  await sendTelegramMessage(text);
 }
 
 const app = express();
@@ -1707,13 +1735,20 @@ app.get('/api/orders/confirm/:token/payment-status', asyncHandler(async (req, re
     // - not cheap, measured multiple seconds against production Supabase) -
     // and only called at all when something actually changed, which most
     // polls won't - "still pending" is by far the common case.
-    if (applyWuzzpaySettlementStatus(order, wuzzpayStatus)) {
+    const { changed, justSettled } = applyWuzzpaySettlementStatus(order, wuzzpayStatus);
+    if (changed) {
       await writeOrders(orders);
     }
-    return { status: order.status, wuzzpayLastStatus: order.wuzzpayLastStatus };
+    return { status: order.status, wuzzpayLastStatus: order.wuzzpayLastStatus, notifyOrder: justSettled ? order : null };
   });
   if (!result) return res.status(404).json({ error: 'Pesanan tidak ditemukan.' });
-  res.json(result);
+  // Fired after the lock is released, never from inside it - see
+  // sendTelegramPaymentNotification's own comment on the lock-contention
+  // incident this must not repeat.
+  if (result.notifyOrder) {
+    sendTelegramPaymentNotification(result.notifyOrder).catch(err => console.error('Telegram payment notification failed:', err));
+  }
+  res.json({ status: result.status, wuzzpayLastStatus: result.wuzzpayLastStatus });
 }));
 
 // Verifies x-wuzzpay-signature against a raw request body. Confirmed
@@ -1766,13 +1801,22 @@ app.post('/api/webhooks/wuzzpay', asyncHandler(async (req, res) => {
       });
       if (snapshot?.wuzzpayTransactionId) {
         const wuzzpayStatus = await fetchWuzzpaySettlementStatus(snapshot.wuzzpayTransactionId, partnerReference);
-        await withDbLock(async () => {
+        const notifyOrder = await withDbLock(async () => {
           const orders = await readOrders();
           const order = orders.find((o: Order) => o.id === partnerReference);
-          if (order && applyWuzzpaySettlementStatus(order, wuzzpayStatus)) {
+          if (!order) return null;
+          const { changed, justSettled } = applyWuzzpaySettlementStatus(order, wuzzpayStatus);
+          if (changed) {
             await writeOrders(orders);
           }
+          return justSettled ? order : null;
         });
+        // Fired after the lock is released, never from inside it - see
+        // sendTelegramPaymentNotification's own comment on the lock-contention
+        // incident this must not repeat.
+        if (notifyOrder) {
+          sendTelegramPaymentNotification(notifyOrder).catch(err => console.error('Telegram payment notification failed:', err));
+        }
       }
     }
   } catch (err) {

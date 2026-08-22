@@ -74,7 +74,7 @@ async function sendTelegramMessage(text: string): Promise<void> {
 // at the call site never blows up on `undefined`.
 async function sendTelegramBookingNotification(order: Order): Promise<void> {
   const itemLines = order.items.map(it => `- ${it.productName} (x${it.quantity})`).join('\n');
-  const text = `Booking baru masuk!\n\nNama: ${order.customerName}\nWhatsApp: ${order.customerWhatsApp}\nPeriode: ${formatDateLabel(order.startDate)} s/d ${formatDateLabel(order.endDate)} (${order.rentDuration} Hari)\n\nPeralatan:\n${itemLines}\n\nTotal: Rp ${order.totalPrice.toLocaleString('id-ID')}\n\nLink Konfirmasi: ${SITE_URL}/pesanan/${order.confirmationToken}`;
+  const text = `Booking baru masuk!\n\nID Pesanan: ${order.id}\nNama: ${order.customerName}\nWhatsApp: ${order.customerWhatsApp}\nPeriode: ${formatDateLabel(order.startDate)} s/d ${formatDateLabel(order.endDate)} (${order.rentDuration} Hari)\n\nPeralatan:\n${itemLines}\n\nTotal: Rp ${order.totalPrice.toLocaleString('id-ID')}\n\nLink Konfirmasi: ${SITE_URL}/pesanan/${order.confirmationToken}`;
   await sendTelegramMessage(text);
 }
 
@@ -234,7 +234,7 @@ async function sendTelegramPaymentNotification(order: Order): Promise<void> {
     : order.paymentMethod === 'qris' ? 'QRIS'
     : order.paymentMethod === 'emoney' ? `E-Wallet${order.paymentChannel ? ` (${order.paymentChannel})` : ''}`
     : order.paymentMethod ?? 'WuzzPay';
-  const text = `Pembayaran diterima!\n\nNama: ${order.customerName}\nWhatsApp: ${order.customerWhatsApp}\nMetode: ${methodLabel}\nTotal: Rp ${order.totalPrice.toLocaleString('id-ID')}\n\nLink Konfirmasi: ${SITE_URL}/pesanan/${order.confirmationToken}`;
+  const text = `Pembayaran diterima!\n\nID Pesanan: ${order.id}\nNama: ${order.customerName}\nWhatsApp: ${order.customerWhatsApp}\nMetode: ${methodLabel}\nTotal: Rp ${order.totalPrice.toLocaleString('id-ID')}\n\nLink Konfirmasi: ${SITE_URL}/pesanan/${order.confirmationToken}`;
   await sendTelegramMessage(text);
 }
 

@@ -1667,6 +1667,7 @@ app.post('/api/orders/confirm/:token/charge', asyncHandler(async (req, res) => {
     };
   });
   if (!result) return res.status(404).json({ error: 'Pesanan tidak ditemukan.' });
+  console.log(`WuzzPay charge succeeded for order ${precheck.orderId}: method=${productId}, transactionId=${transactionId ?? '(none - see error above)'}, provider=${data?.data?.used_provider ?? '(unknown)'}`);
   res.json(result);
 }));
 
@@ -1746,6 +1747,7 @@ app.get('/api/orders/confirm/:token/payment-status', asyncHandler(async (req, re
   // sendTelegramPaymentNotification's own comment on the lock-contention
   // incident this must not repeat.
   if (result.notifyOrder) {
+    console.log(`WuzzPay payment-status poll settled order ${result.notifyOrder.id} via transaction ${result.notifyOrder.wuzzpayTransactionId}`);
     sendTelegramPaymentNotification(result.notifyOrder).catch(err => console.error('Telegram payment notification failed:', err));
   }
   res.json({ status: result.status, wuzzpayLastStatus: result.wuzzpayLastStatus });
@@ -1815,6 +1817,7 @@ app.post('/api/webhooks/wuzzpay', asyncHandler(async (req, res) => {
         // sendTelegramPaymentNotification's own comment on the lock-contention
         // incident this must not repeat.
         if (notifyOrder) {
+          console.log(`WuzzPay webhook settled order ${partnerReference} (ref_no) via transaction ${snapshot.wuzzpayTransactionId}`);
           sendTelegramPaymentNotification(notifyOrder).catch(err => console.error('Telegram payment notification failed:', err));
         }
       }

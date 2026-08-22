@@ -76,6 +76,7 @@ interface PaymentGatewayPanelProps {
   order: PublicOrder;
   token: string;
   onSettled: () => void; // called once the poll confirms Approved/Paid, so the parent can refresh the full order
+  pendingExpiryHours: number; // from GET /api/payment-config - how long an unpaid order (cash included) is held before auto-expiry, see expireStaleOrders in server.ts
 }
 
 type MethodTab = 'qris' | 'va' | 'emoney' | 'cash';
@@ -265,7 +266,7 @@ function PaymentInstructionDisplay({ instruction }: { instruction: Record<string
   );
 }
 
-export default function PaymentGatewayPanel({ order, token, onSettled }: PaymentGatewayPanelProps) {
+export default function PaymentGatewayPanel({ order, token, onSettled, pendingExpiryHours }: PaymentGatewayPanelProps) {
   // TEMPORARY internal testing gate (owner-requested, mirrors
   // PAYMENT_GATEWAY_TEST_TRIGGER_NAME server-side in server.ts's /charge
   // route): most WuzzPay channels are still broken/unprovisioned, so the
@@ -294,6 +295,15 @@ export default function PaymentGatewayPanel({ order, token, onSettled }: Payment
   const stoppedRef = useRef(false);
 
   const expiresAt = instruction?.expires_at as string | undefined;
+  // Customer-facing only - shown instead of expiresAt (WuzzPay's own
+  // payment_instruction expiry, which we don't control and isn't guaranteed
+  // to line up with pendingExpiryHours). 30 minutes earlier than the
+  // booking's own expiry gives a safety margin against a slow settlement
+  // callback landing right at the edge (owner decision, 2026-08-22) - display
+  // only, doesn't change how expireStaleOrders actually enforces expiry in
+  // server.ts, and doesn't affect the "instruction expired" check below,
+  // which still uses the real expiresAt.
+  const onlinePaymentDeadline = new Date(new Date(order.createdAt).getTime() + Math.max(0, pendingExpiryHours - 0.5) * 60 * 60 * 1000);
 
   const stopPolling = () => {
     stoppedRef.current = true;
@@ -439,6 +449,10 @@ export default function PaymentGatewayPanel({ order, token, onSettled }: Payment
   }
 
   if (cashSelected) {
+    // Cash orders have no WuzzPay payment_instruction, so they're never
+    // exempt from expireStaleOrders' plain createdAt-based rule (see
+    // server.ts) - this deadline is the real one that applies here.
+    const cashDeadline = new Date(new Date(order.createdAt).getTime() + pendingExpiryHours * 60 * 60 * 1000);
     return (
       <div className="bg-white border-2 border-black p-6 rounded-none space-y-3 text-center shadow-[4px_4px_0px_rgba(0,0,0,1)]">
         <h3 className="text-sm font-display font-black text-black uppercase tracking-tight">Bayar Tunai Saat Pengambilan</h3>
@@ -446,6 +460,10 @@ export default function PaymentGatewayPanel({ order, token, onSettled }: Payment
           Silakan datang ke toko kami dan siapkan uang tunai sejumlah{' '}
           <strong className="text-black">Rp {order.totalPrice.toLocaleString('id-ID')}</strong> saat mengambil
           barang. Staf kami akan mengonfirmasi pembayaran Anda saat itu.
+        </p>
+        <p className="text-[10px] text-zinc-500 font-bold uppercase flex items-center justify-center gap-1.5">
+          <Clock className="w-3.5 h-3.5" />
+          Ambil &amp; bayar sebelum {formatDateTimeLabel(cashDeadline.toISOString())}, atau pesanan otomatis dibatalkan
         </p>
       </div>
     );
@@ -543,12 +561,10 @@ export default function PaymentGatewayPanel({ order, token, onSettled }: Payment
       ) : (
         <div className="space-y-3">
           <PaymentInstructionDisplay instruction={instruction} />
-          {expiresAt && (
-            <p className="text-[10px] text-zinc-500 font-bold uppercase text-center flex items-center justify-center gap-1.5">
-              <Clock className="w-3.5 h-3.5" />
-              Bayar sebelum {formatDateTimeLabel(expiresAt)}
-            </p>
-          )}
+          <p className="text-[10px] text-zinc-500 font-bold uppercase text-center flex items-center justify-center gap-1.5">
+            <Clock className="w-3.5 h-3.5" />
+            Bayar sebelum {formatDateTimeLabel(onlinePaymentDeadline.toISOString())}
+          </p>
           <p className="text-[10px] text-zinc-400 font-bold uppercase text-center italic">
             Menunggu konfirmasi pembayaran otomatis...
           </p>

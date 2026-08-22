@@ -13,6 +13,7 @@ export default function OrderConfirmationPage() {
   const navigate = useNavigate();
   const [order, setOrder] = useState<PublicOrder | null>(null);
   const [paymentGatewayEnabled, setPaymentGatewayEnabled] = useState(false);
+  const [pendingExpiryHours, setPendingExpiryHours] = useState(2);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const { withLoading } = useLoading();
@@ -44,6 +45,9 @@ export default function OrderConfirmationPage() {
         // never blocks the customer from seeing their order confirmation.
         const configData = await configRes.json().catch(() => ({ enabled: false }));
         setPaymentGatewayEnabled(Boolean(configData.enabled));
+        if (typeof configData.pendingExpiryHours === 'number') {
+          setPendingExpiryHours(configData.pendingExpiryHours);
+        }
       } catch (err: any) {
         setError(err.message || 'Pesanan tidak ditemukan.');
       } finally {
@@ -131,7 +135,7 @@ export default function OrderConfirmationPage() {
           </div>
         </div>
 
-        <PaymentGatewayPanel order={order} token={token!} onSettled={refetchOrder} />
+        <PaymentGatewayPanel order={order} token={token!} onSettled={refetchOrder} pendingExpiryHours={pendingExpiryHours} />
 
         <button
           onClick={() => navigate('/')}

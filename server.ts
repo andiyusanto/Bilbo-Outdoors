@@ -1518,7 +1518,14 @@ app.post('/api/orders/:id/calculate-late', authenticateUser, asyncHandler(async 
 // Also doubles as the instant kill-switch in production: unsetting
 // WUZZPAY_API_KEY reverts the client to the old flow immediately.
 app.get('/api/payment-config', asyncHandler(async (req, res) => {
-  res.json({ enabled: Boolean(WUZZPAY_API_KEY && WUZZPAY_MERCHANT_ID) });
+  // Narrow readSettings, not the full readDB - this route is public and hit
+  // on every confirmation page load, same reasoning as store-info above.
+  // pendingExpiryHours is included so the client can tell the customer how
+  // long they have before an unpaid order (cash included - only a live
+  // WuzzPay payment_instruction defers this, see expireStaleOrders) is
+  // automatically expired.
+  const settings = await readSettings();
+  res.json({ enabled: Boolean(WUZZPAY_API_KEY && WUZZPAY_MERCHANT_ID), pendingExpiryHours: settings.pendingExpiryHours });
 }));
 
 // Public, scoped by the same unguessable confirmationToken as GET

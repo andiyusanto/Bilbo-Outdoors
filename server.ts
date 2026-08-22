@@ -80,6 +80,15 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
 // ---------------- WUZZPAY PAYMENT GATEWAY ----------------
 const WUZZPAY_API_KEY = process.env.WUZZPAY_API_KEY;
 const WUZZPAY_MERCHANT_ID = process.env.WUZZPAY_MERCHANT_ID;
+// Confirmed 2026-08-22 against a real webhook.test delivery (WuzzPay's docs
+// never published this - see the payment gateway plan's Context): the
+// signature is hex(HMAC-SHA256(secret, `${x-wuzzpay-timestamp}.${rawBody}`)),
+// same scheme Stripe uses. Webhook verification is skipped (not rejected) if
+// this is unset, same "missing config = fall back" convention as elsewhere -
+// verifyAndSettleOrderPayment's own re-check against WuzzPay's API remains the
+// authoritative source of truth regardless, so this is defense in depth, not
+// the only guard.
+const WUZZPAY_WEBHOOK_SECRET = process.env.WUZZPAY_WEBHOOK_SECRET;
 // Sandbox is the safe default when WUZZPAY_ENV is unset - mirrors the
 // "missing config = the safe path" convention already used for Telegram/image
 // upload above. Production is only ever used when explicitly opted into.
@@ -206,7 +215,18 @@ const PORT = 3000;
 const DB_FILE = path.join(process.cwd(), 'server_db.json');
 
 // Middleware
-app.use(express.json({ limit: '10mb' }));
+// `verify` stashes the exact raw request bytes on req.rawBody alongside the
+// parsed body - needed only by the WuzzPay webhook route below to check
+// x-wuzzpay-signature (an HMAC over the raw body, not the re-serialized JS
+// object, which could differ in key order/whitespace from what was actually
+// signed). Cheap enough to do unconditionally rather than special-casing one
+// route's body-parser config.
+app.use(express.json({
+  limit: '10mb',
+  verify: (req: express.Request, _res, buf) => {
+    (req as express.Request & { rawBody?: Buffer }).rawBody = buf;
+  },
+}));
 
 // ---------------- DUAL-MODE PERSISTENCE ----------------
 // If DATABASE_URL is set at boot, all reads/writes go through Postgres exclusively.
@@ -1696,30 +1716,46 @@ app.get('/api/orders/confirm/:token/payment-status', asyncHandler(async (req, re
   res.json(result);
 }));
 
-// Public webhook receiver - no auth, since WuzzPay's own servers call this and
-// its signing scheme isn't published anywhere in their docs (checked
-// exhaustively - see the payment gateway plan's Context). Deliberately never
-// trusts the body for anything beyond "which order to re-check": only
-// partner_reference is read, purely to look up the order; the actual status
-// change always comes from an authenticated GET back to WuzzPay, never from
-// this payload. This makes the endpoint replay-safe and spoof-proof by
-// construction - the worst a forged/garbage body can do is trigger a harmless
-// extra re-verification of an order the caller can already see the token
-// for. Always responds 200 quickly regardless of outcome, to avoid retry
-// storms from WuzzPay on our own bugs. Same lock-scoping as payment-status
-// above - the slow network call never runs inside withDbLock.
+// Verifies x-wuzzpay-signature against a raw request body. Confirmed
+// 2026-08-22 against a real webhook.test delivery: hex(HMAC-SHA256(secret,
+// `${timestamp}.${rawBody}`)) - same scheme Stripe uses, never published in
+// WuzzPay's own docs. crypto.timingSafeEqual needs equal-length buffers, so a
+// length mismatch (e.g. a garbled/truncated header) is treated as "invalid"
+// rather than thrown.
+function verifyWuzzpaySignature(rawBody: Buffer | undefined, timestamp: unknown, signature: unknown): boolean {
+  if (!WUZZPAY_WEBHOOK_SECRET || !rawBody || typeof timestamp !== 'string' || typeof signature !== 'string') {
+    return false;
+  }
+  const expected = crypto.createHmac('sha256', WUZZPAY_WEBHOOK_SECRET).update(`${timestamp}.${rawBody}`).digest('hex');
+  const expectedBuf = Buffer.from(expected, 'hex');
+  const actualBuf = Buffer.from(signature, 'hex');
+  return expectedBuf.length === actualBuf.length && crypto.timingSafeEqual(expectedBuf, actualBuf);
+}
+
+// Public webhook receiver - no auth header required, since WuzzPay's own
+// servers call this; authenticity is instead checked via the HMAC signature
+// above (when WUZZPAY_WEBHOOK_SECRET is configured). Even so, the payload is
+// still never trusted for the actual state change: only ref_no (WuzzPay's
+// name for the partner_reference/order.id we sent at charge time - confirmed
+// against a real delivery, docs never specified it) is read, purely to look
+// up which order to re-check; the actual status change always comes from an
+// authenticated GET back to WuzzPay, never from this payload. This makes the
+// endpoint replay-safe and spoof-proof by construction even if signature
+// verification is ever skipped (unconfigured secret, or a future WuzzPay
+// change to the scheme) - the worst a forged/garbled body can do is trigger a
+// harmless extra re-verification of an order the caller can already see the
+// token for. Always responds 200 quickly regardless of outcome, to avoid
+// retry storms from WuzzPay on our own bugs. Same lock-scoping as
+// payment-status above - the slow network call never runs inside withDbLock.
 app.post('/api/webhooks/wuzzpay', asyncHandler(async (req, res) => {
-  // TEMPORARY diagnostic logging (2026-08-21): WuzzPay's docs never
-  // published a webhook payload/signature spec (checked exhaustively - see
-  // the payment gateway plan's Context). Log the raw delivery unconditionally
-  // so the first real callback (e.g. via the dashboard's Payment Simulator)
-  // reveals the actual body shape and whether any signature header is
-  // present, the same "fail loud, log the raw response" approach that
-  // already found the undocumented data.transaction.ID nesting on /charge.
-  // Remove once the shape is confirmed - this doesn't belong long-term.
-  console.log('WuzzPay webhook received - headers:', JSON.stringify(req.headers), 'body:', JSON.stringify(req.body));
   try {
-    const partnerReference = req.body?.partner_reference ?? req.body?.data?.partner_reference;
+    const rawBody = (req as express.Request & { rawBody?: Buffer }).rawBody;
+    if (WUZZPAY_WEBHOOK_SECRET && !verifyWuzzpaySignature(rawBody, req.headers['x-wuzzpay-timestamp'], req.headers['x-wuzzpay-signature'])) {
+      console.error('WuzzPay webhook received with missing/invalid x-wuzzpay-signature - ignoring.');
+      return res.status(200).json({ received: true });
+    }
+
+    const partnerReference = req.body?.ref_no ?? req.body?.partner_reference ?? req.body?.data?.partner_reference;
     if (typeof partnerReference === 'string') {
       // Narrow readOrders/writeOrders throughout, not the full readDB/writeDB
       // - same reasoning as payment-status/cash/charge above.

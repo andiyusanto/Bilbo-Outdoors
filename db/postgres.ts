@@ -298,9 +298,29 @@ export async function readProductsPostgres(): Promise<Product[]> {
   return res.rows.map(rowToProduct);
 }
 
+// Explicit column list, NOT `SELECT *` - deliberately excludes id_card_base64
+// (the customer's personal photo, stored inline as base64 text/TOAST, not a
+// Supabase Storage URL). Confirmed 2026-08-22 against production: only 71
+// orders, but 47MB of raw photo text (up to ~3MB each) - readOrdersPostgres
+// runs on nearly every route in this app (including the payment-status poll,
+// hit every 5s per open customer payment tab), so pulling that into Node's
+// memory on every single call was a real, measured contributor to a Render
+// OOM crash. rowToOrder's `row.id_card_base64 ?? ''` already defaults
+// personalPhotoBase64 to '' when the column isn't selected - safe as long as
+// nothing re-persists this now-empty value over a real stored photo (see
+// writeOrdersWithClient's ON CONFLICT clause, which deliberately excludes
+// id_card_base64 from its SET list for the same reason - this field is only
+// ever set once at order creation, never modified afterward, so the bulk
+// upsert never needs to touch it again). The one place that needs the real
+// photo (GET /api/orders/:id) fetches it separately via readOrderPhotoPostgres.
+const ORDER_COLUMNS_NO_PHOTO = `id, customer_name, customer_whatsapp, start_date, end_date, rent_duration,
+  total_price, status, created_at, late_days, late_fee, confirmation_token, returned_at, picked_up_at,
+  pickup_id_type, amount_paid, status_history, penalties, payment_method, payment_channel,
+  payment_instruction, wuzzpay_transaction_id, wuzzpay_provider, wuzzpay_last_status`;
+
 export async function readOrdersPostgres(): Promise<Order[]> {
   const [ordersRes, itemsRes] = await Promise.all([
-    pool.query('SELECT * FROM orders ORDER BY created_at DESC'),
+    pool.query(`SELECT ${ORDER_COLUMNS_NO_PHOTO} FROM orders ORDER BY created_at DESC`),
     pool.query('SELECT * FROM order_items'),
   ]);
   const itemsByOrderId = new Map<string, OrderItem[]>();
@@ -310,6 +330,14 @@ export async function readOrdersPostgres(): Promise<Order[]> {
     itemsByOrderId.set(itemRow.order_id, list);
   }
   return ordersRes.rows.map((row) => rowToOrder(row, itemsByOrderId.get(row.id) || []));
+}
+
+// Narrow single-column fetch for the one place that needs the real photo
+// (GET /api/orders/:id, per readOrdersPostgres's own comment) - a targeted
+// single-row SELECT, not a burden on the frequently-called full orders read.
+export async function readOrderPhotoPostgres(orderId: string): Promise<string> {
+  const res = await pool.query('SELECT id_card_base64 FROM orders WHERE id = $1', [orderId]);
+  return res.rows[0]?.id_card_base64 ?? '';
 }
 
 export async function readSettingsPostgres(): Promise<StoreSettings> {
@@ -463,7 +491,17 @@ async function writeOrdersWithClient(client: pg.PoolClient, orders: Order[]): Pr
          end_date = EXCLUDED.end_date,
          rent_duration = EXCLUDED.rent_duration,
          total_price = EXCLUDED.total_price,
-         id_card_base64 = EXCLUDED.id_card_base64,
+         -- id_card_base64 deliberately excluded from the update - it's only
+         -- ever set once at order creation (POST /api/orders), never modified
+         -- afterward by any route. Re-setting it here on every write would
+         -- (a) risk wiping the real stored photo with '' whenever the
+         -- in-memory order came from readOrdersPostgres's photo-excluding
+         -- SELECT (see its own comment), and (b) re-TOAST an unchanged
+         -- multi-hundred-KB value on every single order write - confirmed
+         -- 2026-08-22 as real production churn (1.79M TOAST insert/delete
+         -- cycles against only 71 orders, driven by frequent writes like the
+         -- 5s payment-status poll). The INSERT branch above still saves a new
+         -- order's photo correctly; only re-upserts of an EXISTING row skip it.
          status = EXCLUDED.status,
          created_at = EXCLUDED.created_at,
          late_days = EXCLUDED.late_days,

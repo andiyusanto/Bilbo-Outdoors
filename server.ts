@@ -9,7 +9,7 @@ import { defaultProducts } from './db/defaultProducts';
 import { defaultSettings } from './db/defaultSettings';
 import { defaultUsers } from './db/defaultUsers';
 import { defaultJobPriceList } from './db/defaultJobPriceList';
-import { initPostgresPool, seedPostgresIfEmpty, readDBPostgres, writeDBPostgres, findUserByUsernamePostgres, findUserBySessionTokenPostgres, findUserByIdPostgres, updateUserAuthFieldsPostgres, readProductsPostgres, readOrdersPostgres, readSettingsPostgres, readUsersPostgres, readJobPriceListPostgres, readJobEntriesPostgres, writeOrdersPostgres } from './db/postgres';
+import { initPostgresPool, seedPostgresIfEmpty, readDBPostgres, writeDBPostgres, findUserByUsernamePostgres, findUserBySessionTokenPostgres, findUserByIdPostgres, updateUserAuthFieldsPostgres, readProductsPostgres, readOrdersPostgres, readSettingsPostgres, readUsersPostgres, readJobPriceListPostgres, readJobEntriesPostgres, writeOrdersPostgres, readOrderPhotoPostgres } from './db/postgres';
 import { calculateRentalCost, calculateLegacyRentalCost, getAmountPaid, getRemainingBalance, getPenaltyTotal } from './src/pricing';
 import { hashPassword, verifyPassword, generateSessionToken } from './src/auth';
 import { formatDateLabel, getTodayDateString } from './src/lib/date';
@@ -302,6 +302,10 @@ let readJobEntries: () => Promise<JobEntry[]>;
 let readSettings: () => Promise<StoreSettings>;
 let readUsers: () => Promise<AppUser[]>;
 let writeOrders: (orders: Order[]) => Promise<void>;
+// readOrders() deliberately omits personalPhotoBase64 in Postgres mode (see
+// readOrdersPostgres's comment) - this is the narrow accessor for the one
+// route that needs the real value.
+let readOrderPhoto: (orderId: string) => Promise<string>;
 
 function seedJsonFileIfMissing(): void {
   if (!fs.existsSync(DB_FILE)) {
@@ -337,6 +341,7 @@ async function initDatabase(): Promise<void> {
     readSettings = readSettingsPostgres;
     readUsers = readUsersPostgres;
     writeOrders = writeOrdersPostgres;
+    readOrderPhoto = readOrderPhotoPostgres;
     console.log('Persistence: Postgres (DATABASE_URL detected).');
   } else {
     seedJsonFileIfMissing();
@@ -400,6 +405,13 @@ async function initDatabase(): Promise<void> {
       const db = await readDB();
       db.orders = orders;
       await writeDB(db);
+    };
+    // JSON mode's readOrders() already returns the real photo (the whole file
+    // is loaded into memory regardless of column selection) - this only
+    // exists so both persistence modes share the same call site.
+    readOrderPhoto = async (orderId: string) => {
+      const orders = await readOrders();
+      return orders.find((o: Order) => o.id === orderId)?.personalPhotoBase64 ?? '';
     };
     console.log('Persistence: local JSON file (server_db.json).');
   }
@@ -1082,6 +1094,9 @@ app.get('/api/orders', authenticateUser, asyncHandler(async (req, res) => {
 
 // Admin: Get a single order in full (including personalPhotoBase64) - used
 // by OrderDetailPanel when opened, since the list above omits the photo.
+// readOrders() itself no longer carries the real photo in Postgres mode (see
+// readOrdersPostgres's comment) - fetched separately here via readOrderPhoto,
+// the one place in the app that actually needs it.
 app.get('/api/orders/:id', authenticateUser, asyncHandler(async (req, res) => {
   const { id } = req.params;
   const orders = await readOrders();
@@ -1089,6 +1104,7 @@ app.get('/api/orders/:id', authenticateUser, asyncHandler(async (req, res) => {
   if (!order) {
     return res.status(404).json({ error: 'Order not found.' });
   }
+  order.personalPhotoBase64 = await readOrderPhoto(id);
   res.json(order);
 }));
 

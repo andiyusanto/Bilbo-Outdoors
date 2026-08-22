@@ -50,7 +50,15 @@ export interface Order {
   rentDuration: number; // calculated days
   items: OrderItem[];
   totalPrice: number;
-  personalPhotoBase64: string; // customer's own photo (face-to-torso or full body), rental guarantee/identity verification
+  personalPhotoBase64: string; // customer's own photo (face-to-torso or full body), rental guarantee/identity verification.
+  // RESOLVED, directly-usable display value only - either the legacy raw base64 data URL, or (when
+  // personalPhotoStoragePath is set) a freshly-minted short-lived signed URL. Never a bare storage path.
+  personalPhotoStoragePath?: string; // Object path in the private `bilbo-personal-photos` Supabase Storage
+  // bucket - set once at creation when Storage upload succeeds, never modified afterward. Undefined on
+  // legacy orders and whenever Storage is unconfigured/upload failed (photo lives in personalPhotoBase64
+  // instead in that case - see POST /api/orders in server.ts). Internal bookkeeping only, never sent to
+  // any client-facing response (see PublicOrder/OrderListItem below) - the resolved signed URL in
+  // personalPhotoBase64 is what's actually used.
   status: OrderStatus;
   createdAt: string;
   returnedAt?: string; // ISO datetime, set once when status transitions into 'Item Returned/Completed'
@@ -96,13 +104,15 @@ export interface PenaltyEntry {
 // are internal gateway debugging fields with no customer-facing purpose - the
 // customer's own polling response is a separate, intentionally narrow object
 // (see GET /api/orders/confirm/:token/payment-status), not this projection.
-export type PublicOrder = Omit<Order, 'personalPhotoBase64' | 'statusHistory' | 'penalties' | 'wuzzpayTransactionId' | 'wuzzpayLastStatus'>;
+export type PublicOrder = Omit<Order, 'personalPhotoBase64' | 'personalPhotoStoragePath' | 'statusHistory' | 'penalties' | 'wuzzpayTransactionId' | 'wuzzpayLastStatus'>;
 
 // List-view projection - the orders array fetched on login/refresh never
 // needs personalPhotoBase64 (only OrderDetailPanel does, via a dedicated
 // single-order fetch - see handleOpenOrderDetail). Keeps the list payload
-// from scaling with every order's photo forever.
-export type OrderListItem = Omit<Order, 'personalPhotoBase64'>;
+// from scaling with every order's photo forever. personalPhotoStoragePath is
+// internal bookkeeping only (see its own comment) - never has a reason to
+// reach any client, this projection included.
+export type OrderListItem = Omit<Order, 'personalPhotoBase64' | 'personalPhotoStoragePath'>;
 
 export interface DashboardStats {
   activeRentalsCount: number;

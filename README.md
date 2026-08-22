@@ -152,7 +152,8 @@ CREATE TABLE IF NOT EXISTS orders (
   payment_instruction JSONB,
   wuzzpay_transaction_id VARCHAR(255),
   wuzzpay_provider VARCHAR(255),
-  wuzzpay_last_status VARCHAR(255)
+  wuzzpay_last_status VARCHAR(255),
+  personal_photo_path VARCHAR(255) -- object path in the PRIVATE bilbo-personal-photos Supabase Storage bucket (never a full URL - signed URLs expire, see server.ts's createSignedPersonalPhotoUrl); set once at creation for new orders when Storage is configured, NULL for legacy orders (which keep their photo in id_card_base64 above)
 );
 
 -- 3. Membuat Tabel Order Items (Relasi Detail Item dari Order)
@@ -392,6 +393,11 @@ CREATE TABLE IF NOT EXISTS job_entries (
 > ALTER TABLE orders ADD COLUMN IF NOT EXISTS wuzzpay_transaction_id VARCHAR(255);
 > ALTER TABLE orders ADD COLUMN IF NOT EXISTS wuzzpay_provider VARCHAR(255);
 > ALTER TABLE orders ADD COLUMN IF NOT EXISTS wuzzpay_last_status VARCHAR(255);
+> ```
+
+> **Sudah pernah menjalankan Step A sebelum kolom `personal_photo_path` ada?** Jalankan ini sekali di SQL Editor yang sama (aman dijalankan berulang) - nullable, tanpa default, order lama tetap `NULL` selamanya, tidak ada regresi atau backfill otomatis. Kolom ini menyimpan *path* (bukan URL penuh) foto diri pelanggan di dalam bucket **privat** Supabase Storage baru (`bilbo-personal-photos`), pengganti `id_card_base64` (yang menyimpan foto sebagai teks base64 mentah - TOAST besar yang ditulis ulang setiap kali order-nya di-update, lihat komentar di atas `ORDER_COLUMNS_NO_PHOTO` di `db/postgres.ts`). `id_card_base64` tetap dipertahankan apa adanya untuk order lama, dan tetap dipakai sebagai fallback untuk order baru bila `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` belum dikonfigurasi atau upload ke Storage gagal. `GET /api/orders/:id` (satu-satunya rute yang butuh foto asli) menyelesaikan salah satu dari dua kolom ini menjadi satu string `personalPhotoBase64` yang langsung bisa dipakai (`data:...;base64,...` untuk yang lama, signed URL berumur pendek untuk yang baru) - bentuk field di response tidak berubah, lihat `readOrderPhoto` di `server.ts`.
+> ```sql
+> ALTER TABLE orders ADD COLUMN IF NOT EXISTS personal_photo_path VARCHAR(255);
 > ```
 
 > **Sudah pernah menjalankan Step A sebelum index `idx_order_items_order_id` ada?** Jalankan ini sekali di SQL Editor yang sama (aman dijalankan berulang, tidak mengubah data apa pun). `order_items.order_id` di-query lewat `WHERE`/`DELETE` di setiap penulisan order (lihat `writeOrdersPostgres` di `db/postgres.ts`), tapi Postgres tidak otomatis membuat index untuk kolom foreign key (hanya sisi yang direferensikan, `orders.id`, yang otomatis ter-index) - tanpa index ini, setiap penulisan order melakukan sequential scan ke seluruh tabel `order_items`.

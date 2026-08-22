@@ -93,8 +93,8 @@ async function runMigration() {
       const existing = await client.query('SELECT id FROM orders WHERE id = $1', [order.id]);
       if (existing.rows.length === 0) {
         await client.query(
-          `INSERT INTO orders (id, customer_name, customer_whatsapp, start_date, end_date, rent_duration, total_price, id_card_base64, status, created_at, late_days, late_fee, confirmation_token, returned_at, picked_up_at, pickup_id_type, amount_paid, status_history, penalties, payment_method, payment_channel, payment_instruction, wuzzpay_transaction_id, wuzzpay_provider, wuzzpay_last_status)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)`,
+          `INSERT INTO orders (id, customer_name, customer_whatsapp, start_date, end_date, rent_duration, total_price, id_card_base64, status, created_at, late_days, late_fee, confirmation_token, returned_at, picked_up_at, pickup_id_type, amount_paid, status_history, penalties, payment_method, payment_channel, payment_instruction, wuzzpay_transaction_id, wuzzpay_provider, wuzzpay_last_status, personal_photo_path)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)`,
           [
             order.id,
             order.customerName,
@@ -120,7 +120,10 @@ async function runMigration() {
             order.paymentInstruction ? JSON.stringify(order.paymentInstruction) : null,
             order.wuzzpayTransactionId ?? null,
             order.wuzzpayProvider ?? null,
-            order.wuzzpayLastStatus ?? null
+            order.wuzzpayLastStatus ?? null,
+            // This script only ever migrates legacy JSON data, which never
+            // has a Supabase Storage path - always null here.
+            null
           ]
         );
         console.log(`   - Order: ${order.id} by ${order.customerName} migrated.`);

@@ -83,13 +83,75 @@ async function sendTelegramBookingNotification(order: Order): Promise<void> {
   await sendTelegramMessage(text);
 }
 
-// ---------------- PRODUCT IMAGE UPLOAD (SUPABASE STORAGE) ----------------
+// ---------------- SUPABASE STORAGE (PRODUCT IMAGES + PERSONAL PHOTOS) ----------------
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const PRODUCT_IMAGE_BUCKET = 'bilbo-product-images';
 const MAX_PRODUCT_IMAGE_BYTES = 2 * 1024 * 1024;
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   console.log('Product image upload disabled — set SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY to enable.');
+}
+
+// Unlike product images (bilbo-product-images, a PUBLIC bucket - anyone with
+// a URL can view them, which is fine, they're storefront photos), the
+// customer's personal identity photo is PII/rental-guarantee documentation -
+// this bucket MUST be created as PRIVATE in the Supabase dashboard (Public
+// bucket: OFF). Access is only ever via a short-lived signed URL minted
+// server-side (see createSignedPersonalPhotoUrl), never a permanent public
+// link. Confirmed 2026-08-22: 71 orders but 147MB on disk (47MB of it raw
+// base64 photo text) - this moves NEW orders' photos out of Postgres
+// entirely; legacy orders keep their base64 in id_card_base64 unchanged (see
+// src/types.ts's Order.personalPhotoStoragePath comment for the full split).
+const PERSONAL_PHOTO_BUCKET = 'bilbo-personal-photos';
+const MAX_PERSONAL_PHOTO_BYTES = 5 * 1024 * 1024; // headroom above the ~3.17MB max observed pre-fix
+const SIGNED_URL_EXPIRY_SECONDS = 300; // 5 minutes - enough for an admin to open OrderDetailPanel
+// Storage is only ever engaged in Postgres mode - JSON-file mode (local dev
+// only, per this project's own convention, never production) keeps the
+// unconditional inline-base64 behavior regardless of whether these Supabase
+// vars happen to also be set in a local .env.
+const PERSONAL_PHOTO_STORAGE_ENABLED = Boolean(process.env.DATABASE_URL && SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY);
+
+// Shared by both the product-image upload route and personal-photo upload
+// (inside POST /api/orders) - both do the identical "POST a buffer to a
+// Supabase Storage bucket with the service-role key" call.
+async function uploadToSupabaseStorage(bucket: string, objectPath: string, buffer: Buffer, contentType: string): Promise<void> {
+  const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}/${objectPath}`, {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY!,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      'Content-Type': contentType,
+    },
+    body: buffer,
+  });
+  if (!uploadRes.ok) {
+    throw new Error(`Supabase Storage upload failed (${uploadRes.status}): ${await uploadRes.text().catch(() => '')}`);
+  }
+}
+
+// Mints a short-lived signed URL for a private-bucket object - distinct from
+// the product-image route's `/object/public/...` URL, which works forever
+// with no auth since that bucket is public. Only ever called for the
+// personal-photo bucket, so it's not parameterized by bucket name.
+async function createSignedPersonalPhotoUrl(objectPath: string): Promise<string> {
+  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/${PERSONAL_PHOTO_BUCKET}/${objectPath}`, {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE_SERVICE_ROLE_KEY!,
+      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ expiresIn: SIGNED_URL_EXPIRY_SECONDS }),
+  });
+  if (!res.ok) {
+    throw new Error(`Supabase Storage sign failed (${res.status}): ${await res.text().catch(() => '')}`);
+  }
+  const { signedURL } = await res.json() as { signedURL: string };
+  // Supabase's documented shape returns a RELATIVE path here
+  // ("/object/sign/<bucket>/<path>?token=..."), not a full URL like the
+  // public-object endpoint - confirmed against a real call before this went
+  // live (see the plan's Stage 2 verification).
+  return `${SUPABASE_URL}/storage/v1${signedURL}`;
 }
 
 // ---------------- WUZZPAY PAYMENT GATEWAY ----------------
@@ -302,10 +364,28 @@ let readJobEntries: () => Promise<JobEntry[]>;
 let readSettings: () => Promise<StoreSettings>;
 let readUsers: () => Promise<AppUser[]>;
 let writeOrders: (orders: Order[]) => Promise<void>;
-// readOrders() deliberately omits personalPhotoBase64 in Postgres mode (see
-// readOrdersPostgres's comment) - this is the narrow accessor for the one
-// route that needs the real value.
-let readOrderPhoto: (orderId: string) => Promise<string>;
+// readOrders() deliberately omits both photo columns in Postgres mode (see
+// readOrdersPostgres's comment) - this is the per-mode raw accessor for the
+// one route that needs the real value. Resolving whichever storage form is
+// present (legacy base64 vs. a Storage path needing a signed URL) happens
+// once, in the shared readOrderPhoto() below - never duplicated per mode.
+let readOrderPhotoRaw: (orderId: string) => Promise<{ base64: string; storagePath: string | null }>;
+
+// Single choke point for "give me a directly-usable photo display value for
+// this order," whichever of the two storage forms actually backs it (see
+// src/types.ts's Order.personalPhotoStoragePath comment for the full split).
+// A signing failure is allowed to throw here rather than being swallowed to
+// '' - see POST /api/orders' upload try/catch for why creation-time failures
+// degrade gracefully but read-time ones must not: a customer who never
+// uploaded a photo and an admin who can no longer retrieve a real one must
+// never look the same to staff reviewing a rental-guarantee document.
+async function readOrderPhoto(orderId: string): Promise<string> {
+  const { base64, storagePath } = await readOrderPhotoRaw(orderId);
+  if (storagePath) {
+    return await createSignedPersonalPhotoUrl(storagePath);
+  }
+  return base64 || '';
+}
 
 function seedJsonFileIfMissing(): void {
   if (!fs.existsSync(DB_FILE)) {
@@ -341,7 +421,7 @@ async function initDatabase(): Promise<void> {
     readSettings = readSettingsPostgres;
     readUsers = readUsersPostgres;
     writeOrders = writeOrdersPostgres;
-    readOrderPhoto = readOrderPhotoPostgres;
+    readOrderPhotoRaw = readOrderPhotoPostgres;
     console.log('Persistence: Postgres (DATABASE_URL detected).');
   } else {
     seedJsonFileIfMissing();
@@ -408,10 +488,15 @@ async function initDatabase(): Promise<void> {
     };
     // JSON mode's readOrders() already returns the real photo (the whole file
     // is loaded into memory regardless of column selection) - this only
-    // exists so both persistence modes share the same call site.
-    readOrderPhoto = async (orderId: string) => {
+    // exists so both persistence modes share the same call site. storagePath
+    // is always null here: JSON-mode order creation never engages Supabase
+    // Storage (PERSONAL_PHOTO_STORAGE_ENABLED is gated on DATABASE_URL too),
+    // so local dev/testing never touches real Storage regardless of what
+    // Supabase vars happen to be present in .env.
+    readOrderPhotoRaw = async (orderId: string) => {
       const orders = await readOrders();
-      return orders.find((o: Order) => o.id === orderId)?.personalPhotoBase64 ?? '';
+      const base64 = orders.find((o: Order) => o.id === orderId)?.personalPhotoBase64 ?? '';
+      return { base64, storagePath: null };
     };
     console.log('Persistence: local JSON file (server_db.json).');
   }
@@ -775,19 +860,7 @@ app.post('/api/products/upload-image', authenticateUser, asyncHandler(async (req
   // Unique path per upload - sidesteps Storage's upsert semantics and the ~60s
   // Smart CDN cache-invalidation delay entirely, since every URL is brand new.
   const objectPath = `products/${crypto.randomUUID()}.${extension}`;
-  const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/${PRODUCT_IMAGE_BUCKET}/${objectPath}`, {
-    method: 'POST',
-    headers: {
-      apikey: SUPABASE_SERVICE_ROLE_KEY,
-      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-      'Content-Type': mimeType,
-    },
-    body: buffer,
-  });
-
-  if (!uploadRes.ok) {
-    throw new Error(`Supabase Storage upload failed (${uploadRes.status}): ${await uploadRes.text().catch(() => '')}`);
-  }
+  await uploadToSupabaseStorage(PRODUCT_IMAGE_BUCKET, objectPath, buffer, mimeType);
 
   res.status(201).json({ url: `${SUPABASE_URL}/storage/v1/object/public/${PRODUCT_IMAGE_BUCKET}/${objectPath}` });
 }));
@@ -1031,7 +1104,39 @@ app.post('/api/orders', asyncHandler(async (req, res) => {
       };
     });
 
-    // 4. Create Order Object
+    // 4. Upload the personal photo to Supabase Storage instead of storing it
+    // inline, when Storage is configured - see PERSONAL_PHOTO_STORAGE_ENABLED
+    // and src/types.ts's Order.personalPhotoStoragePath comment for the full
+    // rationale (this replaced storing raw base64 directly in Postgres, which
+    // measurably bloated the orders table and caused real memory pressure).
+    // Failure here degrades gracefully to the original inline-base64 behavior
+    // rather than ever blocking a booking - unlike a read-time signing
+    // failure (see readOrderPhoto), a create-time upload failure has an
+    // obvious, harmless fallback: just keep what we already have in hand.
+    let personalPhotoStoragePath: string | undefined;
+    let storedPersonalPhotoBase64: string = personalPhotoBase64 || '';
+    if (PERSONAL_PHOTO_STORAGE_ENABLED && personalPhotoBase64) {
+      const photoMatch = typeof personalPhotoBase64 === 'string' && personalPhotoBase64.match(/^data:(image\/webp|image\/png);base64,(.+)$/);
+      if (photoMatch) {
+        const [, mimeType, base64Data] = photoMatch;
+        const buffer = Buffer.from(base64Data, 'base64');
+        if (buffer.length > MAX_PERSONAL_PHOTO_BYTES) {
+          return res.status(413).json({ error: 'Ukuran foto terlalu besar. Gunakan foto lain.' });
+        }
+        try {
+          const objectPath = `personal-photos/${crypto.randomUUID()}.${mimeType === 'image/webp' ? 'webp' : 'png'}`;
+          await uploadToSupabaseStorage(PERSONAL_PHOTO_BUCKET, objectPath, buffer, mimeType);
+          personalPhotoStoragePath = objectPath;
+          storedPersonalPhotoBase64 = ''; // Storage now holds the real bytes - don't also duplicate into Postgres
+        } catch (err) {
+          console.error('Personal photo Storage upload failed, falling back to inline base64:', err);
+          // storedPersonalPhotoBase64 stays as the original base64 - graceful degrade, never a blocked booking
+        }
+      }
+      // else: unrecognized format - fall back to today's exact legacy behavior (store as-is, no validation)
+    }
+
+    // 5. Create Order Object
     const newOrder: Order = {
       id: `order-${Date.now()}`,
       confirmationToken: crypto.randomUUID(),
@@ -1042,7 +1147,8 @@ app.post('/api/orders', asyncHandler(async (req, res) => {
       rentDuration,
       items: orderItems,
       totalPrice,
-      personalPhotoBase64: personalPhotoBase64 || '',
+      personalPhotoBase64: storedPersonalPhotoBase64,
+      personalPhotoStoragePath,
       status: 'Pending',
       createdAt: new Date().toISOString()
     };
@@ -1051,7 +1157,12 @@ app.post('/api/orders', asyncHandler(async (req, res) => {
     await writeOrders(orders);
 
     createdOrder = newOrder;
-    res.status(201).json(newOrder);
+    // personalPhotoStoragePath is internal bookkeeping only (see its type
+    // comment) - the client only ever reads confirmationToken from this
+    // response (confirmed via useOrderSubmission.ts), but strip it anyway,
+    // same minimal-projection care as every other admin/internal-only field.
+    const { personalPhotoStoragePath: _personalPhotoStoragePath, ...responseOrder } = newOrder;
+    res.status(201).json(responseOrder);
   });
   if (createdOrder) {
     sendTelegramBookingNotification(createdOrder).catch(err => console.error('Telegram booking notification failed:', err));
@@ -1070,7 +1181,7 @@ app.get('/api/orders/confirm/:token', asyncHandler(async (req, res) => {
     return res.status(404).json({ error: 'Pesanan tidak ditemukan.' });
   }
 
-  const { personalPhotoBase64, statusHistory, penalties, wuzzpayTransactionId, wuzzpayLastStatus, ...safeOrder }: Order = order;
+  const { personalPhotoBase64, personalPhotoStoragePath, statusHistory, penalties, wuzzpayTransactionId, wuzzpayLastStatus, ...safeOrder }: Order = order;
   const publicOrder: PublicOrder = safeOrder;
   res.json(publicOrder);
 }));
@@ -1085,7 +1196,7 @@ app.get('/api/orders', authenticateUser, asyncHandler(async (req, res) => {
       await writeOrders(orders);
     }
     const orderList: OrderListItem[] = orders.map((o: Order) => {
-      const { personalPhotoBase64, ...rest } = o;
+      const { personalPhotoBase64, personalPhotoStoragePath, ...rest } = o;
       return rest;
     });
     res.json(orderList);

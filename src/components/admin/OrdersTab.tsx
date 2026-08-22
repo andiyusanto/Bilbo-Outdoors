@@ -105,6 +105,7 @@ export default function OrdersTab({ orders, products, settings, orderActions, or
     handleUpdatePayment,
     handleAddPenalty,
     handleRemovePenalty,
+    handleUploadPersonalPhoto,
     handleDeleteOrder,
     handleRemoveLateFee,
     handleCalculateLateFees,
@@ -363,6 +364,7 @@ export default function OrdersTab({ orders, products, settings, orderActions, or
           onUpdatePayment={handleUpdatePayment}
           onAddPenalty={handleAddPenalty}
           onRemovePenalty={handleRemovePenalty}
+          onUploadPersonalPhoto={handleUploadPersonalPhoto}
           onDeleteOrder={handleDeleteOrder}
           onRemoveLateFee={handleRemoveLateFee}
           isOwner={isOwner}

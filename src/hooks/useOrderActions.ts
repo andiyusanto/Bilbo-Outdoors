@@ -26,11 +26,16 @@ export function useOrderActions({ token, orders, setOrders, fetchStats }: UseOrd
   // refreshed independently of this hook's own actions (the background poll
   // in useAdminData, or another admin's edit landing via that poll). The list
   // item carries every field the panel needs except personalPhotoBase64
-  // (omitted from GET /api/orders, see handleOpenOrderDetail below) - a photo
-  // that never changes after order creation - so this is a local merge, not
-  // a fetch. After this hook's own mutations, orders/selectedOrder are
-  // already patched from the same response in the same tick, so the merge
-  // below is a no-op then; it only does real work for external changes.
+  // (omitted from GET /api/orders, see handleOpenOrderDetail below) - so this
+  // is a local merge, not a fetch. Since OrderListItem never carries that
+  // field at all, `{ ...prev, ...latest }` below naturally can't clobber it
+  // either way - this holds regardless of whether the photo was set once at
+  // creation or added later by staff (see handleUploadPersonalPhoto), which
+  // patches selectedOrder directly from its own response instead of relying
+  // on this merge to pick it up. After this hook's own mutations,
+  // orders/selectedOrder are already patched from the same response in the
+  // same tick, so the merge below is a no-op then; it only does real work for
+  // external changes.
   useEffect(() => {
     if (!selectedOrder) return;
     const latest = orders.find(o => o.id === selectedOrder.id);
@@ -168,6 +173,36 @@ export function useOrderActions({ token, orders, setOrders, fetchStats }: UseOrd
     });
   };
 
+  // Retroactively attaches a photo to an order that has none - e.g. the
+  // customer skipped it on the booking form and staff verified ID in person
+  // instead, but want a photo on file after all. Purely optional: an order is
+  // allowed to have no photo indefinitely (see OrderDetailPanel's "Tidak ada
+  // foto diunggah" placeholder) - this action exists so staff *can* add one,
+  // never so they must. Unlike handleUpdatePayment/handleAddPenalty, the
+  // response here carries a REAL resolved photo (a signed URL or legacy
+  // base64, see server.ts's readOrderPhoto) rather than the always-empty
+  // placeholder those routes' responses happen to carry - so it's applied
+  // only to selectedOrder (the open detail panel, which needs it), never to
+  // the orders list state, keeping OrderListItem genuinely photo-free.
+  const handleUploadPersonalPhoto = async (orderId: string, photoDataUrl: string) => {
+    await withLoading(async () => {
+      try {
+        const res = await fetch(`/api/orders/${orderId}/personal-photo`, {
+          method: 'POST',
+          headers: jsonAuthHeaders(token),
+          body: JSON.stringify({ photo: photoDataUrl })
+        });
+        const updatedOrder = await parseJsonOrThrow(res);
+        if (selectedOrder?.id === orderId) {
+          setSelectedOrder(updatedOrder);
+        }
+        notifySuccess('Foto berhasil diunggah!');
+      } catch (err: any) {
+        notifyError(`Gagal mengunggah foto: ${err.message}`);
+      }
+    });
+  };
+
   // Owner-only (enforced server-side too) - permanently removes an order,
   // e.g. an erroneous double-booking. Not allowed once completed.
   const handleDeleteOrder = async (orderId: string) => {
@@ -271,6 +306,7 @@ export function useOrderActions({ token, orders, setOrders, fetchStats }: UseOrd
     handleUpdatePayment,
     handleAddPenalty,
     handleRemovePenalty,
+    handleUploadPersonalPhoto,
     handleDeleteOrder,
     handleRemoveLateFee,
     handleCalculateLateFees,

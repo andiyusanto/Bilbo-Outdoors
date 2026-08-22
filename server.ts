@@ -9,7 +9,7 @@ import { defaultProducts } from './db/defaultProducts';
 import { defaultSettings } from './db/defaultSettings';
 import { defaultUsers } from './db/defaultUsers';
 import { defaultJobPriceList } from './db/defaultJobPriceList';
-import { initPostgresPool, seedPostgresIfEmpty, readDBPostgres, writeDBPostgres, findUserByUsernamePostgres, findUserBySessionTokenPostgres, findUserByIdPostgres, updateUserAuthFieldsPostgres, readProductsPostgres, readOrdersPostgres, readSettingsPostgres, readUsersPostgres, readJobPriceListPostgres, readJobEntriesPostgres, writeOrdersPostgres, readOrderPhotoPostgres } from './db/postgres';
+import { initPostgresPool, seedPostgresIfEmpty, readDBPostgres, writeDBPostgres, findUserByUsernamePostgres, findUserBySessionTokenPostgres, findUserByIdPostgres, updateUserAuthFieldsPostgres, readProductsPostgres, readOrdersPostgres, readSettingsPostgres, readUsersPostgres, readJobPriceListPostgres, readJobEntriesPostgres, writeOrdersPostgres, readOrderPhotoPostgres, updateOrderPersonalPhotoPostgres } from './db/postgres';
 import { calculateRentalCost, calculateLegacyRentalCost, getAmountPaid, getRemainingBalance, getPenaltyTotal } from './src/pricing';
 import { hashPassword, verifyPassword, generateSessionToken } from './src/auth';
 import { formatDateLabel, getTodayDateString } from './src/lib/date';
@@ -152,6 +152,42 @@ async function createSignedPersonalPhotoUrl(objectPath: string): Promise<string>
   // public-object endpoint - confirmed against a real call before this went
   // live (see the plan's Stage 2 verification).
   return `${SUPABASE_URL}/storage/v1${signedURL}`;
+}
+
+// Shared by both POST /api/orders (customer checkout) and
+// POST /api/orders/:id/personal-photo (staff retroactively adding a photo the
+// customer never uploaded) - both need the identical "validate, upload to
+// Storage if enabled, gracefully fall back to inline base64 otherwise or on
+// failure" behavior. Returns the two possible stored forms (mutually
+// exclusive - exactly one is ever non-empty/non-null) for the caller to
+// persist, or an error response to return as-is.
+async function processPersonalPhotoUpload(dataUrl: unknown): Promise<{ base64: string; storagePath: string | null } | { error: string; status: number }> {
+  if (typeof dataUrl !== 'string' || !dataUrl) {
+    return { base64: '', storagePath: null };
+  }
+  const match = dataUrl.match(/^data:(image\/webp|image\/png);base64,(.+)$/);
+  if (!match) {
+    // Unrecognized format - fall back to legacy behavior (store as-is, no
+    // validation) rather than rejecting outright, same as before Storage
+    // support existed.
+    return { base64: dataUrl, storagePath: null };
+  }
+  const [, mimeType, base64Data] = match;
+  const buffer = Buffer.from(base64Data, 'base64');
+  if (buffer.length > MAX_PERSONAL_PHOTO_BYTES) {
+    return { error: 'Ukuran foto terlalu besar. Gunakan foto lain.', status: 413 };
+  }
+  if (!PERSONAL_PHOTO_STORAGE_ENABLED) {
+    return { base64: dataUrl, storagePath: null };
+  }
+  try {
+    const objectPath = `personal-photos/${crypto.randomUUID()}.${mimeType === 'image/webp' ? 'webp' : 'png'}`;
+    await uploadToSupabaseStorage(PERSONAL_PHOTO_BUCKET, objectPath, buffer, mimeType);
+    return { base64: '', storagePath: objectPath };
+  } catch (err) {
+    console.error('Personal photo Storage upload failed, falling back to inline base64:', err);
+    return { base64: dataUrl, storagePath: null };
+  }
 }
 
 // ---------------- WUZZPAY PAYMENT GATEWAY ----------------
@@ -370,6 +406,11 @@ let writeOrders: (orders: Order[]) => Promise<void>;
 // present (legacy base64 vs. a Storage path needing a signed URL) happens
 // once, in the shared readOrderPhoto() below - never duplicated per mode.
 let readOrderPhotoRaw: (orderId: string) => Promise<{ base64: string; storagePath: string | null }>;
+// Narrow, deliberate exception to the "photo columns are write-once" rule
+// (see writeOrdersWithClient's ON CONFLICT comment in db/postgres.ts) - the
+// one legitimate case where a photo genuinely changes after creation: staff
+// retroactively adding one via POST /api/orders/:id/personal-photo.
+let updateOrderPersonalPhoto: (orderId: string, base64: string, storagePath: string | null) => Promise<void>;
 
 // Single choke point for "give me a directly-usable photo display value for
 // this order," whichever of the two storage forms actually backs it (see
@@ -422,6 +463,7 @@ async function initDatabase(): Promise<void> {
     readUsers = readUsersPostgres;
     writeOrders = writeOrdersPostgres;
     readOrderPhotoRaw = readOrderPhotoPostgres;
+    updateOrderPersonalPhoto = updateOrderPersonalPhotoPostgres;
     console.log('Persistence: Postgres (DATABASE_URL detected).');
   } else {
     seedJsonFileIfMissing();
@@ -497,6 +539,15 @@ async function initDatabase(): Promise<void> {
       const orders = await readOrders();
       const base64 = orders.find((o: Order) => o.id === orderId)?.personalPhotoBase64 ?? '';
       return { base64, storagePath: null };
+    };
+    updateOrderPersonalPhoto = async (orderId: string, base64: string, storagePath: string | null) => {
+      const orders = await readOrders();
+      const order = orders.find((o: Order) => o.id === orderId);
+      if (order) {
+        order.personalPhotoBase64 = base64;
+        order.personalPhotoStoragePath = storagePath ?? undefined;
+        await writeOrders(orders);
+      }
     };
     console.log('Persistence: local JSON file (server_db.json).');
   }
@@ -1113,27 +1164,9 @@ app.post('/api/orders', asyncHandler(async (req, res) => {
     // rather than ever blocking a booking - unlike a read-time signing
     // failure (see readOrderPhoto), a create-time upload failure has an
     // obvious, harmless fallback: just keep what we already have in hand.
-    let personalPhotoStoragePath: string | undefined;
-    let storedPersonalPhotoBase64: string = personalPhotoBase64 || '';
-    if (PERSONAL_PHOTO_STORAGE_ENABLED && personalPhotoBase64) {
-      const photoMatch = typeof personalPhotoBase64 === 'string' && personalPhotoBase64.match(/^data:(image\/webp|image\/png);base64,(.+)$/);
-      if (photoMatch) {
-        const [, mimeType, base64Data] = photoMatch;
-        const buffer = Buffer.from(base64Data, 'base64');
-        if (buffer.length > MAX_PERSONAL_PHOTO_BYTES) {
-          return res.status(413).json({ error: 'Ukuran foto terlalu besar. Gunakan foto lain.' });
-        }
-        try {
-          const objectPath = `personal-photos/${crypto.randomUUID()}.${mimeType === 'image/webp' ? 'webp' : 'png'}`;
-          await uploadToSupabaseStorage(PERSONAL_PHOTO_BUCKET, objectPath, buffer, mimeType);
-          personalPhotoStoragePath = objectPath;
-          storedPersonalPhotoBase64 = ''; // Storage now holds the real bytes - don't also duplicate into Postgres
-        } catch (err) {
-          console.error('Personal photo Storage upload failed, falling back to inline base64:', err);
-          // storedPersonalPhotoBase64 stays as the original base64 - graceful degrade, never a blocked booking
-        }
-      }
-      // else: unrecognized format - fall back to today's exact legacy behavior (store as-is, no validation)
+    const photoResult = await processPersonalPhotoUpload(personalPhotoBase64);
+    if ('error' in photoResult) {
+      return res.status(photoResult.status).json({ error: photoResult.error });
     }
 
     // 5. Create Order Object
@@ -1147,8 +1180,8 @@ app.post('/api/orders', asyncHandler(async (req, res) => {
       rentDuration,
       items: orderItems,
       totalPrice,
-      personalPhotoBase64: storedPersonalPhotoBase64,
-      personalPhotoStoragePath,
+      personalPhotoBase64: photoResult.base64,
+      personalPhotoStoragePath: photoResult.storagePath ?? undefined,
       status: 'Pending',
       createdAt: new Date().toISOString()
     };
@@ -1215,6 +1248,58 @@ app.get('/api/orders/:id', authenticateUser, asyncHandler(async (req, res) => {
   if (!order) {
     return res.status(404).json({ error: 'Order not found.' });
   }
+  order.personalPhotoBase64 = await readOrderPhoto(id);
+  res.json(order);
+}));
+
+// Admin: retroactively attach a personal photo to an order that has none -
+// e.g. the customer skipped it on the booking form and staff verified their
+// ID in person instead, but later want a photo on file after all. Optional by
+// design: an order is allowed to have no photo forever (see OrderDetailPanel's
+// "Tidak ada foto diunggah" placeholder) - this route exists purely so staff
+// *can* add one, never to require it. Same authenticateUser gate as viewing
+// the photo (GET /api/orders/:id) - not a new privilege boundary.
+app.post('/api/orders/:id/personal-photo', authenticateUser, asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { photo } = req.body;
+  if (!photo || typeof photo !== 'string') {
+    return res.status(400).json({ error: 'Foto wajib disertakan.' });
+  }
+
+  const orders = await readOrders();
+  const order = orders.find((o: Order) => o.id === id);
+  if (!order) {
+    return res.status(404).json({ error: 'Order not found.' });
+  }
+
+  // Enforce "attach only when there is none" server-side, not just as a UI
+  // convention (OrderDetailPanel only renders the upload UI when
+  // personalPhotoBase64 is already empty, but that alone doesn't stop a
+  // direct API call). readOrders() excludes both photo columns from its
+  // query in Postgres mode (see readOrdersPostgres's comment), so `order`
+  // here can't be trusted to reflect the real state - check via
+  // readOrderPhotoRaw instead, which does. Any staff account with
+  // authenticateUser can reach this route; without this check, one could
+  // silently overwrite a real customer's identity photo on any order,
+  // including an already-completed one, with no confirmation or trace - this
+  // route exists only to fill in a missing photo, never to replace one.
+  const existing = await readOrderPhotoRaw(id);
+  if (existing.base64 || existing.storagePath) {
+    return res.status(409).json({ error: 'Pesanan ini sudah memiliki foto - tidak bisa diganti lewat sini.' });
+  }
+
+  // Slow network call - deliberately outside withDbLock, same reasoning as
+  // fetchWuzzpaySettlementStatus (never hold the process-wide lock across an
+  // outbound network call).
+  const result = await processPersonalPhotoUpload(photo);
+  if ('error' in result) {
+    return res.status(result.status).json({ error: result.error });
+  }
+
+  await withDbLock(async () => {
+    await updateOrderPersonalPhoto(id, result.base64, result.storagePath);
+  });
+
   order.personalPhotoBase64 = await readOrderPhoto(id);
   res.json(order);
 }));

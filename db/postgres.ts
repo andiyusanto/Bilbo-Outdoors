@@ -350,6 +350,19 @@ export async function readOrderPhotoPostgres(orderId: string): Promise<{ base64:
   return { base64: row?.id_card_base64 ?? '', storagePath: row?.personal_photo_path ?? null };
 }
 
+// Deliberate exception to writeOrdersWithClient's "photo columns are
+// write-once at creation" rule (see its own ON CONFLICT comment) - this is
+// the one legitimate case where a photo genuinely needs to change after
+// creation (staff retroactively adding a photo the customer never uploaded,
+// via POST /api/orders/:id/personal-photo). A separate, narrow, single-row
+// UPDATE, never routed through the bulk upsert - so it doesn't reintroduce
+// the re-TOAST-on-every-write problem that rule exists to avoid; this action
+// is rare (an occasional admin click), not part of the routine high-frequency
+// write path (checkout, status changes, the payment-status poll, etc.).
+export async function updateOrderPersonalPhotoPostgres(orderId: string, base64: string, storagePath: string | null): Promise<void> {
+  await pool.query('UPDATE orders SET id_card_base64 = $1, personal_photo_path = $2 WHERE id = $3', [base64, storagePath, orderId]);
+}
+
 export async function readSettingsPostgres(): Promise<StoreSettings> {
   const res = await pool.query('SELECT * FROM settings WHERE id = 1');
   // Defensive fallback (never crash) if the settings row hasn't been seeded yet on

@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Phone, UserCheck, AlertTriangle, CheckCircle, Clock, Printer, Search, Pencil } from 'lucide-react';
+import { Phone, UserCheck, AlertTriangle, CheckCircle, Clock, Printer, Search, Pencil, Upload } from 'lucide-react';
 import { Order, OrderStatus, Product, StoreSettings } from '../../types';
 import { formatDateLabel, formatDateTimeLabel, getTodayDateString } from '../../lib/date';
 import { calculateRentalCost, getRemainingBalance, getPenaltyTotal } from '../../pricing';
 import { getDistinctCategories } from '../../lib/categories';
 import { useOrderEditActions } from '../../hooks/useOrderEditActions';
+import { usePersonalPhotoUpload } from '../../hooks/usePersonalPhotoUpload';
 import DateInput from '../DateInput';
 import CategoryFilterTabs from '../client/CategoryFilterTabs';
 import OrderResiPrint from './OrderResiPrint';
@@ -27,6 +28,7 @@ interface OrderDetailPanelProps {
   onUpdatePayment: (orderId: string, amountPaid: number) => void;
   onAddPenalty: (orderId: string, penalty: { type: 'Kerusakan' | 'Kehilangan'; productId: string; description: string; amount: number }) => void;
   onRemovePenalty: (orderId: string, penaltyId: string) => void;
+  onUploadPersonalPhoto: (orderId: string, photoDataUrl: string) => void;
   onDeleteOrder: (orderId: string) => void;
   onRemoveLateFee: (orderId: string) => void;
   isOwner: boolean;
@@ -49,6 +51,7 @@ export default function OrderDetailPanel({
   onUpdatePayment,
   onAddPenalty,
   onRemovePenalty,
+  onUploadPersonalPhoto,
   onDeleteOrder,
   onRemoveLateFee,
   isOwner,
@@ -78,6 +81,25 @@ export default function OrderDetailPanel({
     closeEditOrder,
     handleSaveOrderEdit,
   } = orderEditActions;
+
+  // Reuses the exact same file-pick/resize/HEIC-handling logic as the public
+  // booking form (src/hooks/usePersonalPhotoUpload.ts) - staff attaching a
+  // photo retroactively needs the identical processing, just a different
+  // destination (POST /api/orders/:id/personal-photo instead of being
+  // embedded in a new booking). Two-step (pick -> preview -> explicit
+  // "Upload" click) rather than uploading immediately on file selection -
+  // the hook's resize is itself async and updates state on its own next
+  // render, so there's no reliable way to read the freshly-resized value back
+  // synchronously in the same change handler; a distinct confirm step also
+  // lets staff back out before committing to a real upload. No local loading
+  // state here, matching every other action in this file - the global
+  // loading overlay (triggered inside onUploadPersonalPhoto's own
+  // withLoading) already covers it.
+  const { personalPhotoBase64: pendingPersonalPhoto, handleFileChange: handlePersonalPhotoFileChange } = usePersonalPhotoUpload();
+  const handleConfirmPersonalPhotoUpload = () => {
+    if (!pendingPersonalPhoto) return;
+    onUploadPersonalPhoto(order.id, pendingPersonalPhoto);
+  };
 
   const [showPickupConfirm, setShowPickupConfirm] = useState(false);
   const [pickupIdTypeSelect, setPickupIdTypeSelect] = useState('');
@@ -556,8 +578,42 @@ export default function OrderDetailPanel({
                 <p className="text-[9px] text-zinc-500 font-bold uppercase text-center mt-2">Diupload oleh pelanggan saat pemesanan.</p>
               </div>
             ) : (
-              <div className="border-2 border-dashed border-black rounded-none py-6 text-center text-xs text-zinc-400 font-bold uppercase">
-                Tidak ada foto diunggah (verifikasi langsung di toko).
+              <div className="space-y-2">
+                <div className="border-2 border-dashed border-black rounded-none py-6 text-center text-xs text-zinc-400 font-bold uppercase px-3">
+                  Tidak ada foto diunggah (verifikasi langsung di toko).
+                </div>
+                {/* Optional - staff can attach a photo retroactively, but an
+                    order is allowed to have none forever; this is purely an
+                    added capability, never a requirement. */}
+                {pendingPersonalPhoto ? (
+                  <div className="border-2 border-black rounded-none bg-zinc-50 p-3 text-center space-y-2 shadow-[2px_2px_0px_rgba(0,0,0,1)]">
+                    <img
+                      src={pendingPersonalPhoto}
+                      alt="Pratinjau foto diri"
+                      className="mx-auto max-h-32 rounded-none object-contain border border-black"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleConfirmPersonalPhotoUpload}
+                      className="w-full py-2 bg-black hover:bg-brand hover:text-black text-white font-black text-[10px] rounded-none border-2 border-black uppercase tracking-widest cursor-pointer"
+                    >
+                      Unggah Foto Ini
+                    </button>
+                  </div>
+                ) : (
+                  <div className="border-2 border-dashed border-black rounded-none hover:bg-brand/5 transition-all bg-zinc-50 relative overflow-hidden">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handlePersonalPhotoFileChange}
+                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
+                    />
+                    <div className="py-4 text-center space-y-1">
+                      <Upload className="w-4 h-4 mx-auto text-zinc-600 stroke-[2.5]" />
+                      <p className="text-[10px] font-black text-black uppercase tracking-wider">Unggah Foto Sekarang (Opsional)</p>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
             {order.pickupIdType && (

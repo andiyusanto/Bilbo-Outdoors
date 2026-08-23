@@ -490,6 +490,14 @@ export default function PaymentGatewayPanel({ order, token, onSettled, pendingEx
       {!instruction ? (
         <div className="bg-white border-2 border-black p-6 rounded-none space-y-4 shadow-[4px_4px_0px_rgba(0,0,0,1)]">
           <h3 className="text-xs font-black uppercase text-black tracking-widest border-b-2 border-brand pb-2">PILIH METODE PEMBAYARAN</h3>
+          <div className="bg-amber-50 border-2 border-amber-600 p-3 rounded-none flex items-start gap-2">
+            <Clock className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+            <p className="text-[11px] text-amber-800 font-bold normal-case leading-relaxed">
+              Silakan pilih metode pembayaran yang tersedia, lakukan pembayaran maksimal {pendingExpiryHours} jam
+              semenjak booking ini dibuat. Booking akan otomatis expired jika tidak dibayar melebihi batas waktu
+              yang telah ditentukan, dan item yang dipilih akan kembali dibuka untuk umum.
+            </p>
+          </div>
           <div className="grid grid-cols-2 gap-2">
             {(['qris', 'va', 'emoney', 'cash'] as MethodTab[]).map((m) => {
               const isDisabled = m !== 'cash' && !isTestOrder;

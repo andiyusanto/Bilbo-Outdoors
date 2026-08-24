@@ -58,3 +58,23 @@ export function getAmountPaid(order: PaymentFields): number {
 export function getRemainingBalance(order: PaymentFields): number {
   return Math.max(0, order.totalPrice + (order.lateFee || 0) + getPenaltyTotal(order) - getAmountPaid(order));
 }
+
+// Mirrors expireStaleOrders' gating logic in server.ts exactly (keep both in
+// sync) - the real instant a still-Pending order first became eligible to
+// auto-expire, NOT when the system happened to next notice and flip it.
+// expireStaleOrders only runs lazily (on the next request that touches it),
+// so an order can sit past this instant for a while with its statusHistory
+// "Expired" entry's changedAt reflecting only the detection time, not this
+// true deadline - display both, never conflate them (see OrderDetailPanel's
+// Zona Berbahaya banner). A live WuzzPay payment_instruction pushes the real
+// deadline out past the plain createdAt+pendingExpiryHours rule, exactly like
+// the server-side check.
+export function getPendingExpiryDeadline(
+  order: Pick<Order, 'createdAt' | 'paymentInstruction'>,
+  pendingExpiryHours: number
+): Date {
+  const createdAtDeadlineMs = new Date(order.createdAt).getTime() + pendingExpiryHours * 60 * 60 * 1000;
+  const instructionExpiresAt = order.paymentInstruction?.expires_at;
+  const instructionMs = typeof instructionExpiresAt === 'string' ? new Date(instructionExpiresAt).getTime() : -Infinity;
+  return new Date(Math.max(createdAtDeadlineMs, instructionMs));
+}

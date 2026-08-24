@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Phone, UserCheck, AlertTriangle, CheckCircle, Clock, Printer, Search, Pencil, Upload } from 'lucide-react';
 import { Order, OrderStatus, Product, StoreSettings } from '../../types';
 import { formatDateLabel, formatDateTimeLabel, getTodayDateString } from '../../lib/date';
-import { calculateRentalCost, getRemainingBalance, getPenaltyTotal } from '../../pricing';
+import { calculateRentalCost, getRemainingBalance, getPenaltyTotal, getPendingExpiryDeadline } from '../../pricing';
 import { getDistinctCategories } from '../../lib/categories';
 import { useOrderEditActions } from '../../hooks/useOrderEditActions';
 import { usePersonalPhotoUpload } from '../../hooks/usePersonalPhotoUpload';
@@ -153,6 +153,12 @@ export default function OrderDetailPanel({
   const penaltyTotal = getPenaltyTotal(order);
   const totalInvoice = (order.totalPrice || 0) + (order.lateFee || 0) + penaltyTotal;
   const remainingBalance = getRemainingBalance(order);
+  // Only meaningful once Expired - the real deadline vs. when the system's
+  // lazy check actually noticed (see getPendingExpiryDeadline's comment).
+  const expiryDeadline = order.status === 'Expired' ? getPendingExpiryDeadline(order, settings.pendingExpiryHours) : null;
+  const expiryDetectedEntry = order.status === 'Expired'
+    ? [...(order.statusHistory || [])].reverse().find(e => e.status === 'Expired')
+    : undefined;
 
   // Edit-order form derived values - live client-side preview only, the
   // server recomputes rentDuration/totalPrice authoritatively on save.
@@ -627,10 +633,19 @@ export default function OrderDetailPanel({
           <div className="border-t-2 border-black pt-5 space-y-3">
             <h4 className="text-[10px] font-black text-zinc-400 uppercase tracking-wider">Alur Kerja Sewa</h4>
 
-            {order.status === 'Expired' && (
+            {order.status === 'Expired' && expiryDeadline && (
               <div className="bg-red-50 border-2 border-red-500 text-red-800 text-xs p-3 rounded-none flex items-start uppercase font-bold">
                 <AlertTriangle className="w-4 h-4 mr-2 shrink-0 mt-0.5" />
-                <span className="normal-case">Pesanan ini sudah kedaluwarsa (tidak dibayar dalam 2 jam) dan berhenti menahan stok. Jika penyewa ternyata sudah membayar, Anda tetap bisa menyetujuinya di bawah ini selama stok masih tersedia.</span>
+                <span className="normal-case">
+                  Pesanan ini sudah kedaluwarsa (tidak dibayar dalam {settings.pendingExpiryHours} jam) dan berhenti
+                  menahan stok. Jika penyewa ternyata sudah membayar, Anda tetap bisa menyetujuinya di bawah ini
+                  selama stok masih tersedia.
+                  <br />
+                  <span className="font-black">
+                    Kedaluwarsa sejak: {formatDateTimeLabel(expiryDeadline)}
+                    {expiryDetectedEntry && ` (terdeteksi sistem: ${formatDateTimeLabel(expiryDetectedEntry.changedAt)})`}
+                  </span>
+                </span>
               </div>
             )}
 

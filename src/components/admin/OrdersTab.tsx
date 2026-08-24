@@ -3,7 +3,7 @@ import { Search, ChevronRight, FileSpreadsheet, ArrowUpDown, ChevronUp, ChevronD
 import { OrderListItem, OrderStatus, Product, StoreSettings } from '../../types';
 import { useOrderActions } from '../../hooks/useOrderActions';
 import { useOrderEditActions } from '../../hooks/useOrderEditActions';
-import { formatDateLabel, formatDateTimeLabel, getDefaultDateRange } from '../../lib/date';
+import { formatDateLabel, formatDateTimeLabel, getDefaultDateRange, localDateFromInstant } from '../../lib/date';
 import { getAmountPaid, getRemainingBalance, getPenaltyTotal } from '../../pricing';
 import OrderDetailPanel from './OrderDetailPanel';
 import DateInput from '../DateInput';
@@ -23,7 +23,7 @@ function ordersToCsv(orders: OrderListItem[]): string {
     o.id,
     o.customerName,
     o.customerWhatsApp,
-    formatDateLabel(o.createdAt.split('T')[0]),
+    formatDateLabel(localDateFromInstant(o.createdAt)),
     formatDateLabel(o.startDate),
     formatDateLabel(o.endDate),
     o.rentDuration,
@@ -132,13 +132,13 @@ export default function OrdersTab({ orders, products, settings, orderActions, or
       o.id.toLowerCase().includes(orderSearch.toLowerCase());
     const matchesStatus = orderStatusFilter === 'All' || o.status === orderStatusFilter;
     // Filters by when the order was placed (createdAt), not the rental period -
-    // matches the "Tanggal Pemesanan" column below and the same field
-    // expireStaleOrders (server.ts) uses to decide Pending -> Expired, so "orders
-    // from this month" means the same thing everywhere in the app. createdAt is
-    // a full UTC ISO datetime; take its date portion via plain string split
-    // (same convention as getTodayDateString/getDefaultDateRange in lib/date.ts),
-    // not `new Date(...)`, to avoid a local-timezone off-by-one at the day boundary.
-    const orderDate = o.createdAt.split('T')[0];
+    // matches the "Tanggal Pemesanan" column below, so "orders from this month"
+    // means the same thing everywhere in the app. createdAt is a full UTC ISO
+    // datetime; take its LOCAL date portion (localDateFromInstant, same
+    // convention as getTodayDateString/getDefaultDateRange in lib/date.ts) -
+    // a plain string split on the raw ISO text would take the UTC date instead,
+    // off by one day for any order placed between local midnight and 07:00 WIB.
+    const orderDate = localDateFromInstant(o.createdAt);
     const matchesDateFrom = !orderDateFrom || orderDate >= orderDateFrom;
     const matchesDateTo = !orderDateTo || orderDate <= orderDateTo;
     return matchesSearch && matchesStatus && matchesDateFrom && matchesDateTo;
@@ -279,7 +279,7 @@ export default function OrdersTab({ orders, products, settings, orderActions, or
                       <p className="text-[10px] text-zinc-600 font-mono font-black mt-0.5">{order.id}</p>
                     </td>
                     <td className="px-5 py-4 text-xs text-zinc-800 font-bold uppercase font-mono">
-                      {formatDateLabel(order.createdAt.split('T')[0])}
+                      {formatDateLabel(localDateFromInstant(order.createdAt))}
                     </td>
                     <td className="px-5 py-4">
                       <div className="text-xs text-zinc-800 font-bold uppercase">

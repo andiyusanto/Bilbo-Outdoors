@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Clock, DollarSign, Calendar, ChevronDown } from 'lucide-react';
 import { OrderListItem, Product, DashboardStats } from '../../types';
-import { getDefaultDateRange, getTodayDateString } from '../../lib/date';
+import { getDefaultDateRange, getTodayDateString, localDateFromInstant } from '../../lib/date';
 import { getAmountPaid, getRemainingBalance } from '../../pricing';
 import DateInput from '../DateInput';
 
@@ -18,11 +18,13 @@ export default function OverviewTab({ orders, products }: OverviewTabProps) {
 
   // Every KPI/chart below is derived from this, not the raw `orders` prop, so
   // the Dari/Sampai range (by order.createdAt, i.e. Tanggal Pemesanan - same
-  // field Manajemen Order filters by and expireStaleOrders in server.ts uses)
-  // governs everything on this tab. Date-portion via plain string split, not
-  // `new Date(...)`, matching lib/date.ts's getTodayDateString convention.
+  // field Manajemen Order filters by) governs everything on this tab.
+  // localDateFromInstant takes createdAt's LOCAL date portion, matching
+  // lib/date.ts's getTodayDateString convention - not a plain string split on
+  // the raw UTC ISO text, which would be off by one day for any order placed
+  // between local midnight and 07:00 WIB.
   const dateFilteredOrders = orders.filter(o => {
-    const orderDate = o.createdAt.split('T')[0];
+    const orderDate = localDateFromInstant(o.createdAt);
     return (!overviewDateFrom || orderDate >= overviewDateFrom) &&
       (!overviewDateTo || orderDate <= overviewDateTo);
   });

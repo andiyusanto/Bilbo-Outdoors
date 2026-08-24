@@ -31,6 +31,17 @@ export function formatDateTimeInputLabel(value: string): string {
   return timePart ? `${formatDateLabel(datePart)}, ${timePart}` : formatDateLabel(datePart);
 }
 
+// Local calendar-day portion ("YYYY-MM-DD") of a real instant (createdAt,
+// rejectedAt, etc.) - local getters, NOT `.toISOString().split('T')[0]`,
+// which is UTC and misreports the day during WIB's local-midnight-to-07:00
+// gap - the exact same reasoning getTodayDateString below already documents,
+// just applied to an arbitrary instant instead of "now".
+export function localDateFromInstant(date: Date | string): string {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 // "Today" as YYYY-MM-DD, in the local timezone of wherever this runs - client
 // (staff's browser) or server (the deploy box, which per CLAUDE.md is set to
 // Asia/Jakarta to match the store). NOT `.toISOString().split('T')[0]`, which

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import { JobEntry, JobType } from '../../types';
 import { useApprovalActions } from '../../hooks/useApprovalActions';
-import { formatDateLabel, getDefaultDateRange } from '../../lib/date';
+import { formatDateLabel, getDefaultDateRange, localDateFromInstant } from '../../lib/date';
 import DateInput from '../DateInput';
 
 interface ApprovalTabProps {
@@ -228,7 +228,7 @@ export default function ApprovalTab({ jobEntries, approvalActions }: ApprovalTab
                       <td className="px-4 py-3 uppercase">{entry.itemName}</td>
                       <td className="px-4 py-3 uppercase">{JOB_TYPE_LABELS[entry.jobType]}</td>
                       <td className="px-4 py-3 text-red-700">{entry.rejectionReason}</td>
-                      <td className="px-4 py-3 font-mono text-red-700">{entry.rejectedAt ? formatDateLabel(entry.rejectedAt.split('T')[0]) : '-'}</td>
+                      <td className="px-4 py-3 font-mono text-red-700">{entry.rejectedAt ? formatDateLabel(localDateFromInstant(entry.rejectedAt)) : '-'}</td>
                     </tr>
                   ))
                 )}

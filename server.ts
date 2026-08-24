@@ -928,6 +928,19 @@ app.post('/api/products/upload-image', authenticateUser, asyncHandler(async (req
 // readiness is never applied retroactively. Active (not-yet-returned) orders are
 // unaffected by readiness and block through their scheduled endDate only, same as
 // before this feature.
+//
+// order.returnedAt is a real UTC instant (.toISOString()); its calendar day
+// must be read in Asia/Jakarta, not the server process's own ambient
+// timezone (same reasoning as the pickedUpAt/returnDateTime fix above - don't
+// let a future host with a different ambient TZ, e.g. a cloud container
+// defaulting to UTC, silently misreport the day) and not a plain string split
+// on the raw ISO text either (that grabs the UTC day, which is a calendar day
+// early for any return between local midnight and 07:00 WIB - it would start,
+// and therefore end, the readiness-blocked window one day too soon).
+function jakartaDateString(instant: string): string {
+  return new Date(new Date(instant).getTime() + 7 * 60 * 60 * 1000).toISOString().split('T')[0];
+}
+
 function calculateAllocatedStock(orders: Order[], products: Product[], startDateStr: string, endDateStr: string, excludeOrderId?: string): Record<string, number> {
   const startReq = new Date(startDateStr);
   const endReq = new Date(endDateStr);
@@ -970,8 +983,8 @@ function calculateAllocatedStock(orders: Order[], products: Product[], startDate
           // When readinessDays is 0, effectiveEnd lands one day BEFORE effectiveStart,
           // making the range empty - i.e. no blocking at all, immediately available
           // even on the return day itself, matching the pre-readiness-feature default.
-          effectiveStart = new Date(order.returnedAt!.split('T')[0]);
-          effectiveEnd = new Date(order.returnedAt!.split('T')[0]);
+          effectiveStart = new Date(jakartaDateString(order.returnedAt!));
+          effectiveEnd = new Date(jakartaDateString(order.returnedAt!));
           effectiveEnd.setDate(effectiveEnd.getDate() + (readinessDaysById.get(item.productId) || 0) - 1);
         } else {
           effectiveStart = orderStart;

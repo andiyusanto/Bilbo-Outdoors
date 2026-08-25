@@ -1,5 +1,4 @@
 import pg from 'pg';
-import dns from 'dns';
 import { Product, Order, OrderItem, StoreSettings, AppUser, JobPriceListItem, JobEntry } from '../src/types';
 import { defaultProducts } from './defaultProducts';
 import { defaultSettings } from './defaultSettings';
@@ -9,9 +8,13 @@ import { defaultJobPriceList } from './defaultJobPriceList';
 let pool: pg.Pool;
 
 export function initPostgresPool(connectionString: string): void {
-  // Supabase's pooler host is dual-stack (A + AAAA). Prefer IPv4 so this doesn't
-  // fail with ENETUNREACH on networks without a working IPv6 route.
-  dns.setDefaultResultOrder('ipv4first');
+  // Supabase's pooler host is dual-stack (A + AAAA), which can fail with
+  // ENETUNREACH/ETIMEDOUT on a network without a working IPv6 route - now
+  // fixed globally (dns.setDefaultResultOrder + net.setDefaultAutoSelectFamily)
+  // at the top of server.ts, unconditionally, not just here, since the same
+  // class of dual-stack host shows up in Telegram/WuzzPay/Supabase Storage
+  // calls too. Nothing to do here anymore; kept as a pointer for anyone
+  // grepping for the old fix location.
 
   // node-postgres auto-parses the DATE oid into a JS Date constructed from local
   // calendar components, which then re-serializes via the *server's* local

@@ -3,6 +3,8 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
+import dns from 'dns';
+import net from 'net';
 import { createServer as createViteServer } from 'vite';
 import { Product, Order, OrderItem, OrderStatus, PenaltyEntry, PublicOrder, OrderListItem, DashboardStats, StoreSettings, AppUser, PublicUser, UserRole, JobPriceListItem, JobEntry, JobType } from './src/types';
 import { defaultProducts } from './db/defaultProducts';
@@ -13,6 +15,25 @@ import { initPostgresPool, seedPostgresIfEmpty, readDBPostgres, writeDBPostgres,
 import { calculateRentalCost, calculateLegacyRentalCost, getAmountPaid, getRemainingBalance, getPenaltyTotal } from './src/pricing';
 import { hashPassword, verifyPassword, generateSessionToken } from './src/auth';
 import { formatDateLabel, getTodayDateString } from './src/lib/date';
+
+// Several outbound calls this server makes (Telegram, WuzzPay, Supabase
+// Storage/pooler) target dual-stack hosts. Node's Happy Eyeballs
+// (autoSelectFamily, on by default since Node 18.13) races BOTH the IPv4 and
+// IPv6 address in parallel on every connection - if this network's IPv6
+// route is broken (packets silently dropped rather than cleanly rejected),
+// that race can time out even though IPv4 alone would have connected
+// instantly. Confirmed 2026-08-24 against a real production failure:
+// "Telegram booking notification failed: AggregateError [ETIMEDOUT]" with
+// two sub-errors, api.telegram.org resolving to both an A and AAAA record.
+// dns.setDefaultResultOrder('ipv4first') alone (previously only set inside
+// initPostgresPool, Postgres-mode only) doesn't prevent this - it only
+// affects which address is tried first, not whether the second, hanging one
+// is also raced. Disabling autoSelectFamily entirely is what actually stops
+// that second attempt. Applied unconditionally here (not inside Postgres
+// init) so it also protects Telegram/WuzzPay/Supabase Storage calls in
+// JSON-file/local-dev mode, not just Postgres mode.
+dns.setDefaultResultOrder('ipv4first');
+net.setDefaultAutoSelectFamily(false);
 
 declare global {
   namespace Express {
@@ -63,15 +84,37 @@ const SITE_URL = 'https://www.bilbooutdoors.com';
 // Shared low-level sender - fetch only rejects on network-level failure,
 // never on HTTP error status, so throw explicitly here so a bad token/chat-id
 // reaches each call site's own `.catch()`.
+//
+// Retries up to 3 total attempts with a short backoff (1s, then 2s) on ANY
+// failure - both a network-level throw (e.g. the dual-stack ETIMEDOUT race,
+// see the autoSelectFamily fix above) and a non-2xx response. Safe to retry
+// blindly here since every call site is fire-and-forget (never blocks a
+// booking/payment) - the only cost of a full 3-attempt exhaustion is a few
+// extra seconds before the error is logged, not a delayed customer response.
+// A permanently bad token/chat-id will still retry 3x pointlessly before
+// failing, but that's a one-time setup mistake, not a recurring cost.
 async function sendTelegramMessage(text: string): Promise<void> {
   if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_BOOKING_CHAT_ID) return;
-  const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: TELEGRAM_BOOKING_CHAT_ID, text }),
-    signal: AbortSignal.timeout(5000),
-  });
-  if (!res.ok) throw new Error(`Telegram API responded ${res.status}: ${await res.text().catch(() => '')}`);
+  const RETRY_DELAYS_MS = [1000, 2000]; // between attempts 1->2 and 2->3 only
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 1 + RETRY_DELAYS_MS.length; attempt++) {
+    try {
+      const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: TELEGRAM_BOOKING_CHAT_ID, text }),
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) throw new Error(`Telegram API responded ${res.status}: ${await res.text().catch(() => '')}`);
+      return;
+    } catch (err) {
+      lastError = err;
+      if (attempt < RETRY_DELAYS_MS.length) {
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
+      }
+    }
+  }
+  throw lastError;
 }
 
 // Fire-and-forget from the /api/orders call site - never blocks or delays a

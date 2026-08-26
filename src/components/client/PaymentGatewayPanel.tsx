@@ -4,31 +4,7 @@ import { Check, ChevronDown, Copy, Phone, Clock } from 'lucide-react';
 import { PublicOrder } from '../../types';
 import { parseJsonOrThrow } from '../../lib/api';
 import { formatDateTimeLabel } from '../../lib/date';
-
-// Bank Virtual Account codes - standard numeric interbank codes, NOT the
-// letter codes ("BCA"/"BRI"/...) shown on WuzzPay's own "Bank List" doc page
-// (docs.wuzzpay.com/bank-list). Confirmed empirically against the sandbox
-// (Stage 2 of the payment gateway plan): a letter code was rejected
-// downstream by WuzzPay's provider (espay) with "Data tidak ditemukan = Bank
-// Code", while the numeric code from their own /v1/va/static example
-// (014 = BCA) succeeded. Their docs are internally inconsistent on this
-// parameter; these are the values that actually work.
-const BANK_OPTIONS = [
-  { code: '014', name: 'Bank Central Asia (BCA)' },
-  { code: '002', name: 'Bank Rakyat Indonesia (BRI)' },
-  { code: '009', name: 'Bank Negara Indonesia (BNI)' },
-  { code: '008', name: 'Bank Mandiri' },
-  { code: '451', name: 'Bank Syariah Indonesia (BSI)' },
-  { code: '013', name: 'Bank Permata' },
-  { code: '022', name: 'Bank CIMB Niaga' },
-  { code: '011', name: 'Bank Danamon' },
-];
-
-const WALLET_OPTIONS = [
-  { code: 'ovo', name: 'OVO' },
-  { code: 'dana', name: 'DANA' },
-  { code: 'gopay', name: 'GoPay' },
-];
+import { BANK_OPTIONS, WALLET_OPTIONS } from '../../lib/paymentChannels';
 
 const POLL_INTERVAL_MS = 5000;
 

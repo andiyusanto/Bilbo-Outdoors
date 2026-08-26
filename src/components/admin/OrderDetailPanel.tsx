@@ -4,6 +4,7 @@ import { Order, OrderStatus, Product, StoreSettings } from '../../types';
 import { formatDateLabel, formatDateTimeLabel, getTodayDateString } from '../../lib/date';
 import { calculateRentalCost, getRemainingBalance, getPenaltyTotal, getPendingExpiryDeadline } from '../../pricing';
 import { getDistinctCategories } from '../../lib/categories';
+import { getBankName, getWalletName } from '../../lib/paymentChannels';
 import { useOrderEditActions } from '../../hooks/useOrderEditActions';
 import { usePersonalPhotoUpload } from '../../hooks/usePersonalPhotoUpload';
 import DateInput from '../DateInput';
@@ -11,6 +12,23 @@ import CategoryFilterTabs from '../client/CategoryFilterTabs';
 import OrderResiPrint from './OrderResiPrint';
 
 const PICKUP_ID_TYPE_OPTIONS = ['KTP', 'SIM', 'KTA', 'KIP', 'Kartu Pelajar', 'Lainnya'];
+
+// order.paymentChannel is the raw code WuzzPay itself uses (a bank code like
+// "008", or a wallet code like "ovo") - not human-readable on its own, so
+// resolve it to a friendly name via the shared lookup where one exists.
+// Falls back to the bare code (previous behavior) for anything unrecognized,
+// so an unmapped/future channel never disappears from the display.
+function formatPaymentMethodLabel(method: string, channel?: string): string {
+  if (method === 'va') {
+    const bank = getBankName(channel);
+    return bank ? `VA ${bank} (${channel})` : `VA${channel ? ` (${channel})` : ''}`;
+  }
+  if (method === 'emoney') {
+    const wallet = getWalletName(channel);
+    return wallet ? `E-Wallet ${wallet} (${channel})` : `E-Wallet${channel ? ` (${channel})` : ''}`;
+  }
+  return `${method}${channel ? ` (${channel})` : ''}`;
+}
 
 interface LateCalculationResult {
   lateDays: number;
@@ -453,7 +471,7 @@ export default function OrderDetailPanel({
                 {order.paymentMethod && (
                   <div>
                     <p className="text-[9px] text-zinc-500 font-black uppercase tracking-wider">Metode</p>
-                    <p className="font-black text-black uppercase mt-0.5">{order.paymentMethod}{order.paymentChannel ? ` (${order.paymentChannel})` : ''}</p>
+                    <p className="font-black text-black uppercase mt-0.5">{formatPaymentMethodLabel(order.paymentMethod, order.paymentChannel)}</p>
                   </div>
                 )}
                 {order.wuzzpayLastStatus && (
@@ -464,7 +482,7 @@ export default function OrderDetailPanel({
                 )}
                 {order.wuzzpayTransactionId && (
                   <div className="col-span-2">
-                    <p className="text-[9px] text-zinc-500 font-black uppercase tracking-wider">ID Transaksi</p>
+                    <p className="text-[9px] text-zinc-500 font-black uppercase tracking-wider">ID Transaksi WuzzPay</p>
                     <p className="font-mono text-black mt-0.5 break-all">{order.wuzzpayTransactionId}</p>
                   </div>
                 )}

@@ -170,6 +170,13 @@ export default function OrderDetailPanel({
     setPenaltyAmountInput('');
   };
 
+  // The VA number generated for this specific customer's charge, if this was
+  // a Virtual Account order - order.paymentInstruction is the raw payload
+  // WuzzPay returned at charge time (see src/types.ts), untyped beyond that.
+  const vaNumber = order.paymentMethod === 'va' && typeof order.paymentInstruction?.va_number === 'string'
+    ? order.paymentInstruction.va_number
+    : undefined;
+
   const penaltyTotal = getPenaltyTotal(order);
   const totalInvoice = (order.totalPrice || 0) + (order.lateFee || 0) + penaltyTotal;
   const remainingBalance = getRemainingBalance(order);
@@ -472,6 +479,12 @@ export default function OrderDetailPanel({
                   <div>
                     <p className="text-[9px] text-zinc-500 font-black uppercase tracking-wider">Metode</p>
                     <p className="font-black text-black uppercase mt-0.5">{formatPaymentMethodLabel(order.paymentMethod, order.paymentChannel)}</p>
+                  </div>
+                )}
+                {vaNumber && (
+                  <div className="col-span-2">
+                    <p className="text-[9px] text-zinc-500 font-black uppercase tracking-wider">Nomor VA</p>
+                    <p className="font-mono text-black mt-0.5 break-all">{vaNumber}</p>
                   </div>
                 )}
                 {order.wuzzpayLastStatus && (

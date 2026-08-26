@@ -203,6 +203,37 @@ export function useOrderActions({ token, orders, setOrders, fetchStats }: UseOrd
     });
   };
 
+  // Admin-triggered, on-demand re-check against WuzzPay's own API for this
+  // order's real transaction status - see server.ts's /verify-payment route
+  // comment for why this exists (the webhook and the customer's own polling
+  // can both miss a settlement if the tab closes fast enough). Same
+  // full-order-response/state-merge shape as handleUpdatePayment/handleAddPenalty.
+  const handleVerifyWuzzpayPayment = async (orderId: string) => {
+    await withLoading(async () => {
+      try {
+        const res = await fetch(`/api/orders/${orderId}/verify-payment`, {
+          method: 'POST',
+          headers: jsonAuthHeaders(token),
+        });
+        const updatedOrder = await parseJsonOrThrow(res);
+        setOrders(prev => prev.map(o => o.id === orderId ? updatedOrder : o));
+        if (selectedOrder?.id === orderId) {
+          setSelectedOrder(updatedOrder);
+        }
+        if (updatedOrder.status === 'Approved/Paid' || updatedOrder.status === 'Item Picked Up' || updatedOrder.status === 'Item Returned/Completed') {
+          notifySuccess('Pembayaran terverifikasi oleh WuzzPay - pesanan otomatis disetujui!');
+        } else if (updatedOrder.wuzzpayLastStatus === 'failed' || updatedOrder.wuzzpayLastStatus === 'expired') {
+          notifyError(`WuzzPay: transaksi ini berstatus "${updatedOrder.wuzzpayLastStatus}" - belum/tidak dibayar.`);
+        } else {
+          notifySuccess('WuzzPay mengonfirmasi: pesanan ini masih belum dibayar.');
+        }
+        fetchStats();
+      } catch (err: any) {
+        notifyError(`Gagal memverifikasi pembayaran: ${err.message}`);
+      }
+    });
+  };
+
   // Owner-only (enforced server-side too) - permanently removes an order,
   // e.g. an erroneous double-booking. Not allowed once completed.
   const handleDeleteOrder = async (orderId: string) => {
@@ -304,6 +335,7 @@ export function useOrderActions({ token, orders, setOrders, fetchStats }: UseOrd
     handleOpenOrderDetail,
     handleUpdateOrderStatus,
     handleUpdatePayment,
+    handleVerifyWuzzpayPayment,
     handleAddPenalty,
     handleRemovePenalty,
     handleUploadPersonalPhoto,

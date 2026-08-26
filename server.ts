@@ -1502,6 +1502,54 @@ app.put('/api/orders/:id/status', authenticateUser, asyncHandler(async (req, res
   });
 }));
 
+// Admin: manually ask WuzzPay for this order's real transaction status, on
+// demand - rather than waiting for the webhook or the customer's own open
+// payment page to catch a settlement. Exists specifically for the gap
+// confirmed 2026-08-26 in production: a customer who pays and closes their
+// tab before a single payment-status poll completes depends entirely on the
+// webhook, which isn't guaranteed to arrive for every provider/event. Staff
+// previously had no way to actually verify a claimed payment other than
+// trusting the customer and clicking "Konfirmasi Pembayaran" blind. This is
+// the exact same fetchWuzzpaySettlementStatus + applyWuzzpaySettlementStatus
+// pair the public payment-status route already uses (see its own comments) -
+// not a new WuzzPay integration, just an admin-triggered on-demand version of
+// the identical check. Only meaningful for orders that actually went through
+// WuzzPay (wuzzpayTransactionId set) - cash orders never have one.
+app.post('/api/orders/:id/verify-payment', authenticateUser, asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const snapshot = await withDbLock(async () => {
+    const orders = await readOrders();
+    const order = orders.find((o: Order) => o.id === id);
+    return order ? { wuzzpayTransactionId: order.wuzzpayTransactionId } : null;
+  });
+  if (!snapshot) return res.status(404).json({ error: 'Pesanan tidak ditemukan.' });
+  if (!snapshot.wuzzpayTransactionId) {
+    return res.status(400).json({ error: 'Pesanan ini tidak memiliki transaksi WuzzPay untuk diverifikasi (kemungkinan dibayar tunai).' });
+  }
+
+  // SLOW outbound call - deliberately outside withDbLock, same reasoning as
+  // fetchWuzzpaySettlementStatus's own comment (a slow WuzzPay response must
+  // never hold up every other write route app-wide).
+  const wuzzpayStatus = await fetchWuzzpaySettlementStatus(snapshot.wuzzpayTransactionId, id);
+
+  const result = await withDbLock(async () => {
+    const orders = await readOrders();
+    const order = orders.find((o: Order) => o.id === id);
+    if (!order) return null;
+    const { changed, justSettled } = applyWuzzpaySettlementStatus(order, wuzzpayStatus);
+    if (changed) {
+      await writeOrders(orders);
+    }
+    return { order, justSettled };
+  });
+  if (!result) return res.status(404).json({ error: 'Pesanan tidak ditemukan.' });
+  if (result.justSettled) {
+    console.log(`WuzzPay manual verification settled order ${result.order.id} via transaction ${result.order.wuzzpayTransactionId}`);
+    sendTelegramPaymentNotification(result.order).catch(err => console.error('Telegram payment notification failed:', err));
+  }
+  res.json(result.order);
+}));
+
 // Admin: correct/top-up the amount collected on an order without changing its
 // status - e.g. a partially-paying customer tops up before pickup. Capped at
 // the current full invoice (totalPrice + lateFee + any penalties, if already calculated).

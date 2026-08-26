@@ -103,6 +103,7 @@ export default function OrdersTab({ orders, products, settings, orderActions, or
     handleOpenOrderDetail,
     handleUpdateOrderStatus,
     handleUpdatePayment,
+    handleVerifyWuzzpayPayment,
     handleAddPenalty,
     handleRemovePenalty,
     handleUploadPersonalPhoto,
@@ -362,6 +363,7 @@ export default function OrdersTab({ orders, products, settings, orderActions, or
           onClose={handleCloseOrderDetail}
           onUpdateStatus={handleUpdateOrderStatus}
           onUpdatePayment={handleUpdatePayment}
+          onVerifyWuzzpayPayment={handleVerifyWuzzpayPayment}
           onAddPenalty={handleAddPenalty}
           onRemovePenalty={handleRemovePenalty}
           onUploadPersonalPhoto={handleUploadPersonalPhoto}

@@ -26,6 +26,7 @@ interface OrderDetailPanelProps {
   onClose: () => void;
   onUpdateStatus: (orderId: string, newStatus: OrderStatus, pickupIdType?: string, amountPaid?: number) => void;
   onUpdatePayment: (orderId: string, amountPaid: number) => void;
+  onVerifyWuzzpayPayment: (orderId: string) => void;
   onAddPenalty: (orderId: string, penalty: { type: 'Kerusakan' | 'Kehilangan'; productId: string; description: string; amount: number }) => void;
   onRemovePenalty: (orderId: string, penaltyId: string) => void;
   onUploadPersonalPhoto: (orderId: string, photoDataUrl: string) => void;
@@ -49,6 +50,7 @@ export default function OrderDetailPanel({
   onClose,
   onUpdateStatus,
   onUpdatePayment,
+  onVerifyWuzzpayPayment,
   onAddPenalty,
   onRemovePenalty,
   onUploadPersonalPhoto,
@@ -647,6 +649,16 @@ export default function OrderDetailPanel({
                   </span>
                 </span>
               </div>
+            )}
+
+            {(order.status === 'Pending' || order.status === 'Expired') && order.wuzzpayTransactionId && (
+              <button
+                onClick={() => onVerifyWuzzpayPayment(order.id)}
+                className="w-full py-3 bg-white hover:bg-zinc-100 text-black font-black text-xs border-2 border-black shadow-[3px_3px_0px_rgba(0,0,0,1)] rounded-none transition-all uppercase tracking-widest cursor-pointer flex items-center justify-center gap-2"
+              >
+                <Search className="w-4 h-4" />
+                Cek Status ke WuzzPay
+              </button>
             )}
 
             {(order.status === 'Pending' || order.status === 'Expired') && !showPaymentConfirm && (

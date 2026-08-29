@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Clock, Save, Megaphone } from 'lucide-react';
+import { Clock, Save, Megaphone, ScrollText } from 'lucide-react';
 import { StoreSettings, WeeklyHours } from '../../types';
 import { useSettingsActions } from '../../hooks/useSettingsActions';
 
@@ -204,6 +204,22 @@ export default function SettingsTab({ settings, settingsActions }: SettingsTabPr
             Satu baris = satu teks yang tampil bergantian di bar bawah. Bisa untuk nama kategori, info diskon, atau pengumuman lain - bebas.
           </p>
         </div>
+      </div>
+
+      <div className="bg-white border-2 border-black rounded-none shadow-[4px_4px_0px_rgba(0,0,0,1)] p-5 space-y-4 max-w-xl">
+        <h3 className="text-xs font-black text-black uppercase tracking-wider flex items-center">
+          <ScrollText className="w-4 h-4 mr-2 text-black stroke-[2.5]" />
+          Syarat &amp; Ketentuan
+        </h3>
+        <p className="text-[10px] text-zinc-500 font-semibold normal-case leading-relaxed -mt-2">
+          Teks ini tampil di popup halaman checkout publik - pelanggan wajib mencentang persetujuan sebelum bisa mengirim pemesanan. Baris kosong akan tampil sebagai jarak antar paragraf.
+        </p>
+        <textarea
+          rows={14}
+          value={formState.termsAndConditions}
+          onChange={(e) => setFormState(prev => ({ ...prev, termsAndConditions: e.target.value }))}
+          className="block w-full bg-white border-2 border-black px-3 py-2 text-xs font-bold rounded-none focus:outline-none normal-case font-mono"
+        />
       </div>
 
       <button

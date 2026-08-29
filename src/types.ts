@@ -151,6 +151,7 @@ export interface StoreSettings {
   operatingHours: WeeklyHours;
   footer: FooterSettings;
   runningText: string[]; // marquee phrases, in order - free text, not limited to category names (can hold promo/discount announcements etc.)
+  termsAndConditions: string; // free text shown in the checkout page's Syarat & Ketentuan popup - plain text, line breaks preserved, no structured fields
 }
 
 export type UserRole = 'owner' | 'karyawan';

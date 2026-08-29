@@ -188,7 +188,8 @@ CREATE TABLE IF NOT EXISTS settings (
   pending_expiry_hours INTEGER NOT NULL DEFAULT 2,
   operating_hours JSONB NOT NULL,
   footer JSONB,
-  running_text VARCHAR(255)[]
+  running_text VARCHAR(255)[],
+  terms_and_conditions TEXT
 );
 
 -- 5. Membuat Tabel Users (akun staff - owner/master & karyawan)
@@ -308,7 +309,8 @@ CREATE TABLE IF NOT EXISTS job_entries (
 >   pending_expiry_hours INTEGER NOT NULL DEFAULT 2,
 >   operating_hours JSONB NOT NULL,
 >   footer JSONB,
->   running_text VARCHAR(255)[]
+>   running_text VARCHAR(255)[],
+>   terms_and_conditions TEXT
 > );
 > ```
 > Setelah tabel dibuat, boot aplikasi berikutnya akan otomatis mengisi baris default (lihat `seedPostgresIfEmpty` di `db/postgres.ts`) - tidak perlu INSERT manual.
@@ -403,6 +405,11 @@ CREATE TABLE IF NOT EXISTS job_entries (
 > **Sudah pernah menjalankan Step A sebelum index `idx_order_items_order_id` ada?** Jalankan ini sekali di SQL Editor yang sama (aman dijalankan berulang, tidak mengubah data apa pun). `order_items.order_id` di-query lewat `WHERE`/`DELETE` di setiap penulisan order (lihat `writeOrdersPostgres` di `db/postgres.ts`), tapi Postgres tidak otomatis membuat index untuk kolom foreign key (hanya sisi yang direferensikan, `orders.id`, yang otomatis ter-index) - tanpa index ini, setiap penulisan order melakukan sequential scan ke seluruh tabel `order_items`.
 > ```sql
 > CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id);
+> ```
+
+> **Sudah pernah menjalankan Step A sebelum kolom `terms_and_conditions` di `settings` ada?** Jalankan ini sekali di SQL Editor yang sama (aman dijalankan berulang) - nullable tanpa default; kode aplikasi (`rowToSettings` di `db/postgres.ts`) otomatis memakai teks default bawaan (`db/defaultSettings.ts`) selama kolom masih `NULL`. Menyimpan teks bebas Syarat & Ketentuan yang ditampilkan lewat popup di halaman checkout publik (wajib dicentang sebelum pelanggan bisa kirim pemesanan) - diatur dari menu "Pengaturan".
+> ```sql
+> ALTER TABLE settings ADD COLUMN IF NOT EXISTS terms_and_conditions TEXT;
 > ```
 
 ### Step B: Dapatkan Connection String Supabase Anda

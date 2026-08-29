@@ -38,6 +38,12 @@ const FALLBACK_RUNNING_TEXT = [
   'Tent & Shelter', 'Sleeping Systems', 'Carrier & Backpack', 'Cooking Gear',
   'Lighting & Power', 'Hiking Essentials', 'Camp Support', 'Apparel & Personal Gear',
 ];
+// Shown in the checkout page's Syarat & Ketentuan popup before GET
+// /api/store-info resolves (or if it ever fails) - kept intentionally short
+// and generic here, unlike the other fallbacks above which mirror real
+// content exactly, since the real text is expected to always be configured
+// via Pengaturan by the time this ever matters in practice.
+const FALLBACK_TERMS = 'Syarat & ketentuan belum tersedia. Silakan hubungi kami jika ada pertanyaan sebelum melanjutkan pemesanan.';
 
 // Lazy-loaded: the admin dashboard (all its tabs/hooks) has no reason to be
 // in the bundle every client visitor downloads on first paint.
@@ -52,6 +58,7 @@ export default function App() {
   const [footer, setFooter] = useState<FooterSettings>(FALLBACK_FOOTER);
   const [operatingHours, setOperatingHours] = useState<WeeklyHours>(FALLBACK_OPERATING_HOURS);
   const [runningText, setRunningText] = useState<string[]>(FALLBACK_RUNNING_TEXT);
+  const [termsAndConditions, setTermsAndConditions] = useState<string>(FALLBACK_TERMS);
 
   useEffect(() => {
     fetch('/api/store-info')
@@ -64,6 +71,7 @@ export default function App() {
         if (info.footer) setFooter(info.footer);
         if (info.operatingHours) setOperatingHours(info.operatingHours);
         if (Array.isArray(info.runningText)) setRunningText(info.runningText);
+        if (info.termsAndConditions) setTermsAndConditions(info.termsAndConditions);
       })
       .catch(() => {}); // keep the fallback values - footer stays functional either way
   }, []);
@@ -117,7 +125,7 @@ export default function App() {
         <Routes>
           <Route
             path="/"
-            element={<ClientPortal onAdminToggle={() => {}} runningText={runningText} />}
+            element={<ClientPortal onAdminToggle={() => {}} runningText={runningText} termsAndConditions={termsAndConditions} />}
           />
           <Route path="/pesanan/:token" element={<OrderConfirmationPage />} />
           <Route

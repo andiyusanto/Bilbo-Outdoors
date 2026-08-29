@@ -31,6 +31,7 @@ const DEFAULT_SETTINGS: StoreSettings = {
     copyrightText: '',
   },
   runningText: [],
+  termsAndConditions: '',
 };
 
 export function useAdminData({ isLoggedIn, token, role, onUnauthorized }: UseAdminDataParams) {

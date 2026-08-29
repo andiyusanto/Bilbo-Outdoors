@@ -18,6 +18,7 @@ import DiscountCarousel from './client/DiscountCarousel';
 interface ClientPortalProps {
   onAdminToggle: () => void;
   runningText?: string[];
+  termsAndConditions: string;
 }
 
 // Fallback if the parent's /api/store-info fetch hasn't resolved yet (or ever failed) -
@@ -34,7 +35,7 @@ const DEFAULT_RUNNING_TEXT = [
 // animation makes long text fly past unreadably fast (or short text crawl).
 const MARQUEE_PIXELS_PER_SECOND = 70;
 
-export default function ClientPortal({ onAdminToggle, runningText }: ClientPortalProps) {
+export default function ClientPortal({ onAdminToggle, runningText, termsAndConditions }: ClientPortalProps) {
   const marqueeItems = runningText && runningText.length > 0 ? runningText : DEFAULT_RUNNING_TEXT;
 
   // Measures one copy of the marquee content so its scroll animation duration
@@ -284,6 +285,7 @@ export default function ClientPortal({ onAdminToggle, runningText }: ClientPorta
             submittingOrder={submittingOrder}
             cartIsEmpty={Object.keys(cart).length === 0}
             onSubmit={handleCheckout}
+            termsAndConditions={termsAndConditions}
           />
         </div>
       </div>

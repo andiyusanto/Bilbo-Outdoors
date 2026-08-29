@@ -520,6 +520,7 @@ async function initDatabase(): Promise<void> {
         if (!parsed.settings.footer) parsed.settings.footer = defaultSettings.footer;
         if (!parsed.settings.runningText) parsed.settings.runningText = defaultSettings.runningText;
         if (!parsed.settings.pendingExpiryHours) parsed.settings.pendingExpiryHours = defaultSettings.pendingExpiryHours;
+        if (!parsed.settings.termsAndConditions) parsed.settings.termsAndConditions = defaultSettings.termsAndConditions;
         if (!parsed.users) parsed.users = defaultUsers;
         if (!parsed.jobPriceList) parsed.jobPriceList = defaultJobPriceList;
         if (!parsed.jobEntries) parsed.jobEntries = [];
@@ -2191,6 +2192,7 @@ app.get('/api/store-info', asyncHandler(async (req, res) => {
       copyrightText: savedFooter.copyrightText || defaultSettings.footer.copyrightText,
     },
     runningText: savedRunningText && savedRunningText.length > 0 ? savedRunningText : defaultSettings.runningText,
+    termsAndConditions: settings.termsAndConditions || defaultSettings.termsAndConditions,
   });
 }));
 
@@ -2203,9 +2205,9 @@ app.get('/api/settings', authenticateUser, requireOwner, asyncHandler(async (req
 
 app.put('/api/settings', authenticateUser, requireOwner, asyncHandler(async (req, res) => {
   await withDbLock(async () => {
-    const { lateToleranceHours, pendingExpiryHours, operatingHours, footer, runningText } = req.body;
+    const { lateToleranceHours, pendingExpiryHours, operatingHours, footer, runningText, termsAndConditions } = req.body;
     const db = await readDB();
-    db.settings = { lateToleranceHours, pendingExpiryHours, operatingHours, footer, runningText };
+    db.settings = { lateToleranceHours, pendingExpiryHours, operatingHours, footer, runningText, termsAndConditions };
     await writeDB(db);
     res.json(db.settings);
   });

@@ -1,5 +1,6 @@
-import { FormEvent, ChangeEvent } from 'react';
+import { FormEvent, ChangeEvent, useState } from 'react';
 import { FileText, AlertCircle, Upload, ShieldAlert } from 'lucide-react';
+import TermsModal from '../TermsModal';
 
 interface CheckoutFormProps {
   customerName: string;
@@ -13,6 +14,7 @@ interface CheckoutFormProps {
   submittingOrder: boolean;
   cartIsEmpty: boolean;
   onSubmit: (e: FormEvent) => void;
+  termsAndConditions: string;
 }
 
 export default function CheckoutForm({
@@ -27,7 +29,11 @@ export default function CheckoutForm({
   submittingOrder,
   cartIsEmpty,
   onSubmit,
+  termsAndConditions,
 }: CheckoutFormProps) {
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
+
   return (
     <div className="bg-white border-2 border-black rounded-none shadow-[4px_4px_0px_rgba(0,0,0,1)] p-6 space-y-5">
       <h2 className="font-display font-black text-black text-lg flex items-center uppercase tracking-tight border-b-4 border-brand pb-2">
@@ -113,14 +119,38 @@ export default function CheckoutForm({
           <p>Foto Anda diunggah dengan aman ke server enkripsi Bilbo Outdoors dan hanya digunakan untuk kepentingan verifikasi identitas & jaminan sewa.</p>
         </div>
 
+        <label className="flex items-start gap-2.5 text-[10px] text-zinc-700 font-bold uppercase leading-normal cursor-pointer">
+          <input
+            type="checkbox"
+            checked={agreedToTerms}
+            onChange={(e) => setAgreedToTerms(e.target.checked)}
+            className="mt-0.5 w-4 h-4 shrink-0 accent-black cursor-pointer"
+          />
+          <span>
+            Saya sudah membaca dan menyetujui{' '}
+            <button
+              type="button"
+              onClick={() => setShowTermsModal(true)}
+              className="underline decoration-2 underline-offset-2 hover:text-brand-hover cursor-pointer"
+            >
+              Syarat &amp; Ketentuan
+            </button>{' '}
+            Bilbo Outdoors.
+          </span>
+        </label>
+
         <button
           type="submit"
-          disabled={submittingOrder || cartIsEmpty}
+          disabled={submittingOrder || cartIsEmpty || !agreedToTerms}
           className="w-full flex justify-center py-4 px-4 border-2 border-black rounded-none shadow-[4px_4px_0px_var(--brand-color)] text-xs font-black uppercase tracking-widest bg-black text-brand hover:bg-brand hover:text-black transition-colors focus:outline-none mt-6 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
         >
           {submittingOrder ? 'Memproses Pesanan...' : 'Kirim Pemesanan & Bayar'}
         </button>
       </form>
+
+      {showTermsModal && (
+        <TermsModal content={termsAndConditions} onClose={() => setShowTermsModal(false)} />
+      )}
     </div>
   );
 }

@@ -11,7 +11,7 @@ import DateInput from '../DateInput';
 import CategoryFilterTabs from '../client/CategoryFilterTabs';
 import OrderResiPrint from './OrderResiPrint';
 
-const PICKUP_ID_TYPE_OPTIONS = ['KTP', 'SIM', 'KTA', 'KIP', 'Kartu Pelajar', 'Lainnya'];
+const PICKUP_ID_TYPE_OPTIONS = ['KTP', 'SIM', 'KTA', 'KIP', 'Kartu Pelajar', 'Uang Jaminan', 'Lainnya'];
 
 // order.paymentChannel is the raw code WuzzPay itself uses (a bank code like
 // "008", or a wallet code like "ovo") - not human-readable on its own, so
@@ -124,6 +124,7 @@ export default function OrderDetailPanel({
   const [showPickupConfirm, setShowPickupConfirm] = useState(false);
   const [pickupIdTypeSelect, setPickupIdTypeSelect] = useState('');
   const [pickupIdTypeCustom, setPickupIdTypeCustom] = useState('');
+  const [pickupCollateralAmountInput, setPickupCollateralAmountInput] = useState('');
 
   const [showPaymentConfirm, setShowPaymentConfirm] = useState(false);
   const [paymentAmountInput, setPaymentAmountInput] = useState(String(order.totalPrice));
@@ -136,14 +137,25 @@ export default function OrderDetailPanel({
   const [penaltyDescription, setPenaltyDescription] = useState('');
   const [penaltyAmountInput, setPenaltyAmountInput] = useState('');
 
-  const resolvedPickupIdType = pickupIdTypeSelect === 'Lainnya' ? pickupIdTypeCustom.trim() : pickupIdTypeSelect;
-  const canConfirmPickup = pickupIdTypeSelect !== '' && (pickupIdTypeSelect !== 'Lainnya' || pickupIdTypeCustom.trim() !== '');
+  // "Uang Jaminan" (cash held as collateral instead of an ID card) isn't a
+  // new structured field - like "Lainnya" already does, the entered amount
+  // is folded directly into the same free-text pickupIdType string staff and
+  // the resi already read, so this stays a pure UI/display addition with no
+  // new order field, no refund tracking, and no interaction with the
+  // existing late-fee/penalty/payment logic.
+  const resolvedPickupIdType = pickupIdTypeSelect === 'Lainnya' ? pickupIdTypeCustom.trim()
+    : pickupIdTypeSelect === 'Uang Jaminan' ? `Uang Jaminan (Rp ${Number(pickupCollateralAmountInput || 0).toLocaleString('id-ID')})`
+    : pickupIdTypeSelect;
+  const canConfirmPickup = pickupIdTypeSelect !== ''
+    && (pickupIdTypeSelect !== 'Lainnya' || pickupIdTypeCustom.trim() !== '')
+    && (pickupIdTypeSelect !== 'Uang Jaminan' || (pickupCollateralAmountInput !== '' && Number(pickupCollateralAmountInput) > 0));
 
   const handleConfirmPickup = () => {
     onUpdateStatus(order.id, 'Item Picked Up', resolvedPickupIdType);
     setShowPickupConfirm(false);
     setPickupIdTypeSelect('');
     setPickupIdTypeCustom('');
+    setPickupCollateralAmountInput('');
   };
 
   const handleConfirmPayment = () => {
@@ -750,7 +762,7 @@ export default function OrderDetailPanel({
                   onChange={(e) => setPickupIdTypeSelect(e.target.value)}
                   className="w-full bg-white border-2 border-black px-3 py-2.5 text-xs font-black uppercase rounded-none focus:outline-none cursor-pointer"
                 >
-                  <option value="">Pilih jenis kartu identitas...</option>
+                  <option value="">Pilih jaminan yang diberikan...</option>
                   {PICKUP_ID_TYPE_OPTIONS.map((opt) => (
                     <option key={opt} value={opt}>{opt}</option>
                   ))}
@@ -766,9 +778,20 @@ export default function OrderDetailPanel({
                   />
                 )}
 
+                {pickupIdTypeSelect === 'Uang Jaminan' && (
+                  <input
+                    type="number"
+                    min={0}
+                    value={pickupCollateralAmountInput}
+                    onChange={(e) => setPickupCollateralAmountInput(e.target.value)}
+                    placeholder="Jumlah Uang Jaminan (Rp)"
+                    className="w-full bg-white border-2 border-black px-3 py-2.5 text-xs font-bold rounded-none focus:outline-none"
+                  />
+                )}
+
                 <div className="flex gap-2">
                   <button
-                    onClick={() => { setShowPickupConfirm(false); setPickupIdTypeSelect(''); setPickupIdTypeCustom(''); }}
+                    onClick={() => { setShowPickupConfirm(false); setPickupIdTypeSelect(''); setPickupIdTypeCustom(''); setPickupCollateralAmountInput(''); }}
                     className="flex-1 py-2.5 bg-white border-2 border-black text-black hover:bg-zinc-100 font-black text-xs rounded-none transition-all uppercase tracking-wider cursor-pointer"
                   >
                     Batal

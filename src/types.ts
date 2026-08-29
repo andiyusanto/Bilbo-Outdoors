@@ -63,7 +63,7 @@ export interface Order {
   createdAt: string;
   returnedAt?: string; // ISO datetime, set once when status transitions into 'Item Returned/Completed'
   pickedUpAt?: string; // ISO datetime, set once when status transitions into 'Item Picked Up' - anchors the late-fee deadline (pickedUpAt + rentDuration*24h), see calculate-late in server.ts
-  pickupIdType?: string; // type of physical ID card left as collateral in person (KTP/SIM/KTA/KIP/Kartu Pelajar/etc.), admin-entered at the Approved/Paid -> Item Picked Up transition
+  pickupIdType?: string; // what was left as collateral in person - a physical ID card type (KTP/SIM/KTA/KIP/Kartu Pelajar/etc.) or a cash amount ("Uang Jaminan (Rp ...)", the amount folded directly into this same free-text field, no separate structured field/refund tracking), admin-entered at the Approved/Paid -> Item Picked Up transition
   lateDays?: number;
   lateFee?: number;
   amountPaid?: number; // total collected so far; undefined/0 while still Pending. remainingBalance is always derived (totalPrice + (lateFee||0)) - amountPaid, never stored.

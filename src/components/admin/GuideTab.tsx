@@ -257,18 +257,37 @@ export default function GuideTab() {
         <p className="font-bold text-xs mt-3">Alur status pesanan</p>
         <StatusFlow statuses={['Pending', 'Approved/Paid', 'Item Picked Up', 'Item Returned/Completed']} branch="Expired" />
         <p>
-          <strong>Expired</strong> adalah cabang khusus: pesanan Pending yang belum dibayar dalam 2 jam otomatis berubah
+          <strong>Expired</strong> adalah cabang khusus: pesanan Pending yang belum dibayar dalam batas waktu di{' '}
+          <Ui>Pengaturan</Ui> &rarr; <Ui>Batas Waktu Pembayaran</Ui> (lihat 1.10, default 2 jam) otomatis berubah
           menjadi Expired, namun tetap bisa disetujui manual selama stok masih tersedia.
         </p>
+        <Note label="Waktu kedaluwarsa yang tercatat bukan waktu sebenarnya pesanan jadi tidak valid">
+          Pengecekan kedaluwarsa hanya berjalan saat ada aktivitas (pelanggan membuka katalog, membuat pesanan baru,
+          atau staf membuka Manajemen Order) &mdash; bukan lewat penjadwalan otomatis di belakang layar. Karena itu,
+          panel Detail Order menampilkan dua waktu terpisah pada pesanan Expired: <Ui>Kedaluwarsa sejak</Ui> (batas
+          waktu sebenarnya) dan <Ui>terdeteksi sistem</Ui> (kapan sistem baru menyadarinya, bisa beberapa jam lebih
+          lambat jika tidak ada aktivitas di antaranya). Stok tidak pernah tertahan lebih lama dari batas waktu
+          sebenarnya, walau tercatatnya belakangan.
+        </Note>
         <p className="font-bold text-xs mt-3">Panel Detail Order</p>
         <Steps
           items={[
             <>
-              Saat Pending/Expired, setelah verifikasi bukti pembayaran (lihat 2.7): tekan{' '}
-              <Ui>Konfirmasi Pembayaran (Setujui Sewa)</Ui>. Nominal terisi otomatis sesuai Total Biaya &mdash; ubah
-              nominal ini jika penyewa hanya membayar sebagian (DP/uang muka).
+              Saat Pending/Expired dari pembayaran online (QRIS/Transfer Bank/E-Wallet): tekan{' '}
+              <Ui>Cek Status ke WuzzPay</Ui> untuk menanyakan langsung ke WuzzPay apakah pesanan ini sudah benar-benar
+              dibayar, sebelum memutuskan menyetujui manual &mdash; lebih akurat daripada hanya mempercayai klaim
+              pelanggan.
             </>,
-            <>Saat pelanggan mengambil barang: pilih <Ui>Jaminan yang Diberikan</Ui>, lalu <Ui>Konfirmasi &amp; Serahkan Barang</Ui>.</>,
+            <>
+              Setelah memverifikasi bukti pembayaran (lihat 2.7): tekan <Ui>Konfirmasi Pembayaran (Setujui Sewa)</Ui>.
+              Nominal terisi otomatis sesuai Total Biaya &mdash; ubah nominal ini jika penyewa hanya membayar sebagian
+              (DP/uang muka).
+            </>,
+            <>
+              Saat pelanggan mengambil barang: pilih <Ui>Jaminan yang Diberikan</Ui> &mdash; KTP, SIM, KTA, KIP, Kartu
+              Pelajar, <Ui>Uang Jaminan</Ui> (isi nominal Rupiah yang dipegang sebagai jaminan pengganti kartu
+              identitas), atau Lainnya (kolom isian bebas) &mdash; lalu tekan <Ui>Konfirmasi &amp; Serahkan Barang</Ui>.
+            </>,
             <>
               Saat barang dikembalikan: <Ui>Tanpa Denda</Ui> untuk langsung selesai, atau <Ui>Kalkulator Denda</Ui> &rarr;{' '}
               <Ui>Hitung</Ui> &rarr; <Ui>Terapkan Denda &amp; Selesaikan Sewa</Ui> jika terlambat. Sisa pembayaran (termasuk
@@ -281,6 +300,13 @@ export default function GuideTab() {
           <Ui>Kalkulator Denda</Ui> tidak akan tampil (dan permintaan hitung ditolak server) selama pesanan masih
           Pending/Approved-Paid, supaya tidak ada denda yang tercatat sebelum masa sewa berjalan.
         </Note>
+        <p className="font-bold text-xs mt-3">Info Metode Pembayaran</p>
+        <p>
+          Untuk pesanan yang dibayar online, kotak <Ui>Info Metode Pembayaran</Ui> menampilkan nama bank/e-wallet
+          (bukan hanya kode mentahnya, misal <Ui>VA Bank Mandiri (008)</Ui>), nomor Virtual Account yang diberikan ke
+          pelanggan, status gateway, dan ID Transaksi WuzzPay &mdash; berguna untuk mencocokkan dengan tangkapan
+          layar/bukti yang dikirim pelanggan.
+        </p>
         <p className="font-bold text-xs mt-3">Pembayaran sebagian (DP)</p>
         <p>
           Baris <Ui>Sudah Dibayar</Ui> menampilkan nominal yang sudah diterima; baris <Ui>Sisa Pembayaran</Ui> muncul
@@ -395,9 +421,11 @@ export default function GuideTab() {
       <Section id="g-1-10" num="1.10" title="Pengaturan Toko" owner kicker="Toleransi keterlambatan yang menjadi dasar perhitungan denda, plus jam operasional untuk tampilan publik.">
         <p>
           <Ui>Lama Toleransi Keterlambatan Dalam Satuan Jam</Ui> (default 4 jam) &mdash; ditambahkan sekali ke batas
-          waktu pengembalian (waktu pengambilan barang + durasi sewa). Tabel <Ui>Jam Operasional Toko</Ui> mengatur jam
-          open/close per hari (Senin&ndash;Minggu) untuk tampilan halaman publik, tidak lagi memengaruhi perhitungan
-          denda. Tekan <Ui>Simpan Pengaturan</Ui> setelah mengubah.
+          waktu pengembalian (waktu pengambilan barang + durasi sewa). <Ui>Batas Waktu Pembayaran Sebelum Pesanan
+          Kedaluwarsa</Ui> (default 2 jam) menentukan berapa lama pesanan Pending yang belum dibayar dibiarkan sebelum
+          otomatis berubah menjadi Expired (lihat 1.5). Tabel <Ui>Jam Operasional Toko</Ui> mengatur jam open/close per
+          hari (Senin&ndash;Minggu) untuk tampilan halaman publik, tidak lagi memengaruhi perhitungan denda. Tekan{' '}
+          <Ui>Simpan Pengaturan</Ui> setelah mengubah.
         </p>
         <Note label="Batas waktu pengembalian dihitung dari saat barang diambil">
           Sewa &ldquo;1 hari&rdquo; berarti 24 jam sejak barang diserahkan ke penyewa (<Ui>Item Picked Up</Ui>), bukan
@@ -416,6 +444,12 @@ export default function GuideTab() {
           Baris jam buka di footer publik dihitung otomatis dari tabel <Ui>Jam Operasional Toko</Ui> &mdash; tidak perlu
           diisi terpisah, dan tidak akan pernah tidak sinkron dengan jadwal yang dipakai kalkulator denda.
         </Note>
+        <p className="font-bold text-xs mt-3">Syarat &amp; Ketentuan</p>
+        <p>
+          Kartu <Ui>Syarat &amp; Ketentuan</Ui> mengatur teks bebas yang tampil di popup halaman checkout publik
+          (lihat 2.6) &mdash; pelanggan wajib mencentang persetujuan sebelum bisa mengirim pemesanan. Baris kosong di
+          kotak isian tampil sebagai jarak antar paragraf di popup.
+        </p>
       </Section>
 
       <Section id="g-1-11" num="1.11" title="Manajemen User" owner kicker="Mengelola akun staf beserta hak aksesnya.">
@@ -501,24 +535,45 @@ export default function GuideTab() {
             },
           ]}
         />
-        <p>Tekan <Ui>Kirim Pemesanan &amp; Bayar</Ui> untuk mengirim. Tombol nonaktif jika keranjang kosong atau sedang mengirim.</p>
+        <p>
+          Pelanggan juga wajib mencentang <Ui>Saya sudah membaca dan menyetujui Syarat &amp; Ketentuan</Ui> &mdash;
+          label ini bisa ditekan untuk membuka popup berisi teks lengkap Syarat &amp; Ketentuan (diatur dari{' '}
+          <Ui>Pengaturan</Ui>, lihat 1.10).
+        </p>
+        <p>Tekan <Ui>Kirim Pemesanan &amp; Bayar</Ui> untuk mengirim. Tombol nonaktif jika keranjang kosong, kotak persetujuan belum dicentang, atau sedang mengirim.</p>
       </Section>
 
-      <Section id="g-2-7" num="2.7" title="Halaman Konfirmasi Pesanan & Pembayaran" kicker="Halaman setelah pesanan berhasil dikirim, berisi kode pembayaran dan ringkasan invoice.">
-        <p>Menampilkan ID pesanan, kode QRIS, opsi Transfer Bank, dan Ringkasan Invoice. Tautan halaman ini bisa disimpan/dibagikan untuk cek status kapan saja tanpa login.</p>
-        <Note label="Penting untuk Staf">
-          Kode QRIS di halaman ini bersifat ilustratif dan belum terhubung ke gateway pembayaran sungguhan. Pembayaran
-          tetap diverifikasi manual oleh staf dari bukti yang dikirim pelanggan via WhatsApp, sebelum menekan{' '}
-          <Ui>Konfirmasi Pembayaran (Setujui Sewa)</Ui> di Manajemen Order (lihat 1.5).
+      <Section id="g-2-7" num="2.7" title="Halaman Konfirmasi Pesanan & Pembayaran" kicker="Halaman setelah pesanan berhasil dikirim, berisi pilihan metode pembayaran dan ringkasan invoice.">
+        <p>
+          Menampilkan ID pesanan, Ringkasan Invoice, dan kotak pilihan metode pembayaran (QRIS, Transfer Bank,
+          E-Wallet, Bayar Tunai) &mdash; disertai catatan batas waktu pembayaran (lihat 1.10). Tautan halaman ini bisa
+          disimpan/dibagikan untuk cek status kapan saja tanpa login.
+        </p>
+        <Note label="Saat ini hanya Bayar Tunai yang aktif untuk pelanggan umum">
+          QRIS, Transfer Bank, dan E-Wallet terhubung ke gateway pembayaran WuzzPay sungguhan, namun untuk pelanggan
+          umum masih ditandai &ldquo;segera tersedia&rdquo; selagi proses aktivasi kanal berjalan &mdash; Bayar Tunai
+          adalah satu-satunya pilihan yang bisa dipakai saat ini. Pelanggan yang memilih Bayar Tunai melihat instruksi
+          pembayaran di toko beserta batas waktunya, lalu menekan <Ui>Konfirmasi Bayar Tunai</Ui>. Tidak ada lagi
+          langkah kirim bukti transfer via WhatsApp untuk metode ini &mdash; staf memverifikasi &amp; menyetujui
+          langsung saat pelanggan datang, lewat <Ui>Konfirmasi Pembayaran (Setujui Sewa)</Ui> di Manajemen Order
+          (lihat 1.5).
         </Note>
+        <p>
+          Untuk metode online (dipakai lewat akun uji internal saat aktivasi kanal belum selesai), begitu pelanggan
+          membuat pembayaran, halaman ini otomatis memeriksa status setiap beberapa detik dan langsung memperbarui
+          pesanan begitu terverifikasi &mdash; tanpa perlu staf melakukan apa pun secara manual. Jika pembayaran sudah
+          dilakukan namun halaman belum juga memperbarui status, tombol <Ui>Sudah Bayar Tapi Belum Terverifikasi?</Ui>{' '}
+          membuka WhatsApp dengan pesan otomatis untuk staf mengecek manual (lihat juga <Ui>Cek Status ke WuzzPay</Ui>{' '}
+          di 1.5).
+        </p>
       </Section>
 
       <Section id="g-2-8" num="2.8" title="Setelah Pesanan Dikirim — Apa Selanjutnya?" kicker="Menghubungkan sisi pelanggan dengan proses yang dilakukan staf.">
         <Steps
           items={[
-            'Pelanggan mengirim bukti pembayaran melalui tombol WhatsApp di halaman konfirmasi.',
-            'Staf memverifikasi bukti pembayaran secara manual di menu Manajemen Order.',
-            <>Setelah terverifikasi, staf menekan <Ui>Konfirmasi Pembayaran (Setujui Sewa)</Ui>.</>,
+            <>Pelanggan memilih <Ui>Bayar Tunai</Ui> di halaman konfirmasi dan menekan <Ui>Konfirmasi Bayar Tunai</Ui>.</>,
+            'Pelanggan datang ke toko dan membayar tunai saat mengambil barang.',
+            <>Staf memverifikasi pembayaran secara langsung, lalu menekan <Ui>Konfirmasi Pembayaran (Setujui Sewa)</Ui> di menu Manajemen Order.</>,
             'Saat pengambilan & pengembalian barang, staf melanjutkan alur di panel detail order (lihat 1.5).',
           ]}
         />
@@ -529,9 +584,10 @@ export default function GuideTab() {
       <Section id="g-a" num="A." title="Catatan & Hal Penting">
         <ul className="list-disc pl-5 space-y-1.5 text-xs text-zinc-800">
           <li><strong>Ganti password default segera</strong> setelah menerima akun baru dari Owner (lihat 1.1 dan 1.3).</li>
-          <li><strong>Pesanan otomatis kedaluwarsa (Expired)</strong> jika belum dibayar dalam 2 jam, namun tetap bisa disetujui manual selama stok mencukupi.</li>
+          <li><strong>Pesanan otomatis kedaluwarsa (Expired)</strong> jika belum dibayar dalam batas waktu di Pengaturan (default 2 jam, lihat 1.10), namun tetap bisa disetujui manual selama stok mencukupi.</li>
           <li><strong>Foto diri pelanggan</strong> mendukung JPG, PNG, WebP, dan HEIC &mdash; semua diproses otomatis oleh sistem.</li>
-          <li><strong>Kode QRIS bersifat ilustratif</strong>, bukan gateway aktif. Semua pembayaran wajib diverifikasi manual sebelum pesanan disetujui.</li>
+          <li><strong>Pembayaran online (QRIS/Transfer Bank/E-Wallet) terhubung ke gateway WuzzPay sungguhan</strong>, namun untuk saat ini pelanggan umum hanya bisa memakai Bayar Tunai (lihat 2.7). Gunakan <Ui>Cek Status ke WuzzPay</Ui> di Manajemen Order untuk memverifikasi pembayaran online secara manual jika diperlukan.</li>
+          <li><strong>Syarat &amp; Ketentuan wajib dicentang pelanggan</strong> sebelum bisa mengirim pemesanan &mdash; isi teksnya diatur dari Pengaturan (lihat 1.10 dan 2.6).</li>
           <li><strong>Karyawan vs Owner</strong>: jika sebuah menu terasa hilang, periksa dahulu peran akun yang digunakan (lihat 1.2) &mdash; ini bukan kesalahan sistem.</li>
         </ul>
       </Section>

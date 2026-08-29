@@ -439,14 +439,20 @@
     <span class="status-pill">Item Picked Up</span><span class="status-arrow">&rarr;</span>
     <span class="status-pill">Item Returned/Completed</span>
   </div>
-  <p><span class="status-pill branch">Expired</span> adalah cabang khusus: pesanan Pending yang belum dibayar dalam waktu <strong>2 jam</strong> otomatis berubah menjadi Expired oleh sistem. Pesanan yang sudah Expired masih bisa disetujui secara manual selama stok alat masih tersedia.</p>
+  <p><span class="status-pill branch">Expired</span> adalah cabang khusus: pesanan Pending yang belum dibayar dalam batas waktu di menu Pengaturan &rarr; Batas Waktu Pembayaran (lihat 1.10, default 2 jam) otomatis berubah menjadi Expired oleh sistem. Pesanan yang sudah Expired masih bisa disetujui secara manual selama stok alat masih tersedia.</p>
+
+  <div class="note">
+    <span class="note-label">Waktu kedaluwarsa yang tercatat bukan waktu sebenarnya pesanan jadi tidak valid</span>
+    Pengecekan kedaluwarsa hanya berjalan saat ada aktivitas (pelanggan membuka katalog, membuat pesanan baru, atau staf membuka Manajemen Order) &mdash; bukan lewat penjadwalan otomatis di belakang layar. Karena itu, panel Detail Order menampilkan dua waktu terpisah pada pesanan Expired: <span class="ui">Kedaluwarsa sejak</span> (batas waktu sebenarnya) dan <span class="ui">terdeteksi sistem</span> (kapan sistem baru menyadarinya, bisa beberapa jam lebih lambat jika tidak ada aktivitas di antaranya). Stok tidak pernah tertahan lebih lama dari batas waktu sebenarnya, walau tercatatnya belakangan.
+  </div>
 
   <h3 class="sub">Panel Detail Order &mdash; langkah demi langkah</h3>
   <p>Panel ini menampilkan nama &amp; WhatsApp penyewa, waktu pesanan dibuat, tanggal &amp; durasi sewa, rincian alat yang disewa beserta harga, ringkasan biaya (Biaya Rental Pokok, Denda Terlambat jika ada, Total Invoice), dan foto diri penyewa yang diunggah saat checkout (untuk verifikasi identitas) &mdash; atau keterangan &ldquo;Tidak ada foto diunggah&rdquo; jika pelanggan tidak mengunggah foto.</p>
 
   <ol class="steps">
-    <li><strong>Saat status Pending / Expired:</strong> setelah memverifikasi bukti pembayaran (lihat 2.7), tekan <span class="ui">Konfirmasi Pembayaran (Setujui Sewa)</span>. Nominal terisi otomatis sesuai Total Biaya &mdash; ubah nominal ini jika penyewa hanya membayar sebagian (DP/uang muka). Pesanan berpindah ke status Approved/Paid.</li>
-    <li><strong>Saat status Approved/Paid, ketika pelanggan datang mengambil barang:</strong> tekan <span class="ui">Barang Diambil (Diserahkan ke Penyewa)</span>. Pilih jenis <span class="ui">Jaminan yang Diberikan</span> (KTP, SIM, KTA, KIP, Kartu Pelajar, atau Lainnya &mdash; pilihan Lainnya membuka kolom isian bebas), lalu tekan <span class="ui">Konfirmasi &amp; Serahkan Barang</span>. Pesanan berpindah ke Item Picked Up.</li>
+    <li><strong>Saat status Pending / Expired dari pembayaran online (QRIS/Transfer Bank/E-Wallet):</strong> tekan <span class="ui">Cek Status ke WuzzPay</span> untuk menanyakan langsung ke WuzzPay apakah pesanan ini sudah benar-benar dibayar, sebelum memutuskan menyetujui manual &mdash; lebih akurat daripada hanya mempercayai klaim pelanggan.</li>
+    <li><strong>Setelah memverifikasi bukti pembayaran (lihat 2.7):</strong> tekan <span class="ui">Konfirmasi Pembayaran (Setujui Sewa)</span>. Nominal terisi otomatis sesuai Total Biaya &mdash; ubah nominal ini jika penyewa hanya membayar sebagian (DP/uang muka). Pesanan berpindah ke status Approved/Paid.</li>
+    <li><strong>Saat status Approved/Paid, ketika pelanggan datang mengambil barang:</strong> tekan <span class="ui">Barang Diambil (Diserahkan ke Penyewa)</span>. Pilih jenis <span class="ui">Jaminan yang Diberikan</span> (KTP, SIM, KTA, KIP, Kartu Pelajar, <span class="ui">Uang Jaminan</span> &mdash; isi nominal Rupiah yang dipegang sebagai jaminan pengganti kartu identitas, atau Lainnya &mdash; kolom isian bebas), lalu tekan <span class="ui">Konfirmasi &amp; Serahkan Barang</span>. Pesanan berpindah ke Item Picked Up.</li>
     <li><strong>Saat barang dikembalikan:</strong> pada bagian &ldquo;Alat Dikembalikan &amp; Cek Denda&rdquo;, pilih salah satu:
       <ul class="plain">
         <li><span class="ui">Tanpa Denda</span> &mdash; langsung menandai pesanan selesai tanpa biaya tambahan.</li>
@@ -462,6 +468,9 @@
     <span class="note-label">Kalkulator Denda hanya muncul saat Item Picked Up</span>
     Denda keterlambatan hanya bisa dihitung setelah barang benar-benar diambil pelanggan &mdash; tombol <span class="ui">Kalkulator Denda</span> tidak akan tampil (dan permintaan hitung ditolak server) selama pesanan masih Pending/Approved-Paid, supaya tidak ada denda yang tercatat sebelum masa sewa berjalan.
   </div>
+
+  <h3 class="sub">Info Metode Pembayaran</h3>
+  <p>Untuk pesanan yang dibayar online, kotak <span class="ui">Info Metode Pembayaran</span> menampilkan nama bank/e-wallet (bukan hanya kode mentahnya, misal <span class="ui">VA Bank Mandiri (008)</span>), nomor Virtual Account yang diberikan ke pelanggan, status gateway, dan ID Transaksi WuzzPay &mdash; berguna untuk mencocokkan dengan tangkapan layar/bukti yang dikirim pelanggan.</p>
 
   <h3 class="sub">Pembayaran sebagian (DP)</h3>
   <p>Baris <span class="ui">Sudah Dibayar</span> menampilkan nominal yang sudah diterima; baris <span class="ui">Sisa Pembayaran</span> muncul otomatis selama masih ada tagihan tersisa. Gunakan tautan <span class="ui">Edit</span> di samping <span class="ui">Sudah Dibayar</span> kapan saja untuk mencatat pelunasan tambahan sebelum barang diambil atau dikembalikan.</p>
@@ -571,7 +580,7 @@
   <p class="kicker">Mengatur toleransi keterlambatan yang menjadi dasar perhitungan denda, plus jam operasional untuk tampilan publik.</p>
 
   <h3 class="sub">Toleransi Keterlambatan</h3>
-  <p>Masukkan jumlah jam pada kolom <span class="ui">Lama Toleransi Keterlambatan Dalam Satuan Jam</span> (default 4 jam) &mdash; ditambahkan sekali ke batas waktu pengembalian (waktu pengambilan barang + durasi sewa). Penyewa baru dianggap kena denda jika mengembalikan barang setelah batas waktu + toleransi tersebut.</p>
+  <p>Masukkan jumlah jam pada kolom <span class="ui">Lama Toleransi Keterlambatan Dalam Satuan Jam</span> (default 4 jam) &mdash; ditambahkan sekali ke batas waktu pengembalian (waktu pengambilan barang + durasi sewa). Penyewa baru dianggap kena denda jika mengembalikan barang setelah batas waktu + toleransi tersebut. Kolom <span class="ui">Batas Waktu Pembayaran Sebelum Pesanan Kedaluwarsa</span> (default 2 jam) menentukan berapa lama pesanan Pending yang belum dibayar dibiarkan sebelum otomatis berubah menjadi Expired (lihat 1.5).</p>
 
   <h3 class="sub">Jam Operasional Toko</h3>
   <p>Tabel 7 baris (Senin&ndash;Minggu) berisi jam <span class="ui">open</span>/<span class="ui">close</span> untuk tiap hari &mdash; dipakai untuk tampilan halaman publik (lihat catatan footer di bawah), tidak lagi memengaruhi perhitungan denda. Setelah mengubah, tekan <span class="ui">Simpan Pengaturan</span>.</p>
@@ -588,6 +597,9 @@
     <span class="note-label">Jam Operasional di Footer Otomatis Mengikuti Tabel di Atas</span>
     Baris jam buka di footer publik dihitung otomatis dari tabel Jam Operasional Toko &mdash; tidak perlu diisi terpisah.
   </div>
+
+  <h3 class="sub">Syarat &amp; Ketentuan</h3>
+  <p>Kartu <span class="ui">Syarat &amp; Ketentuan</span> mengatur teks bebas yang tampil di popup halaman checkout publik (lihat 2.6) &mdash; pelanggan wajib mencentang persetujuan sebelum bisa mengirim pemesanan. Baris kosong di kotak isian tampil sebagai jarak antar paragraf di popup.</p>
 </section>
 
 <section class="chapter">
@@ -630,9 +642,9 @@
     <li>Memilih tanggal mulai &amp; selesai sewa.</li>
     <li>Memilih alat camping yang ingin disewa dan memasukkannya ke keranjang.</li>
     <li>Mengecek ringkasan biaya pada kotak <em>Current Selection</em>.</li>
-    <li>Mengisi formulir data diri, termasuk unggah foto sebagai jaminan.</li>
-    <li>Menekan tombol kirim pesanan &mdash; diarahkan ke halaman konfirmasi berisi kode pembayaran.</li>
-    <li>Melakukan pembayaran, lalu mengirim bukti transfer/pembayaran ke admin via WhatsApp untuk diverifikasi.</li>
+    <li>Mengisi formulir data diri, termasuk unggah foto sebagai jaminan, dan mencentang persetujuan Syarat &amp; Ketentuan.</li>
+    <li>Menekan tombol kirim pesanan &mdash; diarahkan ke halaman konfirmasi berisi pilihan metode pembayaran.</li>
+    <li>Memilih metode pembayaran (saat ini Bayar Tunai untuk pelanggan umum, lihat 2.7) dan menyelesaikan pembayaran sesuai instruksi sebelum batas waktu yang ditentukan.</li>
   </ol>
 </section>
 
@@ -689,27 +701,25 @@
 
   <p>Setelah foto dipilih, akan muncul pratinjau kecil beserta nama file. Terdapat keterangan bahwa foto diunggah dengan aman ke server terenkripsi Bilbo Outdoors dan hanya digunakan untuk keperluan verifikasi identitas serta jaminan sewa.</p>
 
-  <p>Tekan <span class="ui">Kirim Pemesanan &amp; Bayar</span> untuk mengirim pesanan. Tombol ini nonaktif apabila keranjang masih kosong atau sedang dalam proses pengiriman. Kesalahan pengisian (keranjang kosong, nama/WhatsApp belum diisi, tanggal tidak valid, atau stok tidak mencukupi) akan ditampilkan dalam kotak peringatan berwarna merah di atas formulir.</p>
+  <p>Pelanggan juga wajib mencentang <span class="ui">Saya sudah membaca dan menyetujui Syarat &amp; Ketentuan</span> &mdash; label ini bisa ditekan untuk membuka popup berisi teks lengkap Syarat &amp; Ketentuan (diatur dari menu Pengaturan, lihat 1.10).</p>
+
+  <p>Tekan <span class="ui">Kirim Pemesanan &amp; Bayar</span> untuk mengirim pesanan. Tombol ini nonaktif apabila keranjang masih kosong, kotak persetujuan Syarat &amp; Ketentuan belum dicentang, atau sedang dalam proses pengiriman. Kesalahan pengisian (keranjang kosong, nama/WhatsApp belum diisi, tanggal tidak valid, atau stok tidak mencukupi) akan ditampilkan dalam kotak peringatan berwarna merah di atas formulir.</p>
 </section>
 
 <section class="chapter">
   <h2 class="section-title">2.7 Halaman Konfirmasi Pesanan &amp; Pembayaran</h2>
-  <p class="kicker">Halaman yang muncul setelah pesanan berhasil dikirim, berisi kode pembayaran dan ringkasan invoice.</p>
+  <p class="kicker">Halaman yang muncul setelah pesanan berhasil dikirim, berisi pilihan metode pembayaran dan ringkasan invoice.</p>
 
-  <p>Setelah pesanan terkirim, pelanggan diarahkan ke halaman konfirmasi dengan judul <strong>PESANAN BERHASIL DIKIRIM!</strong> beserta nomor <em>ID PESANAN</em>. Halaman ini memiliki tautan unik yang bisa disimpan/dibagikan &mdash; pelanggan bisa membukanya kembali kapan saja untuk mengecek status pesanan tanpa perlu login.</p>
-
-  <h3 class="sub">Metode pembayaran yang ditampilkan</h3>
-  <ul class="plain">
-    <li><strong>Kode QRIS</strong> &mdash; menampilkan nominal total tagihan, dapat dipindai melalui GoPay, OVO, Dana, LinkAja, ShopeePay, atau mobile banking.</li>
-    <li><strong>Transfer Bank Terarah</strong> &mdash; sebagai alternatif, ke rekening BCA a/n Bilbo Outdoors, dengan catatan transfer berisi &ldquo;BO - nama pelanggan&rdquo;.</li>
-  </ul>
+  <p>Setelah pesanan terkirim, pelanggan diarahkan ke halaman konfirmasi dengan judul <strong>PESANAN BERHASIL!</strong> beserta nomor <em>ID PESANAN</em>, Ringkasan Invoice, dan kotak pilihan metode pembayaran (QRIS, Transfer Bank, E-Wallet, Bayar Tunai) disertai catatan batas waktu pembayaran (lihat 1.10). Halaman ini memiliki tautan unik yang bisa disimpan/dibagikan &mdash; pelanggan bisa membukanya kembali kapan saja untuk mengecek status pesanan tanpa perlu login.</p>
 
   <div class="note">
-    <span class="note-label">Penting untuk Staf</span>
-    Kode QRIS pada halaman ini bersifat <strong>ilustratif</strong> dan belum terhubung ke gateway pembayaran sungguhan. Pembayaran tetap harus diverifikasi secara manual oleh staf berdasarkan bukti transfer/pembayaran yang dikirim pelanggan melalui WhatsApp, sebelum menekan tombol <span class="ui">Konfirmasi Pembayaran (Setujui Sewa)</span> di menu Manajemen Order (lihat 1.5).
+    <span class="note-label">Saat ini hanya Bayar Tunai yang aktif untuk pelanggan umum</span>
+    QRIS, Transfer Bank, dan E-Wallet terhubung ke gateway pembayaran WuzzPay sungguhan, namun untuk pelanggan umum masih ditandai &ldquo;segera tersedia&rdquo; selagi proses aktivasi kanal berjalan &mdash; Bayar Tunai adalah satu-satunya pilihan yang bisa dipakai saat ini. Pelanggan yang memilih Bayar Tunai melihat instruksi pembayaran di toko beserta batas waktunya, lalu menekan <span class="ui">Konfirmasi Bayar Tunai</span>. Tidak ada lagi langkah kirim bukti transfer via WhatsApp untuk metode ini &mdash; staf memverifikasi &amp; menyetujui langsung saat pelanggan datang, lewat <span class="ui">Konfirmasi Pembayaran (Setujui Sewa)</span> di Manajemen Order (lihat 1.5).
   </div>
 
-  <p>Bagian <strong>RINGKASAN INVOICE</strong> menampilkan tanggal &amp; durasi sewa, nama pelanggan, dan total pembayaran. Tombol <span class="ui">Konfirmasi via WhatsApp</span> membuka WhatsApp dengan pesan yang sudah terisi otomatis (detail pelanggan, daftar alat yang disewa, total biaya, dan tautan konfirmasi pesanan) agar pelanggan tinggal mengirim bukti pembayaran. Tombol <span class="ui">Kembali ke Katalog</span> membawa kembali ke halaman utama.</p>
+  <p>Untuk metode online (dipakai lewat akun uji internal saat aktivasi kanal belum selesai), begitu pelanggan membuat pembayaran, halaman ini otomatis memeriksa status setiap beberapa detik dan langsung memperbarui pesanan begitu terverifikasi &mdash; tanpa perlu staf melakukan apa pun secara manual. Jika pembayaran sudah dilakukan namun halaman belum juga memperbarui status, tombol <span class="ui">Sudah Bayar Tapi Belum Terverifikasi?</span> membuka WhatsApp dengan pesan otomatis untuk staf mengecek manual (lihat juga <span class="ui">Cek Status ke WuzzPay</span> di 1.5).</p>
+
+  <p>Tombol <span class="ui">Kembali ke Katalog</span> membawa kembali ke halaman utama.</p>
 </section>
 
 <section class="chapter">
@@ -717,9 +727,9 @@
   <p class="kicker">Menghubungkan sisi pelanggan dengan proses yang dilakukan staf di panel admin.</p>
 
   <ol class="steps">
-    <li>Pelanggan mengirim bukti pembayaran melalui tombol WhatsApp di halaman konfirmasi.</li>
-    <li>Staf memeriksa pesanan tersebut di menu <strong>Manajemen Order</strong> (status masih Pending) dan memverifikasi bukti pembayaran secara manual.</li>
-    <li>Setelah terverifikasi, staf menekan <span class="ui">Konfirmasi Pembayaran (Setujui Sewa)</span> &mdash; status berubah menjadi Approved/Paid.</li>
+    <li>Pelanggan memilih <span class="ui">Bayar Tunai</span> di halaman konfirmasi dan menekan <span class="ui">Konfirmasi Bayar Tunai</span>.</li>
+    <li>Pelanggan datang ke toko dan membayar tunai saat mengambil barang.</li>
+    <li>Staf memverifikasi pembayaran secara langsung, lalu menekan <span class="ui">Konfirmasi Pembayaran (Setujui Sewa)</span> di menu <strong>Manajemen Order</strong> &mdash; status berubah menjadi Approved/Paid.</li>
     <li>Saat pelanggan datang mengambil alat, staf mencatat jenis jaminan yang diberikan dan menekan <span class="ui">Barang Diambil</span> &mdash; status berubah menjadi Item Picked Up.</li>
     <li>Saat alat dikembalikan, staf mengecek keterlambatan (jika ada) dan menyelesaikan pesanan melalui panel detail yang sama (lihat 1.5).</li>
   </ol>
@@ -735,9 +745,10 @@
 
   <ul class="plain">
     <li><strong>Ganti password default segera</strong> setelah menerima akun baru &mdash; lihat 1.1 dan 1.3.</li>
-    <li><strong>Pesanan otomatis kedaluwarsa (Expired)</strong> jika belum dibayar dalam 2 jam sejak dibuat, namun tetap bisa disetujui manual selama stok masih mencukupi.</li>
+    <li><strong>Pesanan otomatis kedaluwarsa (Expired)</strong> jika belum dibayar dalam batas waktu di Pengaturan (default 2 jam, lihat 1.10), namun tetap bisa disetujui manual selama stok masih mencukupi.</li>
     <li><strong>Foto diri pelanggan</strong> mendukung format JPG, PNG, WebP, dan HEIC (format bawaan foto iPhone) &mdash; semuanya diproses otomatis oleh sistem, staf tidak perlu mengonversi file secara manual.</li>
-    <li><strong>Kode QRIS bersifat ilustratif</strong>, bukan gateway pembayaran aktif. Semua pembayaran wajib diverifikasi manual oleh staf melalui bukti yang dikirim ke WhatsApp sebelum pesanan disetujui.</li>
+    <li><strong>Pembayaran online (QRIS/Transfer Bank/E-Wallet) terhubung ke gateway WuzzPay sungguhan</strong>, namun untuk saat ini pelanggan umum hanya bisa memakai Bayar Tunai (lihat 2.7). Gunakan <span class="ui">Cek Status ke WuzzPay</span> di Manajemen Order untuk memverifikasi pembayaran online secara manual jika diperlukan.</li>
+    <li><strong>Syarat &amp; Ketentuan wajib dicentang pelanggan</strong> sebelum bisa mengirim pemesanan &mdash; isi teksnya diatur dari Pengaturan (lihat 1.10 dan 2.6).</li>
     <li><strong>Karyawan vs Owner</strong>: jika sebuah menu terasa hilang/tidak muncul, periksa dahulu apakah akun yang digunakan memang berperan sebagai Karyawan (lihat 1.2) &mdash; ini bukan kesalahan sistem.</li>
     <li>Kontak resmi, alamat, dan jam operasional Bilbo Outdoors ditampilkan di footer halaman utama, dan dapat diubah kapan saja dari menu Pengaturan Toko &rarr; Footer &amp; Teks Berjalan (lihat 1.10) &mdash; jadi tidak dicantumkan sebagai angka tetap di sini agar panduan ini tidak pernah tidak sinkron dengan data yang sebenarnya.</li>
   </ul>

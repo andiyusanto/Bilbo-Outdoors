@@ -189,6 +189,16 @@ export default function OrderDetailPanel({
     ? order.paymentInstruction.va_number
     : undefined;
 
+  // Per-transaction admin fee WuzzPay charged on top of the amount collected
+  // from the customer (order.paymentInstruction.fee - see the customer-facing
+  // display's own comment: always 0 in sandbox regardless of channel, so
+  // this can't be verified against a real non-zero value yet). Shown for
+  // reconciliation - the customer never pays this separately, it's deducted
+  // from what WuzzPay settles to Bilbo Outdoors.
+  const wuzzpayFee = typeof order.paymentInstruction?.fee === 'number' && order.paymentInstruction.fee > 0
+    ? order.paymentInstruction.fee
+    : undefined;
+
   const penaltyTotal = getPenaltyTotal(order);
   const totalInvoice = (order.totalPrice || 0) + (order.lateFee || 0) + penaltyTotal;
   const remainingBalance = getRemainingBalance(order);
@@ -505,6 +515,12 @@ export default function OrderDetailPanel({
                   <div>
                     <p className="text-[9px] text-zinc-500 font-black uppercase tracking-wider">Status Gateway</p>
                     <p className="font-black text-black uppercase mt-0.5">{order.wuzzpayLastStatus}</p>
+                  </div>
+                )}
+                {wuzzpayFee !== undefined && (
+                  <div>
+                    <p className="text-[9px] text-zinc-500 font-black uppercase tracking-wider">Biaya Admin WuzzPay</p>
+                    <p className="font-mono text-black mt-0.5">Rp {wuzzpayFee.toLocaleString('id-ID')}</p>
                   </div>
                 )}
                 {order.wuzzpayTransactionId && (

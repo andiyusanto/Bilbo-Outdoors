@@ -154,6 +154,12 @@ function PaymentInstructionDisplay({ instruction }: { instruction: Record<string
   if (method === 'virtual_account') {
     const bank = BANK_OPTIONS.find(b => b.code === instruction.bank_code);
     const amount = Number(instruction.total_amount ?? instruction.amount);
+    // WuzzPay's charge response already includes a per-transaction admin fee
+    // (total_amount = amount + fee) - always 0 in the sandbox regardless of
+    // channel/bank, so this can't be verified against a real non-zero value
+    // yet, but shows up automatically the moment production applies real
+    // fees, with zero code change needed then.
+    const fee = Number(instruction.fee ?? 0);
     return (
       <div className="bg-white border-2 border-black p-6 rounded-none space-y-4 shadow-[4px_4px_0px_rgba(0,0,0,1)]">
         <h3 className="text-xs font-black uppercase text-black tracking-widest border-b-2 border-brand pb-2">TRANSFER VIRTUAL ACCOUNT</h3>
@@ -175,6 +181,11 @@ function PaymentInstructionDisplay({ instruction }: { instruction: Record<string
               <p className="text-sm font-black text-black font-mono">Rp {amount.toLocaleString('id-ID')}</p>
               <CopyButton value={String(amount)} />
             </div>
+            {fee > 0 && (
+              <p className="text-[10px] text-zinc-400 font-semibold normal-case mt-1">
+                Termasuk biaya admin: Rp {fee.toLocaleString('id-ID')}
+              </p>
+            )}
           </div>
         </div>
         <PaymentSteps method="va" bankCode={instruction.bank_code} />
@@ -185,6 +196,8 @@ function PaymentInstructionDisplay({ instruction }: { instruction: Record<string
   if (method === 'qris') {
     const qrValue = instruction.qr_string ?? instruction.qris_string ?? instruction.qr_content;
     const qrImageUrl = instruction.qr_image_url ?? instruction.qr_url;
+    const qrisAmount = Number(instruction.total_amount ?? instruction.amount);
+    const qrisFee = Number(instruction.fee ?? 0);
     return (
       <div className="flex flex-col items-center bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
         <div className="w-full flex justify-between items-center border-b border-gray-100 pb-3 mb-4">
@@ -202,8 +215,13 @@ function PaymentInstructionDisplay({ instruction }: { instruction: Record<string
         )}
         <p className="mt-4 font-display font-bold text-gray-950 text-sm tracking-wide text-center">A/N BILBO OUTDOORS</p>
         <p className="mt-1 text-sm font-mono text-gray-600 bg-gray-100 px-3 py-1 rounded-full font-semibold">
-          Total: Rp {Number(instruction.total_amount ?? instruction.amount).toLocaleString('id-ID')}
+          Total: Rp {qrisAmount.toLocaleString('id-ID')}
         </p>
+        {qrisFee > 0 && (
+          <p className="mt-1 text-[11px] text-gray-500 font-semibold">
+            Termasuk biaya admin: Rp {qrisFee.toLocaleString('id-ID')}
+          </p>
+        )}
         <div className="w-full">
           <PaymentSteps method="qris" />
         </div>

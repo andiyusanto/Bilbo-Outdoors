@@ -255,10 +255,23 @@ export default function PaymentGatewayPanel({ order, token, onSettled, pendingEx
   const [methodTab, setMethodTab] = useState<MethodTab>(isTestOrder ? 'qris' : 'cash');
   const [selectedBank, setSelectedBank] = useState(BANK_OPTIONS[0].code);
   const [selectedWallet, setSelectedWallet] = useState(WALLET_OPTIONS[0].code);
+  // Owner's Syarat & Ketentuan allows a minimum 50% DP - online payment only
+  // (cash amount is always decided in person by staff, unaffected by this).
+  // Defaults to full payment; server re-validates this exact range regardless
+  // of what's sent here (see the /charge route) - this is UX only.
+  const [payAmountInput, setPayAmountInput] = useState(String(order.totalPrice));
+  const minDpAmount = Math.ceil(order.totalPrice * 0.5);
+  const payAmountValue = Number(payAmountInput);
+  const isPayAmountValid = payAmountInput !== '' && Number.isInteger(payAmountValue) && payAmountValue >= minDpAmount && payAmountValue <= order.totalPrice;
   const [charging, setCharging] = useState(false);
   const [chargeError, setChargeError] = useState('');
   const [referenceStuck, setReferenceStuck] = useState(false);
   const [instruction, setInstruction] = useState<Record<string, any> | null>(order.paymentInstruction ?? null);
+  // What was actually charged, for the persisted/Sisa display below - starts
+  // from the order (a reload, or an "already-live" precheck reply), then
+  // updated from the /charge response itself the moment a fresh charge
+  // succeeds, since `order` (a prop) won't reflect that until a refetch.
+  const [chargedAmount, setChargedAmount] = useState<number | undefined>(order.wuzzpayChargedAmount);
   const [expired, setExpired] = useState(false);
   const [settled, setSettled] = useState(order.status !== 'Pending');
   const [cashConfirming, setCashConfirming] = useState(false);
@@ -348,7 +361,7 @@ export default function PaymentGatewayPanel({ order, token, onSettled, pendingEx
   }, [instruction, settled, token]);
 
   const chargeRequest = async () => {
-    const body: { productId: MethodTab; bankCode?: string } = { productId: methodTab };
+    const body: { productId: MethodTab; bankCode?: string; amount?: number } = { productId: methodTab, amount: payAmountValue };
     if (methodTab === 'va') body.bankCode = selectedBank;
     if (methodTab === 'emoney') body.bankCode = selectedWallet;
     const res = await fetch(`/api/orders/confirm/${token}/charge`, {
@@ -371,6 +384,7 @@ export default function PaymentGatewayPanel({ order, token, onSettled, pendingEx
     try {
       const data = await chargeRequest();
       setInstruction(data.paymentInstruction ?? null);
+      setChargedAmount(data.wuzzpayChargedAmount ?? undefined);
     } catch (firstErr: any) {
       if (firstErr instanceof ChargeError && firstErr.stuck) {
         setReferenceStuck(true);
@@ -387,6 +401,7 @@ export default function PaymentGatewayPanel({ order, token, onSettled, pendingEx
       try {
         const data = await chargeRequest();
         setInstruction(data.paymentInstruction ?? null);
+        setChargedAmount(data.wuzzpayChargedAmount ?? undefined);
       } catch (secondErr: any) {
         if (secondErr instanceof ChargeError && secondErr.stuck) {
           setReferenceStuck(true);
@@ -532,6 +547,49 @@ export default function PaymentGatewayPanel({ order, token, onSettled, pendingEx
             </p>
           )}
 
+          {methodTab !== 'cash' && (
+            <div className="bg-zinc-50 border border-zinc-200 p-3 space-y-2">
+              <p className="text-[10px] text-zinc-500 font-bold uppercase">Jumlah Yang Dibayar Sekarang</p>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPayAmountInput(String(order.totalPrice))}
+                  className={`py-2 text-[10px] font-black uppercase tracking-wide border-2 border-black rounded-none cursor-pointer ${
+                    payAmountValue === order.totalPrice ? 'bg-black text-brand' : 'bg-white text-black hover:bg-zinc-100'
+                  }`}
+                >
+                  Bayar Penuh
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPayAmountInput(String(minDpAmount))}
+                  className={`py-2 text-[10px] font-black uppercase tracking-wide border-2 border-black rounded-none cursor-pointer ${
+                    payAmountValue === minDpAmount ? 'bg-black text-brand' : 'bg-white text-black hover:bg-zinc-100'
+                  }`}
+                >
+                  Bayar DP Min. 50%
+                </button>
+              </div>
+              <input
+                type="number"
+                min={minDpAmount}
+                max={order.totalPrice}
+                value={payAmountInput}
+                onChange={(e) => setPayAmountInput(e.target.value)}
+                className="w-full bg-white border-2 border-black px-3 py-2 text-xs font-black rounded-none focus:outline-none"
+              />
+              {!isPayAmountValid ? (
+                <p className="text-[10px] font-bold text-red-600 uppercase">
+                  Jumlah tidak valid. Minimal Rp {minDpAmount.toLocaleString('id-ID')} (DP 50%), maksimal Rp {order.totalPrice.toLocaleString('id-ID')}.
+                </p>
+              ) : payAmountValue < order.totalPrice ? (
+                <p className="text-[10px] text-zinc-600 font-semibold normal-case">
+                  Sisa yang dibayar saat pengambilan barang: <strong className="text-black">Rp {(order.totalPrice - payAmountValue).toLocaleString('id-ID')}</strong>
+                </p>
+              ) : null}
+            </div>
+          )}
+
           {(methodTab === 'cash' ? cashError : chargeError) && (
             <p className="text-[11px] font-bold text-red-600 uppercase">{methodTab === 'cash' ? cashError : chargeError}</p>
           )}
@@ -539,7 +597,7 @@ export default function PaymentGatewayPanel({ order, token, onSettled, pendingEx
           <button
             type="button"
             onClick={methodTab === 'cash' ? handleCashConfirm : handleCharge}
-            disabled={methodTab === 'cash' ? cashConfirming : charging}
+            disabled={methodTab === 'cash' ? cashConfirming : (charging || !isPayAmountValid)}
             className="w-full py-4 bg-black hover:bg-brand hover:text-black text-white font-black text-sm rounded-none border-2 border-black shadow-[4px_4px_0px_var(--brand-color)] transition-colors uppercase tracking-widest cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {methodTab === 'cash'
@@ -561,6 +619,12 @@ export default function PaymentGatewayPanel({ order, token, onSettled, pendingEx
       ) : (
         <div className="space-y-3">
           <PaymentInstructionDisplay instruction={instruction} />
+          {typeof chargedAmount === 'number' && chargedAmount < order.totalPrice && (
+            <p className="text-[10px] text-zinc-600 font-semibold normal-case text-center bg-zinc-50 border border-zinc-200 p-2">
+              Ini adalah pembayaran DP. Sisa yang dibayar saat pengambilan barang:{' '}
+              <strong className="text-black">Rp {(order.totalPrice - chargedAmount).toLocaleString('id-ID')}</strong>
+            </p>
+          )}
           <p className="text-[10px] text-zinc-500 font-bold uppercase text-center flex items-center justify-center gap-1.5">
             <Clock className="w-3.5 h-3.5" />
             Bayar sebelum {formatDateTimeLabel(onlinePaymentDeadline.toISOString())}

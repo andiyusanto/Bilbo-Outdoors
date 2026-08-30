@@ -358,7 +358,11 @@ function applyWuzzpaySettlementStatus(order: Order, status: string | undefined):
   const settled = status === 'settled' || status === 'paid' || status === 'success';
   if (settled) {
     order.status = 'Approved/Paid';
-    order.amountPaid = order.totalPrice;
+    // Credits exactly what was requested at charge time (wuzzpayChargedAmount) -
+    // may be a partial DP (minimum 50%, see the /charge route), not always the
+    // full total_price. Falls back to totalPrice for any order that predates
+    // this field, preserving the previous full-payment-assumed behavior.
+    order.amountPaid = order.wuzzpayChargedAmount ?? order.totalPrice;
     order.statusHistory = order.statusHistory || [];
     order.statusHistory.push({
       status: 'Approved/Paid',
@@ -1865,7 +1869,7 @@ app.post('/api/orders/confirm/:token/charge', asyncHandler(async (req, res) => {
   if (!WUZZPAY_API_KEY || !WUZZPAY_MERCHANT_ID) {
     return res.status(503).json({ error: 'Payment gateway belum dikonfigurasi.' });
   }
-  const { productId, bankCode } = req.body;
+  const { productId, bankCode, amount } = req.body;
   if (productId !== 'qris' && productId !== 'va' && productId !== 'emoney') {
     return res.status(400).json({ error: 'Metode pembayaran tidak valid.' });
   }
@@ -1918,6 +1922,7 @@ app.post('/api/orders/confirm/:token/charge', asyncHandler(async (req, res) => {
         kind: 'already-live' as const,
         paymentMethod: order.paymentMethod,
         paymentInstruction: order.paymentInstruction,
+        wuzzpayChargedAmount: order.wuzzpayChargedAmount,
         wuzzpayTransactionId: order.wuzzpayTransactionId,
       };
     }
@@ -1928,7 +1933,25 @@ app.post('/api/orders/confirm/:token/charge', asyncHandler(async (req, res) => {
   if (precheck.kind === 'not-configured') return res.status(503).json({ error: 'Payment gateway belum dikonfigurasi.' });
   if (precheck.kind === 'not-chargeable') return res.status(400).json({ error: 'Pesanan ini sudah tidak bisa dibuatkan pembayaran baru.' });
   if (precheck.kind === 'already-live') {
-    return res.json({ paymentMethod: precheck.paymentMethod, paymentInstruction: precheck.paymentInstruction, wuzzpayTransactionId: precheck.wuzzpayTransactionId });
+    return res.json({ paymentMethod: precheck.paymentMethod, paymentInstruction: precheck.paymentInstruction, wuzzpayChargedAmount: precheck.wuzzpayChargedAmount, wuzzpayTransactionId: precheck.wuzzpayTransactionId });
+  }
+
+  // Owner's Syarat & Ketentuan requires a minimum 50% DP - `amount` lets the
+  // customer choose to pay a deposit instead of the full total online.
+  // Omitting it defaults to full payment (every pre-existing caller keeps
+  // working unchanged). The client's own picker is just UX - this is the
+  // real enforcement point, never trust the requested amount blindly. The
+  // remainder (if any) is collected in person/cash at pickup, exactly like
+  // an existing partial cash payment - see wuzzpayChargedAmount's comment in
+  // src/types.ts for why there's no "pay the rest online later" flow: WuzzPay's
+  // Idempotency-Key for /charge is fixed to order.id, so a second charge
+  // attempt against the same order is rejected as a stuck/duplicate reference.
+  const minChargeAmount = Math.ceil(precheck.totalPrice * 0.5);
+  const chargeAmount = amount === undefined ? precheck.totalPrice : Number(amount);
+  if (!Number.isInteger(chargeAmount) || chargeAmount < minChargeAmount || chargeAmount > precheck.totalPrice) {
+    return res.status(400).json({
+      error: `Jumlah pembayaran tidak valid. Minimal Rp ${minChargeAmount.toLocaleString('id-ID')} (DP 50%), maksimal Rp ${precheck.totalPrice.toLocaleString('id-ID')}.`,
+    });
   }
 
   // SLOW outbound call - deliberately outside withDbLock (see
@@ -1942,7 +1965,7 @@ app.post('/api/orders/confirm/:token/charge', asyncHandler(async (req, res) => {
     // completed) - a second layer on top of the precheck short-circuit above.
     data = await wuzzpayRequest('POST', '/charge', {
       partner_reference: precheck.orderId,
-      amount: { amount: precheck.totalPrice, currency: 'IDR' },
+      amount: { amount: chargeAmount, currency: 'IDR' },
       product_id: productId,
       bank_code: bankCode,
     }, precheck.orderId);
@@ -1992,12 +2015,14 @@ app.post('/api/orders/confirm/:token/charge', asyncHandler(async (req, res) => {
     order.paymentMethod = productId;
     order.paymentChannel = bankCode ?? undefined;
     order.paymentInstruction = data?.data?.payment_instruction ?? undefined;
+    order.wuzzpayChargedAmount = chargeAmount;
     order.wuzzpayProvider = data?.data?.used_provider ?? undefined;
     order.wuzzpayTransactionId = transactionId ?? undefined;
     await writeOrders(orders);
     return {
       paymentMethod: order.paymentMethod,
       paymentInstruction: order.paymentInstruction,
+      wuzzpayChargedAmount: order.wuzzpayChargedAmount,
       wuzzpayTransactionId: order.wuzzpayTransactionId,
     };
   });

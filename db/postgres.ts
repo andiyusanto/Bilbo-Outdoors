@@ -227,6 +227,7 @@ function rowToOrder(row: any, items: OrderItem[]): Order {
     paymentMethod: row.payment_method ?? undefined,
     paymentChannel: row.payment_channel ?? undefined,
     paymentInstruction: row.payment_instruction ?? undefined, // JSONB - pg already parses this into a plain object
+    wuzzpayChargedAmount: row.wuzzpay_charged_amount !== null && row.wuzzpay_charged_amount !== undefined ? Number(row.wuzzpay_charged_amount) : undefined,
     wuzzpayTransactionId: row.wuzzpay_transaction_id ?? undefined,
     wuzzpayProvider: row.wuzzpay_provider ?? undefined,
     wuzzpayLastStatus: row.wuzzpay_last_status ?? undefined,
@@ -325,7 +326,7 @@ export async function readProductsPostgres(): Promise<Product[]> {
 const ORDER_COLUMNS_NO_PHOTO = `id, customer_name, customer_whatsapp, start_date, end_date, rent_duration,
   total_price, status, created_at, late_days, late_fee, confirmation_token, returned_at, picked_up_at,
   pickup_id_type, amount_paid, status_history, penalties, payment_method, payment_channel,
-  payment_instruction, wuzzpay_transaction_id, wuzzpay_provider, wuzzpay_last_status`;
+  payment_instruction, wuzzpay_charged_amount, wuzzpay_transaction_id, wuzzpay_provider, wuzzpay_last_status`;
 
 export async function readOrdersPostgres(): Promise<Order[]> {
   const [ordersRes, itemsRes] = await Promise.all([
@@ -503,6 +504,7 @@ async function writeOrdersWithClient(client: pg.PoolClient, orders: Order[]): Pr
         o.paymentMethod ?? null,
         o.paymentChannel ?? null,
         o.paymentInstruction ? JSON.stringify(o.paymentInstruction) : null,
+        o.wuzzpayChargedAmount ?? null,
         o.wuzzpayTransactionId ?? null,
         o.wuzzpayProvider ?? null,
         o.wuzzpayLastStatus ?? null,
@@ -510,8 +512,8 @@ async function writeOrdersWithClient(client: pg.PoolClient, orders: Order[]): Pr
       );
     });
     await client.query(
-      `INSERT INTO orders (id, customer_name, customer_whatsapp, start_date, end_date, rent_duration, total_price, id_card_base64, status, created_at, late_days, late_fee, confirmation_token, returned_at, picked_up_at, pickup_id_type, amount_paid, status_history, penalties, payment_method, payment_channel, payment_instruction, wuzzpay_transaction_id, wuzzpay_provider, wuzzpay_last_status, personal_photo_path)
-       VALUES ${buildValuesClause(orders.length, 26)}
+      `INSERT INTO orders (id, customer_name, customer_whatsapp, start_date, end_date, rent_duration, total_price, id_card_base64, status, created_at, late_days, late_fee, confirmation_token, returned_at, picked_up_at, pickup_id_type, amount_paid, status_history, penalties, payment_method, payment_channel, payment_instruction, wuzzpay_charged_amount, wuzzpay_transaction_id, wuzzpay_provider, wuzzpay_last_status, personal_photo_path)
+       VALUES ${buildValuesClause(orders.length, 27)}
        ON CONFLICT (id) DO UPDATE SET
          customer_name = EXCLUDED.customer_name,
          customer_whatsapp = EXCLUDED.customer_whatsapp,
@@ -546,6 +548,7 @@ async function writeOrdersWithClient(client: pg.PoolClient, orders: Order[]): Pr
          payment_method = EXCLUDED.payment_method,
          payment_channel = EXCLUDED.payment_channel,
          payment_instruction = EXCLUDED.payment_instruction,
+         wuzzpay_charged_amount = EXCLUDED.wuzzpay_charged_amount,
          wuzzpay_transaction_id = EXCLUDED.wuzzpay_transaction_id,
          wuzzpay_provider = EXCLUDED.wuzzpay_provider,
          wuzzpay_last_status = EXCLUDED.wuzzpay_last_status`,

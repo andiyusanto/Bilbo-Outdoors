@@ -1161,6 +1161,12 @@ app.post('/api/orders', asyncHandler(async (req, res) => {
     if (!customerName || !customerWhatsApp || !startDate || !endDate || !items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Missing required order fields.' });
     }
+    // Same-day pickup/return isn't a bookable option (owner decision,
+    // 2026-08-30) - the client's own date picker already prevents selecting
+    // it (DateRangePicker's endDate `min`), this is the real enforcement.
+    if (new Date(endDate).getTime() <= new Date(startDate).getTime()) {
+      return res.status(400).json({ error: 'Tanggal selesai sewa harus setelah tanggal mulai sewa.' });
+    }
 
     // Narrow readers, not the full readDB - this route only ever needs
     // orders/products/settings, never touches users/jobPriceList/jobEntries,
@@ -1194,9 +1200,9 @@ app.post('/api/orders', asyncHandler(async (req, res) => {
     const start = new Date(startDate);
     const end = new Date(endDate);
     const diffTime = Math.abs(end.getTime() - start.getTime());
-    // Non-inclusive ("nights") day count: 16th -> 17th is 1 day, not 2. Floored
-    // at 1 so a same-day pickup/return (startDate === endDate) still bills as a
-    // minimum 1-day rental instead of 0.
+    // Non-inclusive ("nights") day count: 16th -> 17th is 1 day, not 2. The
+    // validation above already guarantees endDate > startDate, so
+    // Math.max(1, ...) is now just a defensive floor, not doing real work.
     const rentDuration = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
 
     // 3. Calculate Item Costs and Total Price
@@ -1390,8 +1396,14 @@ app.put('/api/orders/:id/edit', authenticateUser, asyncHandler(async (req, res) 
     if (!startDate || !endDate || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Tanggal dan minimal satu item wajib diisi.' });
     }
+    // Same rule as order creation - same-day pickup/return isn't bookable.
+    if (new Date(endDate).getTime() <= new Date(startDate).getTime()) {
+      return res.status(400).json({ error: 'Tanggal selesai sewa harus setelah tanggal mulai sewa.' });
+    }
 
-    // Same non-inclusive "nights" formula as order creation, floored at 1 day.
+    // Same non-inclusive "nights" formula as order creation. The Math.max(1, ...)
+    // floor is now just defensive (the check above already guarantees at
+    // least one day) rather than doing real work.
     const diffTime = Math.abs(new Date(endDate).getTime() - new Date(startDate).getTime());
     const rentDuration = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
 

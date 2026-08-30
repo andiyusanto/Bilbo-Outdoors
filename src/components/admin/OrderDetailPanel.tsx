@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Phone, UserCheck, AlertTriangle, CheckCircle, Clock, Printer, Search, Pencil, Upload } from 'lucide-react';
 import { Order, OrderStatus, Product, StoreSettings } from '../../types';
-import { formatDateLabel, formatDateTimeLabel, getTodayDateString } from '../../lib/date';
+import { formatDateLabel, formatDateTimeLabel, getTodayDateString, addDaysToDateString } from '../../lib/date';
 import { calculateRentalCost, getRemainingBalance, getPenaltyTotal, getPendingExpiryDeadline } from '../../pricing';
 import { getDistinctCategories } from '../../lib/categories';
 import { getBankName, getWalletName } from '../../lib/paymentChannels';
@@ -219,7 +219,9 @@ export default function OrderDetailPanel({
     if (!editStartDate || !editEndDate) return 0;
     const start = new Date(editStartDate);
     const end = new Date(editEndDate);
-    if (end < start) return 0;
+    // Strictly after, not just >= - same-day pickup/return isn't a bookable
+    // option (see the public DateRangePicker's matching rule).
+    if (end <= start) return 0;
     // Same non-inclusive "nights" formula as order creation (server.ts).
     const diffTime = Math.abs(end.getTime() - start.getTime());
     return Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
@@ -343,7 +345,7 @@ export default function OrderDetailPanel({
                   <DateInput
                     value={editEndDate}
                     onChange={setEditEndDate}
-                    min={editStartDate || getTodayDateString()}
+                    min={editStartDate ? addDaysToDateString(editStartDate, 1) : getTodayDateString()}
                     className="w-full rounded-none border-2 border-black px-3 py-2 text-xs font-bold bg-white uppercase text-black"
                   />
                 </div>

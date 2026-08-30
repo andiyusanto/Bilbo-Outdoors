@@ -69,10 +69,17 @@ export function useAvailability(setCart: Dispatch<SetStateAction<Record<string, 
     if (startDate && endDate) {
       const start = new Date(startDate);
       const end = new Date(endDate);
-      if (end >= start) {
+      // Strictly after, not >= - same-day pickup/return isn't a bookable
+      // option (see DateRangePicker's endDate `min`, which already prevents
+      // picking it through the UI; this is the same rule enforced in the
+      // duration calc itself, in case a stale endDate survives a startDate
+      // change without the picker being touched again).
+      if (end > start) {
         const diffTime = Math.abs(end.getTime() - start.getTime());
         // Non-inclusive ("nights") day count - mirrors server.ts's order-creation
-        // formula exactly, floored at 1 for a same-day pickup/return.
+        // formula exactly. The Math.max(1, ...) floor is now just defensive
+        // (end > start already guarantees at least one day) rather than doing
+        // real work, since same-day is no longer reachable through the picker.
         const days = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
         setRentDuration(days);
         // Automatically check remaining inventory stock whenever date changes

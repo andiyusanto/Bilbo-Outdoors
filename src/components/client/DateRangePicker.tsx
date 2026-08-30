@@ -1,6 +1,6 @@
 import { Calendar } from 'lucide-react';
 import DateInput from '../DateInput';
-import { getTodayDateString } from '../../lib/date';
+import { getTodayDateString, addDaysToDateString } from '../../lib/date';
 
 interface DateRangePickerProps {
   startDate: string;
@@ -45,7 +45,10 @@ export default function DateRangePicker({
             <DateInput
               id="endDate"
               required
-              min={startDate || getTodayDateString()}
+              // Strictly after startDate, never equal to it - same-day
+              // pickup/return isn't a bookable option (owner decision,
+              // 2026-08-30): every rental must span at least one real night.
+              min={startDate ? addDaysToDateString(startDate, 1) : getTodayDateString()}
               value={endDate}
               onChange={setEndDate}
               className="w-full rounded-none border-2 border-black px-4 py-2.5 text-xs font-bold bg-white uppercase text-black"

@@ -42,6 +42,19 @@ export function localDateFromInstant(date: Date | string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+// Adds `days` calendar days to a plain "YYYY-MM-DD" string, returning the
+// same plain format - used for an exclusive minimum (e.g. "the day after
+// this one") on a date input's `min` attribute. Parses as local midnight
+// (`T00:00:00`, no timezone suffix) rather than a bare `new Date(dateStr)`
+// (UTC midnight), so day-of-month arithmetic can't be thrown off by the
+// local/UTC offset - same reasoning as this file's other local-getters helpers.
+export function addDaysToDateString(dateStr: string, days: number): string {
+  const d = new Date(`${dateStr}T00:00:00`);
+  d.setDate(d.getDate() + days);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 // "Today" as YYYY-MM-DD, in the local timezone of wherever this runs - client
 // (staff's browser) or server (the deploy box, which per CLAUDE.md is set to
 // Asia/Jakarta to match the store). NOT `.toISOString().split('T')[0]`, which

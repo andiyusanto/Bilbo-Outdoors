@@ -311,7 +311,9 @@ export default function GuideTab() {
         <p>
           Baris <Ui>Sudah Dibayar</Ui> menampilkan nominal yang sudah diterima; baris <Ui>Sisa Pembayaran</Ui> muncul
           otomatis selama masih ada tagihan tersisa. Gunakan tautan <Ui>Edit</Ui> di samping <Ui>Sudah Dibayar</Ui>{' '}
-          kapan saja untuk mencatat pelunasan tambahan sebelum barang diambil atau dikembalikan.
+          kapan saja untuk mencatat pelunasan tambahan sebelum barang diambil atau dikembalikan. Sisa DP dari
+          pembayaran online (lihat 2.7) muncul di sini dengan cara yang sama seperti DP tunai &mdash; keduanya
+          ditagih di toko saat pengambilan barang.
         </p>
         <p className="font-bold text-xs mt-3">Edit Pesanan (status Pending atau Approved/Paid)</p>
         <p>
@@ -504,6 +506,11 @@ export default function GuideTab() {
           Isi <Ui>Tanggal Mulai Sewa</Ui> dan <Ui>Tanggal Selesai Sewa</Ui>. Setelah keduanya terisi, sistem menampilkan
           durasi sewa dan mengecek ketersediaan stok riil untuk rentang tanggal tersebut secara otomatis.
         </p>
+        <Note label="Masa sewa minimal 1 hari">
+          Sewa ambil-kembali di hari yang sama bukan opsi yang bisa dipesan &mdash; kalender <Ui>Tanggal Selesai
+          Sewa</Ui> hanya menampilkan tanggal setelah <Ui>Tanggal Mulai Sewa</Ui>, tidak termasuk tanggal yang sama.
+          Setiap pesanan wajib mencakup minimal satu malam.
+        </Note>
       </Section>
 
       <Section id="g-2-4" num="2.4" title="Memilih Kategori & Alat Camping" kicker="Menjelajahi katalog dan memasukkan alat ke keranjang.">
@@ -566,6 +573,13 @@ export default function GuideTab() {
           membuka WhatsApp dengan pesan otomatis untuk staf mengecek manual (lihat juga <Ui>Cek Status ke WuzzPay</Ui>{' '}
           di 1.5).
         </p>
+        <p>
+          Untuk metode online, pelanggan bisa memilih <Ui>Bayar Penuh</Ui> atau <Ui>Bayar DP Min. 50%</Ui> (atau
+          mengetik nominal bebas di antara keduanya) sebelum membuat pembayaran &mdash; sisa tagihan otomatis
+          ditampilkan dan tetap ditagih tunai saat pengambilan barang, persis seperti DP tunai yang sudah ada.
+          Nominal yang benar-benar dibayar (bukan selalu total penuh) yang tercatat sebagai <Ui>Sudah Dibayar</Ui>{' '}
+          begitu pembayaran online terverifikasi.
+        </p>
       </Section>
 
       <Section id="g-2-8" num="2.8" title="Setelah Pesanan Dikirim — Apa Selanjutnya?" kicker="Menghubungkan sisi pelanggan dengan proses yang dilakukan staf.">
@@ -588,6 +602,8 @@ export default function GuideTab() {
           <li><strong>Foto diri pelanggan</strong> mendukung JPG, PNG, WebP, dan HEIC &mdash; semua diproses otomatis oleh sistem.</li>
           <li><strong>Pembayaran online (QRIS/Transfer Bank/E-Wallet) terhubung ke gateway WuzzPay sungguhan</strong>, namun untuk saat ini pelanggan umum hanya bisa memakai Bayar Tunai (lihat 2.7). Gunakan <Ui>Cek Status ke WuzzPay</Ui> di Manajemen Order untuk memverifikasi pembayaran online secara manual jika diperlukan.</li>
           <li><strong>Syarat &amp; Ketentuan wajib dicentang pelanggan</strong> sebelum bisa mengirim pemesanan &mdash; isi teksnya diatur dari Pengaturan (lihat 1.10 dan 2.6).</li>
+          <li><strong>Masa sewa minimal 1 hari</strong> &mdash; sewa ambil-kembali di hari yang sama bukan opsi yang bisa dipesan, baik lewat halaman publik maupun Edit Pesanan di admin (lihat 2.3).</li>
+          <li><strong>DP minimal 50% kini juga tersedia untuk pembayaran online</strong>, tidak hanya tunai &mdash; pelanggan memilih nominalnya sendiri di halaman konfirmasi (lihat 2.7).</li>
           <li><strong>Karyawan vs Owner</strong>: jika sebuah menu terasa hilang, periksa dahulu peran akun yang digunakan (lihat 1.2) &mdash; ini bukan kesalahan sistem.</li>
         </ul>
       </Section>

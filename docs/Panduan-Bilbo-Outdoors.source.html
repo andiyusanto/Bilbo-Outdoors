@@ -473,7 +473,7 @@
   <p>Untuk pesanan yang dibayar online, kotak <span class="ui">Info Metode Pembayaran</span> menampilkan nama bank/e-wallet (bukan hanya kode mentahnya, misal <span class="ui">VA Bank Mandiri (008)</span>), nomor Virtual Account yang diberikan ke pelanggan, status gateway, dan ID Transaksi WuzzPay &mdash; berguna untuk mencocokkan dengan tangkapan layar/bukti yang dikirim pelanggan.</p>
 
   <h3 class="sub">Pembayaran sebagian (DP)</h3>
-  <p>Baris <span class="ui">Sudah Dibayar</span> menampilkan nominal yang sudah diterima; baris <span class="ui">Sisa Pembayaran</span> muncul otomatis selama masih ada tagihan tersisa. Gunakan tautan <span class="ui">Edit</span> di samping <span class="ui">Sudah Dibayar</span> kapan saja untuk mencatat pelunasan tambahan sebelum barang diambil atau dikembalikan.</p>
+  <p>Baris <span class="ui">Sudah Dibayar</span> menampilkan nominal yang sudah diterima; baris <span class="ui">Sisa Pembayaran</span> muncul otomatis selama masih ada tagihan tersisa. Gunakan tautan <span class="ui">Edit</span> di samping <span class="ui">Sudah Dibayar</span> kapan saja untuk mencatat pelunasan tambahan sebelum barang diambil atau dikembalikan. Sisa DP dari pembayaran online (lihat 2.7) muncul di sini dengan cara yang sama seperti DP tunai &mdash; keduanya ditagih di toko saat pengambilan barang.</p>
 
   <h3 class="sub">Edit Pesanan (status Pending atau Approved/Paid)</h3>
   <p>Tombol <span class="ui">Edit Pesanan (Item &amp; Tanggal)</span> muncul selama pesanan masih Pending atau Approved/Paid &mdash; terkunci begitu barang diambil (Item Picked Up), karena sejak itu item/tanggal dianggap final. Gunakan untuk menambah, mengurangi, atau mengganti alat yang disewa, maupun menjadwalkan ulang tanggal sewa &mdash; tanpa perlu membatalkan dan membuat pesanan baru. Total biaya dan ketersediaan stok dihitung ulang otomatis; stok milik pesanan ini sendiri tidak ikut dihitung sebagai &ldquo;terpakai&rdquo; saat mengecek ketersediaan. Daftar alat pada langkah ini juga menampilkan Varian/Ukuran/Warna produk (jika diisi), sama seperti di halaman katalog publik. Perubahan ini tercatat di <span class="ui">Riwayat Status</span>.</p>
@@ -659,11 +659,16 @@
   <h2 class="section-title">2.3 Memilih Tanggal Sewa</h2>
   <p class="kicker">Langkah pertama sebelum bisa memilih alat &mdash; menentukan tanggal mulai dan selesai sewa.</p>
 
-  <p>Pada bagian <strong>PILIH TANGGAL PENYEWAAN</strong>, isi <span class="ui">Tanggal Mulai Sewa</span> dan <span class="ui">Tanggal Selesai Sewa</span> (tanggal mulai minimal hari ini; tanggal selesai minimal sama dengan tanggal mulai). Setelah kedua tanggal terisi, sistem menampilkan &ldquo;DURASI SEWA DIHITUNG: N HARI&rdquo; dan secara otomatis mengecek ketersediaan stok riil untuk rentang tanggal tersebut.</p>
+  <p>Pada bagian <strong>PILIH TANGGAL PENYEWAAN</strong>, isi <span class="ui">Tanggal Mulai Sewa</span> dan <span class="ui">Tanggal Selesai Sewa</span> (tanggal mulai minimal hari ini; tanggal selesai minimal satu hari setelah tanggal mulai). Setelah kedua tanggal terisi, sistem menampilkan &ldquo;DURASI SEWA DIHITUNG: N HARI&rdquo; dan secara otomatis mengecek ketersediaan stok riil untuk rentang tanggal tersebut.</p>
 
   <div class="note">
     <span class="note-label">Penting</span>
     Sebelum kedua tanggal dipilih, sistem menampilkan peringatan bahwa pelanggan harus memilih rentang tanggal terlebih dahulu untuk melihat ketersediaan stok yang sebenarnya dan mulai memesan.
+  </div>
+
+  <div class="note">
+    <span class="note-label">Masa sewa minimal 1 hari</span>
+    Sewa ambil-kembali di hari yang sama bukan opsi yang bisa dipesan &mdash; kalender <span class="ui">Tanggal Selesai Sewa</span> hanya menampilkan tanggal setelah <span class="ui">Tanggal Mulai Sewa</span>, tidak termasuk tanggal yang sama. Setiap pesanan wajib mencakup minimal satu malam.
   </div>
 </section>
 
@@ -719,6 +724,8 @@
 
   <p>Untuk metode online (dipakai lewat akun uji internal saat aktivasi kanal belum selesai), begitu pelanggan membuat pembayaran, halaman ini otomatis memeriksa status setiap beberapa detik dan langsung memperbarui pesanan begitu terverifikasi &mdash; tanpa perlu staf melakukan apa pun secara manual. Jika pembayaran sudah dilakukan namun halaman belum juga memperbarui status, tombol <span class="ui">Sudah Bayar Tapi Belum Terverifikasi?</span> membuka WhatsApp dengan pesan otomatis untuk staf mengecek manual (lihat juga <span class="ui">Cek Status ke WuzzPay</span> di 1.5).</p>
 
+  <p>Untuk metode online, pelanggan bisa memilih <span class="ui">Bayar Penuh</span> atau <span class="ui">Bayar DP Min. 50%</span> (atau mengetik nominal bebas di antara keduanya) sebelum membuat pembayaran &mdash; sisa tagihan otomatis ditampilkan dan tetap ditagih tunai saat pengambilan barang, persis seperti DP tunai yang sudah ada. Nominal yang benar-benar dibayar (bukan selalu total penuh) yang tercatat sebagai <span class="ui">Sudah Dibayar</span> begitu pembayaran online terverifikasi.</p>
+
   <p>Tombol <span class="ui">Kembali ke Katalog</span> membawa kembali ke halaman utama.</p>
 </section>
 
@@ -749,6 +756,8 @@
     <li><strong>Foto diri pelanggan</strong> mendukung format JPG, PNG, WebP, dan HEIC (format bawaan foto iPhone) &mdash; semuanya diproses otomatis oleh sistem, staf tidak perlu mengonversi file secara manual.</li>
     <li><strong>Pembayaran online (QRIS/Transfer Bank/E-Wallet) terhubung ke gateway WuzzPay sungguhan</strong>, namun untuk saat ini pelanggan umum hanya bisa memakai Bayar Tunai (lihat 2.7). Gunakan <span class="ui">Cek Status ke WuzzPay</span> di Manajemen Order untuk memverifikasi pembayaran online secara manual jika diperlukan.</li>
     <li><strong>Syarat &amp; Ketentuan wajib dicentang pelanggan</strong> sebelum bisa mengirim pemesanan &mdash; isi teksnya diatur dari Pengaturan (lihat 1.10 dan 2.6).</li>
+    <li><strong>Masa sewa minimal 1 hari</strong> &mdash; sewa ambil-kembali di hari yang sama bukan opsi yang bisa dipesan, baik lewat halaman publik maupun Edit Pesanan di admin (lihat 2.3).</li>
+    <li><strong>DP minimal 50% kini juga tersedia untuk pembayaran online</strong>, tidak hanya tunai &mdash; pelanggan memilih nominalnya sendiri di halaman konfirmasi (lihat 2.7).</li>
     <li><strong>Karyawan vs Owner</strong>: jika sebuah menu terasa hilang/tidak muncul, periksa dahulu apakah akun yang digunakan memang berperan sebagai Karyawan (lihat 1.2) &mdash; ini bukan kesalahan sistem.</li>
     <li>Kontak resmi, alamat, dan jam operasional Bilbo Outdoors ditampilkan di footer halaman utama, dan dapat diubah kapan saja dari menu Pengaturan Toko &rarr; Footer &amp; Teks Berjalan (lihat 1.10) &mdash; jadi tidak dicantumkan sebagai angka tetap di sini agar panduan ini tidak pernah tidak sinkron dengan data yang sebenarnya.</li>
   </ul>

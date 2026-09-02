@@ -973,9 +973,21 @@ app.post('/api/products/upload-image', authenticateUser, asyncHandler(async (req
 // no time-of-day granularity - a short readiness window still blocks the entire
 // next calendar day, not just part of it. A completed order with no returnedAt
 // (placed before this feature existed) is excluded entirely, exactly as before -
-// readiness is never applied retroactively. Active (not-yet-returned) orders are
-// unaffected by readiness and block through their scheduled endDate only, same as
-// before this feature.
+// readiness is never applied retroactively.
+//
+// Active (not-yet-marked-returned) orders get the SAME buffer too, anchored on
+// their scheduled endDate instead of a real returnedAt - confirmed 2026-09-02
+// as a real production gap: marking an order Item Returned/Completed is a
+// manual staff click (Tanpa Denda / Terapkan Denda & Selesaikan Sewa), so an
+// order can sit in Item Picked Up for any amount of time after its scheduled
+// end date with zero readiness protection under the old rule (it only ever
+// blocked through endDate itself), letting the item look bookable again - and
+// get double-booked - before staff has even confirmed it's back, let alone
+// readied. Treating the scheduled endDate as the assumed return day is the
+// safe default; the moment the order actually gets marked returned, it
+// switches to the isCompleted branch below using the real returnedAt, which
+// can only ever move the window earlier (an early return frees stock sooner,
+// unchanged pre-existing behavior) never later.
 //
 // order.returnedAt is a real UTC instant (.toISOString()); its calendar day
 // must be read in Asia/Jakarta, not the server process's own ambient
@@ -1035,8 +1047,18 @@ function calculateAllocatedStock(orders: Order[], products: Product[], startDate
           effectiveEnd = new Date(jakartaDateString(order.returnedAt!));
           effectiveEnd.setDate(effectiveEnd.getDate() + (readinessDaysById.get(item.productId) || 0) - 1);
         } else {
+          // Unlike the completed branch, endDate itself is already blocked by
+          // the rental occupancy alone, readiness or not - the customer has
+          // it until then regardless. readinessDays is added as extra days
+          // ON TOP of endDate (not endDate + readinessDays - 1, which would
+          // wrongly shrink the window for the common readinessDays=0 case -
+          // caught before shipping: that formula moves effectiveEnd a day
+          // EARLIER than endDate itself when there's no readiness configured).
+          // readinessDays=0 leaves this exactly as before (effectiveEnd =
+          // endDate itself, no extra buffer, zero regression).
           effectiveStart = orderStart;
           effectiveEnd = new Date(order.endDate);
+          effectiveEnd.setDate(effectiveEnd.getDate() + (readinessDaysById.get(item.productId) || 0));
         }
 
         if (currentDay >= effectiveStart && currentDay <= effectiveEnd) {

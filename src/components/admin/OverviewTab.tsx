@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Clock, DollarSign, Calendar, ChevronDown } from 'lucide-react';
+import { Clock, DollarSign, Calendar, ChevronDown, AlertTriangle } from 'lucide-react';
 import { OrderListItem, Product, DashboardStats } from '../../types';
 import { getDefaultDateRange, getTodayDateString, localDateFromInstant } from '../../lib/date';
 import { getAmountPaid, getRemainingBalance } from '../../pricing';
@@ -41,6 +41,13 @@ export default function OverviewTab({ orders, products }: OverviewTabProps) {
   // Piutang - total still owed across the same order set.
   const totalOutstanding = finishedOrPaidOrders.reduce((sum, o) => sum + getRemainingBalance(o), 0);
   const dueTodayCount = dateFilteredOrders.filter(o => (o.status === 'Item Picked Up' || o.status === 'Approved/Paid') && (o.endDate <= todayStr)).length;
+  // Item Picked Up orders past their scheduled endDate that were never
+  // marked returned now block that stock indefinitely for every future
+  // booking (see calculateAllocatedStock, server.ts) - a stale one silently
+  // locks inventory forever with no natural expiry, so it needs its own
+  // proactive surface here rather than waiting for a customer to hit it as
+  // a confusing "stok tidak cukup" error on an unrelated order.
+  const overduePickedUpCount = dateFilteredOrders.filter(o => o.status === 'Item Picked Up' && o.endDate < todayStr).length;
 
   // Calculate some analytics values for visual dashboard charts - also tracks
   // a per-product breakdown within each category, so clicking a category row
@@ -153,6 +160,20 @@ export default function OverviewTab({ orders, products }: OverviewTabProps) {
             <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Jatuh Tempo Hari Ini</p>
             <p className="text-2xl font-display font-black text-black mt-0.5">{dueTodayCount} Barang</p>
             <p className="text-[10px] text-zinc-500 font-bold uppercase mt-0.5">Harus Dikembalikan</p>
+          </div>
+        </div>
+
+        <div className={`bg-white border-2 p-5 rounded-none flex items-center space-x-4 shadow-[4px_4px_0px_rgba(0,0,0,1)] relative overflow-hidden ${overduePickedUpCount > 0 ? 'border-red-600' : 'border-black'}`}>
+          {overduePickedUpCount > 0 && (
+            <div className="absolute top-0 right-0 bg-red-600 text-white border-l border-b border-black px-2 py-0.5 font-mono text-[9px] font-black uppercase tracking-wider">MENGUNCI STOK</div>
+          )}
+          <div className={`w-12 h-12 border-2 border-black rounded-none flex items-center justify-center shrink-0 shadow-[1px_1px_0px_rgba(0,0,0,1)] ${overduePickedUpCount > 0 ? 'bg-red-600 text-white' : 'bg-zinc-100 text-black'}`}>
+            <AlertTriangle className="w-6 h-6 stroke-[2.5]" />
+          </div>
+          <div>
+            <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Belum Dikembalikan (Lewat Jadwal)</p>
+            <p className="text-2xl font-display font-black text-black mt-0.5">{overduePickedUpCount} Pesanan</p>
+            <p className="text-[10px] text-zinc-500 font-bold uppercase mt-0.5">Tandai Kembali Untuk Buka Stok</p>
           </div>
         </div>
       </div>

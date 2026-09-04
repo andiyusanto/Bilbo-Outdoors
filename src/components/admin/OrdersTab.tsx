@@ -3,7 +3,7 @@ import { Search, ChevronRight, FileSpreadsheet, ArrowUpDown, ChevronUp, ChevronD
 import { OrderListItem, OrderStatus, Product, StoreSettings } from '../../types';
 import { useOrderActions } from '../../hooks/useOrderActions';
 import { useOrderEditActions } from '../../hooks/useOrderEditActions';
-import { formatDateLabel, formatDateTimeLabel, getDefaultDateRange, localDateFromInstant } from '../../lib/date';
+import { formatDateLabel, formatDateTimeLabel, getDefaultDateRange, getTodayDateString, localDateFromInstant, daysBetweenDateStrings } from '../../lib/date';
 import { getAmountPaid, getRemainingBalance, getPenaltyTotal } from '../../pricing';
 import OrderDetailPanel from './OrderDetailPanel';
 import DateInput from '../DateInput';
@@ -76,6 +76,13 @@ export default function OrdersTab({ orders, products, settings, orderActions, or
   const [orderDateTo, setOrderDateTo] = useState<string>(() => getDefaultDateRange().to);
   const [sortColumn, setSortColumn] = useState<SortColumn | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  // An order stuck in Item Picked Up past its scheduled endDate now blocks
+  // that stock indefinitely (see calculateAllocatedStock, server.ts) until
+  // someone actually marks it returned - unlike lateFee/lateDays, this isn't
+  // populated by any explicit action, so it needs its own always-on check
+  // here rather than reusing a server-computed field.
+  const todayStr = getTodayDateString();
 
   // 3-state cycle per column: click = asc, click again = desc, click again =
   // back to default (insertion) order. Clicking a different column resets to
@@ -322,6 +329,11 @@ export default function OrdersTab({ orders, products, settings, orderActions, or
                       }`}>
                         {order.status}
                       </span>
+                      {order.status === 'Item Picked Up' && order.endDate < todayStr ? (
+                        <p className="text-[9px] font-black text-white bg-red-600 border border-black inline-block px-1.5 py-0.5 mt-1 uppercase">
+                          Lewat {daysBetweenDateStrings(order.endDate, todayStr)} Hari - Kunci Stok
+                        </p>
+                      ) : null}
                     </td>
                     <td className="px-5 py-4">
                       {order.statusHistory && order.statusHistory.length > 0 ? (

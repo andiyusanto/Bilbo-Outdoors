@@ -68,6 +68,15 @@ export function getTodayDateString(): string {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
+// Whole days between two plain "YYYY-MM-DD" strings (positive when `to` is
+// after `from`) - parsed as local midnight like addDaysToDateString above, so
+// it can't be thrown off by the local/UTC offset either.
+export function daysBetweenDateStrings(from: string, to: string): number {
+  const a = new Date(`${from}T00:00:00`);
+  const b = new Date(`${to}T00:00:00`);
+  return Math.round((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24));
+}
+
 // Default range for every admin date-range filter: first day of the current
 // month through today (both inclusive) - e.g. on 2026-07-31 this is
 // 2026-07-01..2026-07-31; on 2026-08-03 it's 2026-08-01..2026-08-03.

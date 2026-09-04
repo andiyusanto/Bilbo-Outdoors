@@ -133,6 +133,19 @@ export default function InventoryTab({ products, productActions }: InventoryTabP
                   </div>
 
                   <h3 className="font-display font-black text-sm text-black uppercase mt-3">{prod.name}</h3>
+                  {(prod.varian || prod.size || prod.color) && (
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {prod.varian && (
+                        <span className="text-[9px] font-black text-black bg-brand/15 border border-black px-1.5 py-0.5 uppercase">Varian: {prod.varian}</span>
+                      )}
+                      {prod.size && (
+                        <span className="text-[9px] font-black text-black bg-brand/15 border border-black px-1.5 py-0.5 uppercase">Ukuran: {prod.size}</span>
+                      )}
+                      {prod.color && (
+                        <span className="text-[9px] font-black text-black bg-brand/15 border border-black px-1.5 py-0.5 uppercase">Warna: {prod.color}</span>
+                      )}
+                    </div>
+                  )}
                   {prod.description && (
                     <p className="text-[11px] text-zinc-600 font-bold uppercase mt-1.5 line-clamp-2">{prod.description}</p>
                   )}

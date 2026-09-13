@@ -1073,21 +1073,35 @@ function calculateAllocatedStock(orders: Order[], products: Product[], startDate
           effectiveStart = orderStart;
           effectiveEnd = null;
         } else {
-          // Pending / Approved-Paid, never confirmed picked up - unchanged
-          // from before: fixed buffer past the scheduled endDate, NOT
-          // indefinite. Unlike Item Picked Up, this status was never
-          // confirmed to have physically left the shop, and Approved/Paid
-          // has no auto-expiry the way Pending does (see expireStaleOrders) -
-          // blocking these indefinitely on top of an unconfirmed pickup would
-          // risk permanently locking stock for a genuine no-show with no
-          // recovery path, a worse failure mode than the one this exists to
-          // close. endDate itself is already blocked by the rental occupancy
-          // alone, readiness or not; readinessDays is added ON TOP of endDate
-          // (not endDate + readinessDays - 1, which would wrongly shrink the
-          // window for the common readinessDays=0 case - caught before
-          // shipping the original fix: that formula moves effectiveEnd a day
-          // EARLIER than endDate itself when there's no readiness configured).
-          effectiveStart = orderStart;
+          // Pending / Approved-Paid, never confirmed picked up - fixed buffer
+          // past the scheduled endDate, NOT indefinite. Unlike Item Picked Up,
+          // this status was never confirmed to have physically left the shop,
+          // and Approved/Paid has no auto-expiry the way Pending does (see
+          // expireStaleOrders) - blocking these indefinitely on top of an
+          // unconfirmed pickup would risk permanently locking stock for a
+          // genuine no-show with no recovery path, a worse failure mode than
+          // the one this exists to close. endDate itself is already blocked
+          // by the rental occupancy alone, readiness or not; readinessDays is
+          // added ON TOP of endDate (not endDate + readinessDays - 1, which
+          // would wrongly shrink the window for the common readinessDays=0
+          // case - caught before shipping the original fix: that formula
+          // moves effectiveEnd a day EARLIER than endDate itself when there's
+          // no readiness configured).
+          //
+          // effectiveStart is likewise pulled BACKWARD by readinessDays
+          // (owner-reported bug, 2026-09-13): readiness is the gap needed
+          // between one rental's return and the next one's pickup, and that
+          // gap has to be enforced from whichever side of it already exists
+          // in the system. The forward extension above only protects a NEW
+          // booking from starting too soon after THIS order's end - it does
+          // nothing to stop a NEW booking from ending too close BEFORE this
+          // order's own start (e.g. a tent already booked from Sept 14 with
+          // 48h readiness still let a new booking run through Sept 13, only
+          // 24h of clearance). Pulling effectiveStart back the same way
+          // effectiveEnd is pushed forward makes the buffer symmetric, so it
+          // catches the conflict regardless of which order was booked first.
+          effectiveStart = new Date(order.startDate);
+          effectiveStart.setDate(effectiveStart.getDate() - (readinessDaysById.get(item.productId) || 0));
           effectiveEnd = new Date(order.endDate);
           effectiveEnd.setDate(effectiveEnd.getDate() + (readinessDaysById.get(item.productId) || 0));
         }

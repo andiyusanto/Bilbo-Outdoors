@@ -106,6 +106,20 @@ export function useOrderActions({ token, orders, setOrders, fetchStats }: UseOrd
     });
   };
 
+  // An Approved/Paid order has no auto-expiry the way Pending does (see
+  // expireStaleOrders, server.ts) - a renter who paid but never came to
+  // collect the item leaves it locking stock indefinitely with no recovery
+  // path, since the only other status transition exposed for this status is
+  // "Barang Diambil" (moving forward into Item Picked Up). This reuses the
+  // existing Expired status (calculateAllocatedStock already excludes it) so
+  // no new status/enum value is needed - the status history still shows it
+  // went through Approved/Paid first, distinguishing it from an order that
+  // expired because it was never paid at all.
+  const handleCancelUnclaimedOrder = async (orderId: string) => {
+    if (!(await confirmAction('Batalkan pesanan ini karena barang tidak pernah diambil? Stok akan langsung dibebaskan. Pembayaran yang sudah diterima tidak otomatis dikembalikan - urus refund secara terpisah jika diperlukan.'))) return;
+    await handleUpdateOrderStatus(orderId, 'Expired');
+  };
+
   // Corrects/tops-up the amount collected on an order without touching its
   // status - e.g. a partially-paying customer pays more before pickup.
   const handleUpdatePayment = async (orderId: string, amountPaid: number) => {
@@ -334,6 +348,7 @@ export function useOrderActions({ token, orders, setOrders, fetchStats }: UseOrd
     setLateCalculationResult,
     handleOpenOrderDetail,
     handleUpdateOrderStatus,
+    handleCancelUnclaimedOrder,
     handleUpdatePayment,
     handleVerifyWuzzpayPayment,
     handleAddPenalty,

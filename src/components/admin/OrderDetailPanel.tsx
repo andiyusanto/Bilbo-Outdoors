@@ -43,6 +43,7 @@ interface OrderDetailPanelProps {
   settings: StoreSettings;
   onClose: () => void;
   onUpdateStatus: (orderId: string, newStatus: OrderStatus, pickupIdType?: string, amountPaid?: number) => void;
+  onCancelUnclaimed: (orderId: string) => void;
   onUpdatePayment: (orderId: string, amountPaid: number) => void;
   onVerifyWuzzpayPayment: (orderId: string) => void;
   onAddPenalty: (orderId: string, penalty: { type: 'Kerusakan' | 'Kehilangan'; productId: string; description: string; amount: number }) => void;
@@ -67,6 +68,7 @@ export default function OrderDetailPanel({
   settings,
   onClose,
   onUpdateStatus,
+  onCancelUnclaimed,
   onUpdatePayment,
   onVerifyWuzzpayPayment,
   onAddPenalty,
@@ -769,6 +771,15 @@ export default function OrderDetailPanel({
                 className="w-full py-3 bg-black hover:bg-brand hover:text-black text-brand font-black text-xs border-2 border-black shadow-[3px_3px_0px_rgba(0,0,0,1)] rounded-none transition-all uppercase tracking-widest cursor-pointer"
               >
                 Barang Diambil (Diserahkan ke Penyewa)
+              </button>
+            )}
+
+            {order.status === 'Approved/Paid' && !showPickupConfirm && (
+              <button
+                onClick={() => onCancelUnclaimed(order.id)}
+                className="w-full py-2.5 bg-white hover:bg-red-50 text-red-600 font-black text-[11px] border-2 border-red-500 rounded-none transition-all uppercase tracking-widest cursor-pointer"
+              >
+                Batalkan Pesanan (Tidak Diambil)
               </button>
             )}
 

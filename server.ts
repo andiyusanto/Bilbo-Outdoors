@@ -1962,7 +1962,7 @@ app.post('/api/orders/confirm/:token/charge', asyncHandler(async (req, res) => {
   // with "Data tidak ditemukan = Bank Code", while the numeric code from
   // their /v1/va/static example (014 = BCA) succeeded. Their own docs are
   // internally inconsistent here; this is what's actually correct.
-  const VALID_BANK_CODES = ['014', '008', '002', '009', '022', '011', '013', '451']; // BCA, Mandiri, BRI, BNI, CIMB, Danamon, Permata, BSI
+  const VALID_BANK_CODES = ['014', '008', '002', '009', '022', '011', '013', '451', '147', '153', '490']; // BCA, Mandiri, BRI, BNI, CIMB, Danamon, Permata, BSI, Muamalat, Sinarmas, Bank Neo Commerce
   const VALID_WALLET_CODES = ['ovo', 'dana', 'gopay'];
   if (productId === 'va' && !VALID_BANK_CODES.includes(bankCode)) {
     return res.status(400).json({ error: 'Kode bank tidak valid.' });
@@ -2005,7 +2005,7 @@ app.post('/api/orders/confirm/:token/charge', asyncHandler(async (req, res) => {
         wuzzpayTransactionId: order.wuzzpayTransactionId,
       };
     }
-    return { kind: 'ok' as const, orderId: order.id, totalPrice: order.totalPrice };
+    return { kind: 'ok' as const, orderId: order.id, totalPrice: order.totalPrice, customerName: order.customerName, customerWhatsApp: order.customerWhatsApp };
   });
 
   if (precheck.kind === 'not-found') return res.status(404).json({ error: 'Pesanan tidak ditemukan.' });
@@ -2042,12 +2042,27 @@ app.post('/api/orders/confirm/:token/charge', asyncHandler(async (req, res) => {
     // Idempotency-Key is deterministic (order.id) so a raced/duplicated
     // request is deduped by WuzzPay itself (409 in-flight, replayed once
     // completed) - a second layer on top of the precheck short-circuit above.
-    data = await wuzzpayRequest('POST', '/charge', {
+    //
+    // One path PER PRODUCT now (confirmed 2026-10-25 via docs.wuzzpay.com +
+    // live sandbox curl testing, after the merchant's provider switched from
+    // Espay to Winpay) - the old generic POST /charge with product_id in the
+    // body is gone (404 confirmed live). No product_id field anymore either;
+    // it's implied by the path. emoney uses `wallet` (not `bank_code`) and
+    // newly requires customer_name/customer_phone - confirmed accepted
+    // against sandbox with these exact fields.
+    const chargeBody: Record<string, unknown> = {
       partner_reference: precheck.orderId,
       amount: { amount: chargeAmount, currency: 'IDR' },
-      product_id: productId,
-      bank_code: bankCode,
-    }, precheck.orderId);
+    };
+    if (productId === 'va') {
+      chargeBody.bank_code = bankCode;
+    } else if (productId === 'emoney') {
+      chargeBody.wallet = bankCode; // client's bankCode field doubles as the wallet code
+      chargeBody.customer_name = precheck.customerName;
+      chargeBody.customer_phone = precheck.customerWhatsApp;
+    }
+    // qris sends neither bank_code nor wallet
+    data = await wuzzpayRequest('POST', `/charge/${productId}`, chargeBody, precheck.orderId);
   } catch (err) {
     console.error(`WuzzPay charge failed for order ${precheck.orderId}:`, err);
     // partner_reference already used (WuzzPay's own idempotency dedup, code
@@ -2067,14 +2082,17 @@ app.post('/api/orders/confirm/:token/charge', asyncHandler(async (req, res) => {
     return res.status(502).json({ error: 'Gagal membuat instruksi pembayaran. Silakan coba lagi.' });
   }
 
-  // Transaction id is at data.transaction.ID - nested under a PascalCase
-  // "transaction" object, confirmed empirically against the real sandbox
-  // (Stage 2 of the payment gateway plan). WuzzPay's docs don't show this
-  // shape at all (their VA example response has no "transaction" key and
-  // no id field of any kind), so this was unknown until tested live. Still
-  // falls back to the other plausible names defensively and logs loudly if
-  // even those are absent, rather than silently trusting a guess.
-  const transactionId = data?.data?.transaction?.ID ?? data?.data?.id ?? data?.data?.transaction_id ?? data?.data?.payment_instruction?.id;
+  // Transaction id: confirmed 2026-10-25 via real GET /v1/transactions data
+  // (both list and by-id, for genuine historical transactions) that the id
+  // used to look up a transaction's status is the plain data.id (e.g.
+  // "000163") - not the old data.transaction.ID (PascalCase) guess from the
+  // Espay era, which never appears anywhere in real data. Still unconfirmed
+  // against an actual *successful* charge response body specifically (only
+  // against GET) since sandbox has no active provider to complete one
+  // against right now - keeps the old guesses plus provider_ref (the only
+  // reference WuzzPay's own charge-endpoint doc examples actually show) as
+  // defensive fallbacks, and still logs loudly if nothing matches.
+  const transactionId = data?.data?.id ?? data?.data?.transaction?.id ?? data?.data?.transaction?.ID ?? data?.data?.payment_instruction?.provider_ref ?? data?.data?.transaction_id;
   if (!transactionId) {
     console.error(`WuzzPay charge response for order ${precheck.orderId} has no recognizable transaction id - raw response:`, JSON.stringify(data));
   }
@@ -2211,10 +2229,9 @@ function verifyWuzzpaySignature(rawBody: Buffer | undefined, timestamp: unknown,
 // Public webhook receiver - no auth header required, since WuzzPay's own
 // servers call this; authenticity is instead checked via the HMAC signature
 // above (when WUZZPAY_WEBHOOK_SECRET is configured). Even so, the payload is
-// still never trusted for the actual state change: only ref_no (WuzzPay's
-// name for the partner_reference/order.id we sent at charge time - confirmed
-// against a real delivery, docs never specified it) is read, purely to look
-// up which order to re-check; the actual status change always comes from an
+// still never trusted for the actual state change: only partner_reference
+// (the order.id we sent at charge time) is read, purely to look up which
+// order to re-check; the actual status change always comes from an
 // authenticated GET back to WuzzPay, never from this payload. This makes the
 // endpoint replay-safe and spoof-proof by construction even if signature
 // verification is ever skipped (unconfigured secret, or a future WuzzPay
@@ -2231,7 +2248,14 @@ app.post('/api/webhooks/wuzzpay', asyncHandler(async (req, res) => {
       return res.status(200).json({ received: true });
     }
 
-    const partnerReference = req.body?.ref_no ?? req.body?.partner_reference ?? req.body?.data?.partner_reference;
+    // partner_reference tried first now (confirmed 2026-10-25 against real
+    // transaction records: ref_no is a *different* value than
+    // partner_reference, e.g. "order-1788046773581" vs "5d625ccf02cfc800" -
+    // the original "ref_no = partner_reference" assumption came from a
+    // synthetic webhook.test delivery, not a real transaction, and would
+    // never have matched a real order). ref_no kept as a last-resort
+    // fallback only, in case some webhook event shapes still echo it back.
+    const partnerReference = req.body?.partner_reference ?? req.body?.data?.partner_reference ?? req.body?.ref_no;
     if (typeof partnerReference === 'string') {
       // Narrow readOrders/writeOrders throughout, not the full readDB/writeDB
       // - same reasoning as payment-status/cash/charge above.

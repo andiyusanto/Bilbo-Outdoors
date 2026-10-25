@@ -248,8 +248,17 @@ const WUZZPAY_WEBHOOK_SECRET = process.env.WUZZPAY_WEBHOOK_SECRET;
 // Sandbox is the safe default when WUZZPAY_ENV is unset - mirrors the
 // "missing config = the safe path" convention already used for Telegram/image
 // upload above. Production is only ever used when explicitly opted into.
+//
+// Production host corrected 2026-10-25: docs.wuzzpay.com's base-url page
+// says api.wuzzpay.com, but that host consistently returned a Cloudflare
+// origin_bad_gateway error (their own origin server, not ours - confirmed
+// via a live production test and its Render log). api-gateway.wuzzpay.com -
+// the same "api-gateway" naming the sandbox host already uses, just without
+// "-devel" - is confirmed alive and responding correctly at the application
+// layer (a clean GWY001 "invalid or missing api key" JSON error, not an
+// infrastructure-level 502) when hit directly.
 const WUZZPAY_BASE_URL = process.env.WUZZPAY_ENV === 'production'
-  ? 'https://api.wuzzpay.com/v1'
+  ? 'https://api-gateway.wuzzpay.com/v1'
   : 'https://api-gateway-devel.wuzzpay.com/v1';
 if (!WUZZPAY_API_KEY || !WUZZPAY_MERCHANT_ID) {
   console.log('WuzzPay payment gateway disabled — set WUZZPAY_API_KEY/WUZZPAY_MERCHANT_ID to enable.');

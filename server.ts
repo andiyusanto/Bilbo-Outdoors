@@ -2102,9 +2102,10 @@ app.post('/api/orders/confirm/:token/charge', asyncHandler(async (req, res) => {
 
   // Quick, lock-protected read + validation - a stale read past this point is
   // fine, since the actual charge call below is naturally idempotent
-  // (deterministic Idempotency-Key = order.id), so a race against a
-  // concurrent charge attempt is caught by WuzzPay itself (409 in-flight),
-  // not by this check.
+  // (deterministic Idempotency-Key = order.id + product + bank, see the
+  // charge call below), so a race against a concurrent charge attempt on
+  // the SAME channel+bank is caught by WuzzPay itself (409 in-flight), not
+  // by this check.
   const precheck = await withDbLock(async () => {
     const orders = await readOrders();
     const order = orders.find((o: Order) => o.confirmationToken && o.confirmationToken === token);
@@ -2237,19 +2238,30 @@ app.post('/api/orders/confirm/:token/charge', asyncHandler(async (req, res) => {
       chargeBody.customer_phone = precheck.customerWhatsApp;
     }
     // qris sends neither bank_code nor wallet
-    data = await wuzzpayRequest('POST', `/charge/${productId}`, chargeBody, precheck.orderId);
+    //
+    // Idempotency-Key scoped to order+product+bank (2026-10-26 fix) - NOT
+    // bare order.id. Confirmed two different product PATHS (/charge/va vs
+    // /charge/qris) don't 409 against each other even sharing a key, but
+    // that's a different endpoint each time; two calls to the SAME path
+    // (/charge/va) with a different bank_code (e.g. BRI, then Mandiri) still
+    // share one endpoint, so a bare order.id key collided and WuzzPay 409'd
+    // the second one - observed live, misread as REFERENCE_STUCK (permanent)
+    // when it was actually just a reused key. Including bank_code keeps each
+    // channel+bank combination on the same order its own idempotency scope.
+    const idempotencyKey = bankCode ? `${precheck.orderId}:${productId}:${bankCode}` : `${precheck.orderId}:${productId}`;
+    data = await wuzzpayRequest('POST', `/charge/${productId}`, chargeBody, idempotencyKey);
   } catch (err) {
     console.error(`WuzzPay charge failed for order ${precheck.orderId}:`, err);
-    // partner_reference already used on THIS exact product/channel (WuzzPay's
+    // Idempotency-Key already used for THIS exact product+bank (WuzzPay's
     // own idempotency dedup, code TRX008) - observed 2026-08-20 to mean that
-    // specific channel's reference is permanently stuck on WuzzPay's side,
-    // not just "in flight". Retrying the SAME channel can never succeed here,
-    // since Idempotency-Key is deterministically order.id - only a genuinely
-    // new order gets a fresh reference for that channel. Does not block
-    // trying a DIFFERENT channel on the same order though (confirmed
-    // 2026-10-26: charging two different product paths under the same
-    // partner_reference does not 409 against each other) - the client is
-    // free to pick another method after seeing this error.
+    // specific channel+bank's reference is permanently stuck on WuzzPay's
+    // side, not just "in flight". Retrying the SAME channel+bank can never
+    // succeed here, since the key is deterministic - only a genuinely new
+    // order gets a fresh reference for that exact combination. Does not
+    // block trying a DIFFERENT product OR a different bank_code on the same
+    // order though (confirmed 2026-10-25/26: neither collides, now that the
+    // key includes product+bank, not just order.id) - the client is free to
+    // pick another method/bank after seeing this error.
     if (err instanceof WuzzpayApiError && err.status === 409) {
       return res.status(409).json({
         error: 'Pesanan ini sudah pernah gagal dibuatkan pembayaran dan tidak bisa dicoba lagi. Silakan buat pesanan baru.',

@@ -2097,6 +2097,16 @@ app.post('/api/orders/confirm/:token/charge', asyncHandler(async (req, res) => {
   if (productId === 'emoney' && !VALID_WALLET_CODES.includes(bankCode)) {
     return res.status(400).json({ error: 'Kode e-wallet tidak valid.' });
   }
+  // BSI and Danamon temporarily disabled (2026-10-26) - BSI hit a live
+  // Cloudflare 502 from WuzzPay's own production origin on a real charge
+  // attempt; Danamon disabled alongside it as a precaution until both are
+  // re-verified. Blocked here, not just hidden in the client's bank picker
+  // (BANK_OPTIONS' `disabled` flag, src/lib/paymentChannels.ts), so a stray
+  // request can't reach WuzzPay for a bank we've flagged as currently
+  // unreliable - remove this check once both are confirmed working again.
+  if (productId === 'va' && (bankCode === '451' || bankCode === '011')) {
+    return res.status(503).json({ error: 'Bank ini sedang tidak tersedia sementara. Silakan pilih bank lain.' });
+  }
 
   const { token } = req.params;
 

@@ -593,7 +593,9 @@ export default function PaymentGatewayPanel({ order, token, onSettled, pendingEx
               className="w-full bg-white border-2 border-black px-3 py-2.5 text-xs font-black uppercase rounded-none focus:outline-none cursor-pointer"
             >
               {BANK_OPTIONS.map((b) => (
-                <option key={b.code} value={b.code}>{b.name}</option>
+                <option key={b.code} value={b.code} disabled={b.disabled}>
+                  {b.name}{b.disabled ? ' (Segera Tersedia)' : ''}
+                </option>
               ))}
             </select>
           )}

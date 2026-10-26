@@ -18,10 +18,12 @@ const VA_MINIMUM_AMOUNT = 10000;
 // REFERENCE_STUCK, see server.ts's /charge route) from an ordinary transient
 // failure, so the caller can skip the pointless auto-retry - retrying the
 // SAME product+bank can never succeed once that exact combination's
-// reference is stuck, since the Idempotency-Key is deterministic per
-// order+product+bank (2026-10-26 fix - previously just the order id, which
-// collided across different banks on the same VA channel; see server.ts).
-// A DIFFERENT product OR a different bank on the same channel is unaffected.
+// reference is stuck, since the partner_reference sent to WuzzPay is
+// deterministic per order+product+bank (2026-10-26 fix, corrected same day -
+// first attempt only changed the Idempotency-Key header, but WuzzPay's
+// TRX008 dedup turned out to be keyed on partner_reference itself; see
+// server.ts). A DIFFERENT product OR a different bank on the same channel
+// is unaffected, since each now gets its own partner_reference.
 class ChargeError extends Error {
   stuck: boolean;
   constructor(message: string, stuck: boolean) {

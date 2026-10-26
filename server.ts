@@ -2144,11 +2144,11 @@ app.post('/api/orders/confirm/:token/charge', asyncHandler(async (req, res) => {
 
     // Idempotent short-circuit: re-clicking the SAME channel while its
     // instruction is still live just returns it as-is, unchanged behavior
-    // for a repeat click/page refresh. A DIFFERENT channel is NOT blocked by
-    // this (2026-10-26) - confirmed directly against WuzzPay that charging a
-    // second product under the same partner_reference is not rejected as a
-    // duplicate (no 409), so a customer can try QRIS, then switch to VA,
-    // without losing the order.
+    // for a repeat click/page refresh. A DIFFERENT channel/bank is NOT
+    // blocked by this (2026-10-26) - each gets its own partner_reference (see
+    // the /charge call below, attemptReference), so a customer can try QRIS,
+    // then switch to VA, then switch banks within VA, without losing the
+    // order or hitting WuzzPay's TRX008 dedup.
     const existing = attempts.find(a => a.productId === productId && (productId === 'qris' || a.bankCode === bankCode));
     const existingExpiresAt = existing?.paymentInstruction?.expires_at;
     if (existing && typeof existingExpiresAt === 'string' && new Date(existingExpiresAt).getTime() > Date.now()) {
@@ -2226,8 +2226,21 @@ app.post('/api/orders/confirm/:token/charge', asyncHandler(async (req, res) => {
     // it's implied by the path. emoney uses `wallet` (not `bank_code`) and
     // newly requires customer_name/customer_phone - confirmed accepted
     // against sandbox with these exact fields.
+    // partner_reference scoped to order+product+bank (2026-10-26 fix,
+    // corrected same day) - NOT bare order.id. First attempt (Idempotency-Key
+    // only) wasn't enough: a real production retry (BRI, then Mandiri on the
+    // same order) still 409'd with WuzzPay's own TRX008 ("partner_reference
+    // is already used for a different request") - the dedup is keyed off
+    // partner_reference itself, independent of the Idempotency-Key header.
+    // Confirmed two different product PATHS (/charge/va vs /charge/qris)
+    // don't collide even sharing a partner_reference, but two calls to the
+    // SAME path (/charge/va) with a different bank_code do, since it's the
+    // same endpoint both times. Using "__" as the separator since order IDs
+    // (`order-<timestamp>`) never contain it - the webhook handler below
+    // splits on "__" to recover the real order.id.
+    const attemptReference = bankCode ? `${precheck.orderId}__${productId}__${bankCode}` : `${precheck.orderId}__${productId}`;
     const chargeBody: Record<string, unknown> = {
-      partner_reference: precheck.orderId,
+      partner_reference: attemptReference,
       amount: { amount: chargeAmount, currency: 'IDR' },
     };
     if (productId === 'va') {
@@ -2237,31 +2250,22 @@ app.post('/api/orders/confirm/:token/charge', asyncHandler(async (req, res) => {
       chargeBody.customer_name = precheck.customerName;
       chargeBody.customer_phone = precheck.customerWhatsApp;
     }
-    // qris sends neither bank_code nor wallet
-    //
-    // Idempotency-Key scoped to order+product+bank (2026-10-26 fix) - NOT
-    // bare order.id. Confirmed two different product PATHS (/charge/va vs
-    // /charge/qris) don't 409 against each other even sharing a key, but
-    // that's a different endpoint each time; two calls to the SAME path
-    // (/charge/va) with a different bank_code (e.g. BRI, then Mandiri) still
-    // share one endpoint, so a bare order.id key collided and WuzzPay 409'd
-    // the second one - observed live, misread as REFERENCE_STUCK (permanent)
-    // when it was actually just a reused key. Including bank_code keeps each
-    // channel+bank combination on the same order its own idempotency scope.
-    const idempotencyKey = bankCode ? `${precheck.orderId}:${productId}:${bankCode}` : `${precheck.orderId}:${productId}`;
-    data = await wuzzpayRequest('POST', `/charge/${productId}`, chargeBody, idempotencyKey);
+    // qris sends neither bank_code nor wallet. Idempotency-Key reuses the
+    // same per-attempt reference - both need to be unique per channel+bank
+    // for the same reason, no need for two different schemes.
+    data = await wuzzpayRequest('POST', `/charge/${productId}`, chargeBody, attemptReference);
   } catch (err) {
     console.error(`WuzzPay charge failed for order ${precheck.orderId}:`, err);
-    // Idempotency-Key already used for THIS exact product+bank (WuzzPay's
-    // own idempotency dedup, code TRX008) - observed 2026-08-20 to mean that
-    // specific channel+bank's reference is permanently stuck on WuzzPay's
-    // side, not just "in flight". Retrying the SAME channel+bank can never
-    // succeed here, since the key is deterministic - only a genuinely new
+    // partner_reference already used for THIS exact product+bank (WuzzPay's
+    // own dedup, code TRX008 - "partner_reference is already used for a
+    // different request") - observed 2026-08-20 to mean that specific
+    // channel+bank's reference is permanently stuck on WuzzPay's side, not
+    // just "in flight". Retrying the SAME channel+bank can never succeed
+    // here, since attemptReference is deterministic - only a genuinely new
     // order gets a fresh reference for that exact combination. Does not
     // block trying a DIFFERENT product OR a different bank_code on the same
-    // order though (confirmed 2026-10-25/26: neither collides, now that the
-    // key includes product+bank, not just order.id) - the client is free to
-    // pick another method/bank after seeing this error.
+    // order though, since each gets its own partner_reference (2026-10-26) -
+    // the client is free to pick another method/bank after seeing this error.
     if (err instanceof WuzzpayApiError && err.status === 409) {
       return res.status(409).json({
         error: 'Pesanan ini sudah pernah gagal dibuatkan pembayaran dan tidak bisa dicoba lagi. Silakan buat pesanan baru.',
@@ -2446,6 +2450,13 @@ app.post('/api/webhooks/wuzzpay', asyncHandler(async (req, res) => {
     // fallback only, in case some webhook event shapes still echo it back.
     const partnerReference = req.body?.partner_reference ?? req.body?.data?.partner_reference ?? req.body?.ref_no;
     if (typeof partnerReference === 'string') {
+      // partner_reference is now "orderId__product__bank" per attempt
+      // (2026-10-26, see the /charge route) rather than bare order.id - the
+      // order's own id never contains "__", so splitting on it recovers the
+      // real id regardless of which attempt the webhook is actually about.
+      // Falls back to the raw value unchanged for anything without "__"
+      // (legacy pre-fix orders, or the ref_no fallback above).
+      const orderId = partnerReference.includes('__') ? partnerReference.split('__')[0] : partnerReference;
       // Checks every still-live attempt on the order (multi-channel,
       // 2026-10-26), not just whichever one the webhook happens to be about -
       // consistent with this route's existing "never trust the payload for
@@ -2453,17 +2464,17 @@ app.post('/api/webhooks/wuzzpay', asyncHandler(async (req, res) => {
       // ever a prompt to re-check, so re-checking everything is both simpler
       // and more thorough than trying to single out one attempt via the
       // payload's own transaction_id field.
-      const findById = (orders: Order[]) => orders.find((o: Order) => o.id === partnerReference);
-      const { notifyOrder, duplicateOrder } = await pollAndSettleOrderAttempts(findById, partnerReference);
+      const findById = (orders: Order[]) => orders.find((o: Order) => o.id === orderId);
+      const { notifyOrder, duplicateOrder } = await pollAndSettleOrderAttempts(findById, orderId);
       // Fired after the lock is released, never from inside it - see
       // sendTelegramPaymentNotification's own comment on the lock-contention
       // incident this must not repeat.
       if (notifyOrder) {
-        console.log(`WuzzPay webhook settled order ${partnerReference} via transaction ${notifyOrder.wuzzpayTransactionId}`);
+        console.log(`WuzzPay webhook settled order ${orderId} via transaction ${notifyOrder.wuzzpayTransactionId}`);
         sendTelegramPaymentNotification(notifyOrder).catch(err => console.error('Telegram payment notification failed:', err));
       }
       if (duplicateOrder) {
-        console.error(`WuzzPay webhook found a DUPLICATE payment on order ${partnerReference}`);
+        console.error(`WuzzPay webhook found a DUPLICATE payment on order ${orderId}`);
         sendTelegramDuplicatePaymentAlert(duplicateOrder).catch(err => console.error('Telegram duplicate-payment alert failed:', err));
       }
     }

@@ -2070,6 +2070,15 @@ app.post('/api/orders/confirm/:token/charge', asyncHandler(async (req, res) => {
   if (productId !== 'qris' && productId !== 'va' && productId !== 'emoney') {
     return res.status(400).json({ error: 'Metode pembayaran tidak valid.' });
   }
+  // E-wallet (emoney) disabled (2026-10-26) - confirmed with WuzzPay that this
+  // product isn't provisioned/enabled on our merchant account yet (matches
+  // what was already seen in practice: both dana and ovo test charges failed
+  // provider-side). Blocked here rather than just hidden client-side, so no
+  // stray request reaches WuzzPay for a channel they've confirmed isn't live -
+  // re-enable by removing this block once WuzzPay confirms it's active.
+  if (productId === 'emoney') {
+    return res.status(503).json({ error: 'Pembayaran E-Wallet belum tersedia. Silakan gunakan QRIS atau Transfer Bank.' });
+  }
   // bankCode selects the sub-channel for va (bank) / emoney (wallet) - validated
   // against the same known-code lists the client's picker offers, so no
   // arbitrary string reaches WuzzPay's API unchecked (belt-and-suspenders on

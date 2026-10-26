@@ -549,13 +549,21 @@ export default function PaymentGatewayPanel({ order, token, onSettled, pendingEx
           </div>
           <div className="grid grid-cols-2 gap-2">
             {(['qris', 'va', 'emoney', 'cash'] as MethodTab[]).map((m) => {
-              const isDisabled = m !== 'cash' && !isTestOrder;
+              // emoney (E-Wallet) stays visible but permanently disabled
+              // (2026-10-26) - WuzzPay confirmed this product isn't
+              // provisioned/enabled on our merchant account yet (matches
+              // dana/ovo test charges both failing provider-side), but it's
+              // expected to go live soon, so the tab stays as a preview
+              // rather than disappearing. /charge also hard-rejects it
+              // server-side regardless - remove this `m === 'emoney' ||`
+              // once WuzzPay confirms it's active.
+              const isDisabled = m === 'emoney' || (m !== 'cash' && !isTestOrder);
               return (
                 <button
                   key={m}
                   type="button"
                   disabled={isDisabled}
-                  title={isDisabled ? 'Metode ini akan segera tersedia' : undefined}
+                  title={isDisabled ? (m === 'emoney' ? 'E-Wallet akan segera tersedia' : 'Metode ini akan segera tersedia') : undefined}
                   onClick={() => { setMethodTab(m); setChargeError(''); setCashError(''); }}
                   className={`py-2.5 text-[11px] font-black uppercase tracking-wider border-2 border-black rounded-none ${
                     isDisabled

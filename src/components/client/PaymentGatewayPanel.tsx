@@ -8,6 +8,12 @@ import { BANK_OPTIONS, WALLET_OPTIONS } from '../../lib/paymentChannels';
 
 const POLL_INTERVAL_MS = 5000;
 
+// Banks reject a VA transfer below this amount (confirmed against
+// WuzzPay/Winpay's own minimum for virtual account channels) - QRIS has no
+// such floor, so a customer trying to pay a small DP is steered there
+// instead of hitting a bank-side rejection after already picking VA.
+const VA_MINIMUM_AMOUNT = 10000;
+
 // Distinguishes a permanently-stuck payment reference (WuzzPay code
 // REFERENCE_STUCK, see server.ts's /charge route) from an ordinary transient
 // failure, so the caller can skip the pointless auto-retry - retrying the
@@ -309,6 +315,10 @@ export default function PaymentGatewayPanel({ order, token, onSettled, pendingEx
   // about it instead of still gating on the now-irrelevant free-form input.
   const lockedAmount = attempts.length > 0 ? attempts[0].chargedAmount : undefined;
   const isPayAmountValid = lockedAmount !== undefined || (payAmountInput !== '' && Number.isInteger(payAmountValue) && payAmountValue >= minDpAmount && payAmountValue <= order.totalPrice);
+  // VA-specific floor (see VA_MINIMUM_AMOUNT) - checked against whichever
+  // amount is actually about to be charged, locked or freely-picked.
+  const currentChargeAmount = lockedAmount ?? payAmountValue;
+  const isVaBelowMinimum = methodTab === 'va' && Number.isFinite(currentChargeAmount) && currentChargeAmount < VA_MINIMUM_AMOUNT;
   // Which attempt's instruction is currently on screen - undefined means
   // "show the method picker". Index into `attempts` rather than a copy, so
   // it always reflects that attempt's latest known lastStatus.
@@ -576,6 +586,13 @@ export default function PaymentGatewayPanel({ order, token, onSettled, pendingEx
             </select>
           )}
 
+          {isVaBelowMinimum && (
+            <p className="text-[10px] font-bold text-red-600 uppercase normal-case leading-relaxed">
+              Minimal transfer Virtual Account adalah Rp {VA_MINIMUM_AMOUNT.toLocaleString('id-ID')}. Untuk nominal
+              di bawah itu, silakan gunakan QRIS.
+            </p>
+          )}
+
           {methodTab === 'emoney' && (
             <select
               value={selectedWallet}
@@ -661,7 +678,7 @@ export default function PaymentGatewayPanel({ order, token, onSettled, pendingEx
           <button
             type="button"
             onClick={methodTab === 'cash' ? handleCashConfirm : handleCharge}
-            disabled={methodTab === 'cash' ? cashConfirming : (charging || !isPayAmountValid)}
+            disabled={methodTab === 'cash' ? cashConfirming : (charging || !isPayAmountValid || isVaBelowMinimum)}
             className="w-full py-4 bg-black hover:bg-brand hover:text-black text-white font-black text-sm rounded-none border-2 border-black shadow-[4px_4px_0px_var(--brand-color)] transition-colors uppercase tracking-widest cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {methodTab === 'cash'

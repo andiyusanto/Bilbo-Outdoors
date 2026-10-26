@@ -2187,6 +2187,18 @@ app.post('/api/orders/confirm/:token/charge', asyncHandler(async (req, res) => {
     });
   }
 
+  // Banks reject a VA transfer below this amount - checked after chargeAmount
+  // is finalized so it also catches the locked-amount case (a second channel
+  // can't dodge this by switching to VA for an amount a prior QRIS/e-money
+  // attempt already locked in below the floor). Client-side mirror in
+  // PaymentGatewayPanel (VA_MINIMUM_AMOUNT) is UX only - this is the real check.
+  const VA_MINIMUM_AMOUNT = 10000;
+  if (productId === 'va' && chargeAmount < VA_MINIMUM_AMOUNT) {
+    return res.status(400).json({
+      error: `Minimal transfer Virtual Account adalah Rp ${VA_MINIMUM_AMOUNT.toLocaleString('id-ID')}. Untuk nominal di bawah itu, silakan gunakan QRIS.`,
+    });
+  }
+
   // SLOW outbound call - deliberately outside withDbLock (see
   // fetchWuzzpaySettlementStatus's comment above for why: this used to run
   // inside the lock and could starve every other write route for as long as

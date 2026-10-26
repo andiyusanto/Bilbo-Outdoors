@@ -4,6 +4,7 @@ import { Check, AlertTriangle, Phone } from 'lucide-react';
 import { PublicOrder } from '../../types';
 import { parseJsonOrThrow } from '../../lib/api';
 import { formatDateLabel } from '../../lib/date';
+import { getBankName, getWalletName } from '../../lib/paymentChannels';
 import OrderSuccessScreen from './OrderSuccessScreen';
 import PaymentGatewayPanel from './PaymentGatewayPanel';
 import { useLoading } from '../../contexts/LoadingContext';
@@ -17,6 +18,17 @@ const POST_PENDING_STATUS_MESSAGE: Partial<Record<PublicOrder['status'], string>
   'Item Picked Up': 'Barang sudah Anda ambil. Selamat berpetualang bersama Bilbo Outdoors!',
   'Item Returned/Completed': 'Sewa Anda sudah selesai. Terima kasih telah menyewa di Bilbo Outdoors!',
 };
+
+// Channel-readable label for the payment method that actually settled an
+// order - "VA Bank Mandiri", "QRIS", "E-Wallet OVO" - falling back to the
+// bare method name for anything unmapped (cash, or a future channel).
+function formatSettledChannelLabel(method?: string, channel?: string): string | undefined {
+  if (!method) return undefined;
+  if (method === 'va') return getBankName(channel) ? `VA ${getBankName(channel)}` : 'VA';
+  if (method === 'emoney') return getWalletName(channel) ? `E-Wallet ${getWalletName(channel)}` : 'E-Wallet';
+  if (method === 'qris') return 'QRIS';
+  return undefined;
+}
 
 export default function OrderConfirmationPage() {
   const { token } = useParams<{ token: string }>();
@@ -167,6 +179,24 @@ export default function OrderConfirmationPage() {
                 <span>Nama Penyewa:</span>
                 <strong className="text-black">{order.customerName}</strong>
               </div>
+              {order.paymentMethod && order.paymentMethod !== 'cash' && (
+                <div className="flex justify-between">
+                  <span>Channel Pembayaran:</span>
+                  <strong className="text-black">{formatSettledChannelLabel(order.paymentMethod, order.paymentChannel) || order.paymentMethod}</strong>
+                </div>
+              )}
+              {/* Admin fee WuzzPay charges on top of the amount transferred for
+                  this specific channel - already included in what was paid, not
+                  an extra charge, shown here only for transparency on which
+                  channel's fee applied. Always 0 in sandbox, so invisible until
+                  a real non-zero production fee comes through - see the same
+                  field's comment in PaymentGatewayPanel/OrderDetailPanel. */}
+              {typeof order.paymentInstruction?.fee === 'number' && order.paymentInstruction.fee > 0 && (
+                <div className="flex justify-between">
+                  <span>Biaya Admin Pembayaran Online:</span>
+                  <strong className="text-black font-mono">Rp {order.paymentInstruction.fee.toLocaleString('id-ID')}</strong>
+                </div>
+              )}
               <div className="flex justify-between border-t border-black pt-2 font-black text-black text-sm">
                 <span>Jumlah Pembayaran:</span>
                 <span className="text-black bg-brand px-2 py-0.5 border border-black">Rp {order.totalPrice.toLocaleString('id-ID')}</span>

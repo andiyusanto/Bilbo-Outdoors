@@ -535,6 +535,27 @@ export default function OrderDetailPanel({
             </div>
           )}
 
+          {order.wuzzpayDuplicatePayment && order.wuzzpayDuplicatePayment.length > 0 && (
+            <div className="border-2 border-red-500 rounded-none p-4 bg-red-50 space-y-2">
+              <h4 className="text-[10px] font-black text-red-700 uppercase tracking-wider">
+                ⚠️ Kemungkinan Pembayaran Ganda
+              </h4>
+              <p className="text-[10px] text-red-700 font-bold normal-case leading-relaxed">
+                Pesanan ini sudah lunas, tetapi WuzzPay juga melaporkan channel pembayaran lain sebagai
+                lunas/terbayar. Ini bisa berarti penyewa membayar dua kali lewat metode berbeda &mdash; cek riwayat
+                transaksi di dashboard WuzzPay dan proses refund manual jika memang terjadi duplikasi.
+              </p>
+              <div className="space-y-1">
+                {order.wuzzpayDuplicatePayment.map((dup, idx) => (
+                  <p key={idx} className="text-[10px] font-mono text-red-700">
+                    {dup.productId.toUpperCase()} &middot; ID: {dup.transactionId} &middot; terdeteksi{' '}
+                    {new Date(dup.detectedAt).toLocaleString('id-ID')}
+                  </p>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Payment Detail Status bar */}
           <div className="border-2 border-black p-4 rounded-none space-y-4 bg-white shadow-[2px_2px_0px_rgba(0,0,0,1)]">
             <div className="flex justify-between items-baseline font-bold text-xs uppercase text-zinc-700">

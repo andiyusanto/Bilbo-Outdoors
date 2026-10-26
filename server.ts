@@ -6,7 +6,7 @@ import crypto from 'crypto';
 import dns from 'dns';
 import net from 'net';
 import { createServer as createViteServer } from 'vite';
-import { Product, Order, OrderItem, OrderStatus, PenaltyEntry, PublicOrder, OrderListItem, DashboardStats, StoreSettings, AppUser, PublicUser, UserRole, JobPriceListItem, JobEntry, JobType } from './src/types';
+import { Product, Order, OrderItem, OrderStatus, PenaltyEntry, PublicOrder, OrderListItem, DashboardStats, StoreSettings, AppUser, PublicUser, UserRole, JobPriceListItem, JobEntry, JobType, WuzzpayAttempt } from './src/types';
 import { defaultProducts } from './db/defaultProducts';
 import { defaultSettings } from './db/defaultSettings';
 import { defaultUsers } from './db/defaultUsers';
@@ -354,24 +354,76 @@ async function fetchWuzzpaySettlementStatus(wuzzpayTransactionId: string, orderI
 // notification without re-notifying on every subsequent poll that just
 // reconfirms the same already-Approved/Paid order (this function returns
 // early with both false once status is no longer Pending/Expired).
-function applyWuzzpaySettlementStatus(order: Order, status: string | undefined): { changed: boolean; justSettled: boolean } {
-  if (order.status === 'Approved/Paid' || order.status === 'Item Picked Up' || order.status === 'Item Returned/Completed') return { changed: false, justSettled: false };
-  let changed = false;
-  if (typeof status === 'string' && status !== order.wuzzpayLastStatus) {
-    order.wuzzpayLastStatus = status;
-    changed = true;
+// Every channel attempted on an order, oldest first - the real
+// order.wuzzpayAttempts array if present, else a single-entry fallback
+// synthesized from the legacy singular fields, for an order created before
+// this array existed (2026-10-26). Shared by the /charge precheck,
+// pollAndSettleOrderAttempts, and the admin manual-verify route, so "what
+// counts as an attempt" stays defined in exactly one place.
+function getOrderAttempts(order: Order): WuzzpayAttempt[] {
+  if (order.wuzzpayAttempts && order.wuzzpayAttempts.length > 0) return order.wuzzpayAttempts;
+  if (order.wuzzpayTransactionId && order.paymentInstruction && order.paymentMethod && order.paymentMethod !== 'cash') {
+    return [{
+      productId: order.paymentMethod,
+      bankCode: order.paymentChannel,
+      transactionId: order.wuzzpayTransactionId,
+      paymentInstruction: order.paymentInstruction,
+      chargedAmount: order.wuzzpayChargedAmount ?? order.totalPrice,
+      provider: order.wuzzpayProvider,
+      lastStatus: order.wuzzpayLastStatus,
+      chargedAt: order.createdAt,
+    }];
   }
+  return [];
+}
+
+// Applies a freshly-checked status for ONE specific attempt to its order.
+// Mutates `order`/`attempt` in place (attempt must be the actual array
+// element from order.wuzzpayAttempts, not a copy, so attempt.lastStatus
+// persists through writeOrders) and returns what changed.
+//
+// Multi-channel orders (2026-10-26) can have more than one live attempt at
+// once - WuzzPay has no cancel/void endpoint (confirmed against their full
+// documented API surface), so an older attempt can still genuinely get paid
+// even after the order already settled via a different channel. That's a
+// real double payment, not a bug: flagged into wuzzpayDuplicatePayment for
+// manual refund reconciliation rather than silently discarded.
+function applyWuzzpaySettlementStatus(order: Order, attempt: WuzzpayAttempt, status: string | undefined): { changed: boolean; justSettled: boolean; duplicateDetected: boolean } {
   // "success" confirmed 2026-08-22 against a real webhook.test delivery;
   // "settled"/"paid" kept as plausible variants for other event types until
   // confirmed too (see the payment gateway plan's Stage 2).
   const settled = status === 'settled' || status === 'paid' || status === 'success';
+
+  if (order.status === 'Approved/Paid' || order.status === 'Item Picked Up' || order.status === 'Item Returned/Completed') {
+    if (settled && attempt.transactionId && attempt.transactionId !== order.wuzzpayTransactionId) {
+      order.wuzzpayDuplicatePayment = order.wuzzpayDuplicatePayment || [];
+      if (!order.wuzzpayDuplicatePayment.some(d => d.transactionId === attempt.transactionId)) {
+        order.wuzzpayDuplicatePayment.push({ transactionId: attempt.transactionId, productId: attempt.productId, detectedAt: new Date().toISOString() });
+        return { changed: true, justSettled: false, duplicateDetected: true };
+      }
+    }
+    return { changed: false, justSettled: false, duplicateDetected: false };
+  }
+
+  let changed = false;
+  if (typeof status === 'string' && status !== attempt.lastStatus) {
+    attempt.lastStatus = status;
+    changed = true;
+  }
   if (settled) {
     order.status = 'Approved/Paid';
+    order.paymentMethod = attempt.productId;
+    order.paymentChannel = attempt.bankCode;
+    order.paymentInstruction = attempt.paymentInstruction;
+    order.wuzzpayChargedAmount = attempt.chargedAmount;
+    order.wuzzpayTransactionId = attempt.transactionId;
+    order.wuzzpayProvider = attempt.provider;
+    order.wuzzpayLastStatus = status;
     // Credits exactly what was requested at charge time (wuzzpayChargedAmount) -
     // may be a partial DP (minimum 50%, see the /charge route), not always the
     // full total_price. Falls back to totalPrice for any order that predates
     // this field, preserving the previous full-payment-assumed behavior.
-    order.amountPaid = order.wuzzpayChargedAmount ?? order.totalPrice;
+    order.amountPaid = attempt.chargedAmount ?? order.totalPrice;
     order.statusHistory = order.statusHistory || [];
     order.statusHistory.push({
       status: 'Approved/Paid',
@@ -381,7 +433,52 @@ function applyWuzzpaySettlementStatus(order: Order, status: string | undefined):
     });
     changed = true;
   }
-  return { changed, justSettled: settled };
+  return { changed, justSettled: settled, duplicateDetected: false };
+}
+
+// Shared by /payment-status and the admin manual-verify route: checks every
+// still-unexpired attempt on an order's live WuzzPay status, one at a time,
+// applying each through applyWuzzpaySettlementStatus. Each status check is a
+// SLOW outbound call, deliberately sequential and done OUTSIDE withDbLock
+// (same reasoning as fetchWuzzpaySettlementStatus's own comment - holding
+// the process-wide lock across a slow external call starves every other
+// write route). Stops early the moment one attempt settles - no need to
+// keep checking once the order is paid - but a duplicate-settlement found
+// along the way (point 3 of the multi-channel plan) is still surfaced to
+// the caller, not swallowed, since that needs its own alert regardless of
+// whether this particular call also found a fresh settlement.
+async function pollAndSettleOrderAttempts(findOrder: (orders: Order[]) => Order | undefined, contextLabel: string): Promise<{ notifyOrder: Order | null; duplicateOrder: Order | null }> {
+  const snapshot = await withDbLock(async () => {
+    const orders = await readOrders();
+    const order = findOrder(orders);
+    if (!order) return null;
+    return { status: order.status, attempts: getOrderAttempts(order) };
+  });
+  if (!snapshot) return { notifyOrder: null, duplicateOrder: null };
+  if (snapshot.status !== 'Pending' && snapshot.status !== 'Expired') return { notifyOrder: null, duplicateOrder: null };
+
+  let notifyOrder: Order | null = null;
+  let duplicateOrder: Order | null = null;
+  const now = Date.now();
+  for (const attempt of snapshot.attempts) {
+    if (!attempt.transactionId) continue;
+    const expiresAt = (attempt.paymentInstruction as any)?.expires_at;
+    if (typeof expiresAt === 'string' && new Date(expiresAt).getTime() < now) continue; // don't bother checking a dead instruction
+    const wuzzpayStatus = await fetchWuzzpaySettlementStatus(attempt.transactionId, contextLabel);
+    const result = await withDbLock(async () => {
+      const orders = await readOrders();
+      const order = findOrder(orders);
+      if (!order) return null;
+      const liveAttempt = getOrderAttempts(order).find(a => a.transactionId === attempt.transactionId) ?? attempt;
+      const outcome = applyWuzzpaySettlementStatus(order, liveAttempt, wuzzpayStatus);
+      if (outcome.changed) await writeOrders(orders);
+      return { order, ...outcome };
+    });
+    if (!result) continue;
+    if (result.justSettled) { notifyOrder = result.order; break; }
+    if (result.duplicateDetected) duplicateOrder = result.order;
+  }
+  return { notifyOrder, duplicateOrder };
 }
 
 // Fire-and-forget, same pattern as sendTelegramBookingNotification - callers
@@ -394,6 +491,20 @@ async function sendTelegramPaymentNotification(order: Order): Promise<void> {
     : order.paymentMethod === 'emoney' ? `E-Wallet${order.paymentChannel ? ` (${order.paymentChannel})` : ''}`
     : order.paymentMethod ?? 'WuzzPay';
   const text = `Pembayaran diterima!\n\nID Pesanan: ${order.id}\nNama: ${order.customerName}\nWhatsApp: ${order.customerWhatsApp}\nMetode: ${methodLabel}\nTotal: Rp ${order.totalPrice.toLocaleString('id-ID')}\n\nLink Konfirmasi: ${SITE_URL}/pesanan/${order.confirmationToken}`;
+  await sendTelegramMessage(text);
+}
+
+// Fire-and-forget, same placement discipline as sendTelegramPaymentNotification
+// (always called AFTER withDbLock releases, never from inside it). Fires when
+// pollAndSettleOrderAttempts/the webhook detects a DIFFERENT channel than the
+// one that already settled an order also reports settled - a real double
+// payment, since WuzzPay has no way for us to cancel the other channel's
+// instruction early. This needs a human to check and refund, not an
+// automatic fix - deliberately a separate, more urgent-looking message than
+// sendTelegramPaymentNotification, not a variant of it.
+async function sendTelegramDuplicatePaymentAlert(order: Order): Promise<void> {
+  const latest = order.wuzzpayDuplicatePayment?.[order.wuzzpayDuplicatePayment.length - 1];
+  const text = `⚠️ KEMUNGKINAN PEMBAYARAN GANDA\n\nID Pesanan: ${order.id}\nNama: ${order.customerName}\nWhatsApp: ${order.customerWhatsApp}\n\nPesanan ini sudah lunas via ${order.paymentMethod ?? 'metode lain'}, tapi channel ${latest?.productId ?? '(lain)'} JUGA terdeteksi lunas (transaksi ${latest?.transactionId ?? '?'}).\n\nCek Manajemen Order dan proses refund jika pelanggan benar-benar membayar dua kali.\n\nLink Konfirmasi: ${SITE_URL}/pesanan/${order.confirmationToken}`;
   await sendTelegramMessage(text);
 }
 
@@ -1357,7 +1468,7 @@ app.get('/api/orders/confirm/:token', asyncHandler(async (req, res) => {
     return res.status(404).json({ error: 'Pesanan tidak ditemukan.' });
   }
 
-  const { personalPhotoBase64, personalPhotoStoragePath, statusHistory, penalties, wuzzpayTransactionId, wuzzpayLastStatus, ...safeOrder }: Order = order;
+  const { personalPhotoBase64, personalPhotoStoragePath, statusHistory, penalties, wuzzpayTransactionId, wuzzpayLastStatus, wuzzpayDuplicatePayment, ...safeOrder }: Order = order;
   const publicOrder: PublicOrder = safeOrder;
   res.json(publicOrder);
 }));
@@ -1610,36 +1721,34 @@ app.put('/api/orders/:id/status', authenticateUser, asyncHandler(async (req, res
 // WuzzPay (wuzzpayTransactionId set) - cash orders never have one.
 app.post('/api/orders/:id/verify-payment', authenticateUser, asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const snapshot = await withDbLock(async () => {
-    const orders = await readOrders();
-    const order = orders.find((o: Order) => o.id === id);
-    return order ? { wuzzpayTransactionId: order.wuzzpayTransactionId } : null;
+  const findById = (orders: Order[]) => orders.find((o: Order) => o.id === id);
+
+  const presenceCheck = await withDbLock(async () => {
+    const order = findById(await readOrders());
+    return order ? { hasAttempts: getOrderAttempts(order).length > 0 } : null;
   });
-  if (!snapshot) return res.status(404).json({ error: 'Pesanan tidak ditemukan.' });
-  if (!snapshot.wuzzpayTransactionId) {
+  if (!presenceCheck) return res.status(404).json({ error: 'Pesanan tidak ditemukan.' });
+  if (!presenceCheck.hasAttempts) {
     return res.status(400).json({ error: 'Pesanan ini tidak memiliki transaksi WuzzPay untuk diverifikasi (kemungkinan dibayar tunai).' });
   }
 
-  // SLOW outbound call - deliberately outside withDbLock, same reasoning as
-  // fetchWuzzpaySettlementStatus's own comment (a slow WuzzPay response must
-  // never hold up every other write route app-wide).
-  const wuzzpayStatus = await fetchWuzzpaySettlementStatus(snapshot.wuzzpayTransactionId, id);
+  // Checks every still-live attempt (multi-channel, 2026-10-26), not just a
+  // single tracked transaction id - see pollAndSettleOrderAttempts.
+  const { notifyOrder, duplicateOrder } = await pollAndSettleOrderAttempts(findById, id);
+  if (notifyOrder) {
+    console.log(`WuzzPay manual verification settled order ${notifyOrder.id} via transaction ${notifyOrder.wuzzpayTransactionId}`);
+    sendTelegramPaymentNotification(notifyOrder).catch(err => console.error('Telegram payment notification failed:', err));
+  }
+  if (duplicateOrder) {
+    console.error(`WuzzPay manual verification found a DUPLICATE payment on order ${duplicateOrder.id}`);
+    sendTelegramDuplicatePaymentAlert(duplicateOrder).catch(err => console.error('Telegram duplicate-payment alert failed:', err));
+  }
 
   const result = await withDbLock(async () => {
-    const orders = await readOrders();
-    const order = orders.find((o: Order) => o.id === id);
-    if (!order) return null;
-    const { changed, justSettled } = applyWuzzpaySettlementStatus(order, wuzzpayStatus);
-    if (changed) {
-      await writeOrders(orders);
-    }
-    return { order, justSettled };
+    const order = findById(await readOrders());
+    return order ? { order } : null;
   });
   if (!result) return res.status(404).json({ error: 'Pesanan tidak ditemukan.' });
-  if (result.justSettled) {
-    console.log(`WuzzPay manual verification settled order ${result.order.id} via transaction ${result.order.wuzzpayTransactionId}`);
-    sendTelegramPaymentNotification(result.order).catch(err => console.error('Telegram payment notification failed:', err));
-  }
   res.json(result.order);
 }));
 
@@ -2002,41 +2111,77 @@ app.post('/api/orders/confirm/:token/charge', asyncHandler(async (req, res) => {
     // applyWuzzpaySettlementStatus's separate Expired-transition path, which
     // only completes an existing transaction, never starts a new one.
     if (order.status !== 'Pending') return { kind: 'not-chargeable' as const };
-    // Idempotent short-circuit: a still-live instruction (not yet expired) is
-    // just returned as-is, so a page refresh/double-click doesn't re-charge.
-    const existingExpiresAt = order.paymentInstruction?.expires_at;
-    if (order.wuzzpayTransactionId && typeof existingExpiresAt === 'string' && new Date(existingExpiresAt).getTime() > Date.now()) {
-      return {
-        kind: 'already-live' as const,
-        paymentMethod: order.paymentMethod,
-        paymentInstruction: order.paymentInstruction,
-        wuzzpayChargedAmount: order.wuzzpayChargedAmount,
-        wuzzpayTransactionId: order.wuzzpayTransactionId,
-      };
+
+    // Every channel attempted so far on this order, oldest first. Supports
+    // orders created before wuzzpayAttempts existed (2026-10-26) by
+    // synthesizing a single legacy entry from the old singular fields, so an
+    // in-flight pre-deploy order still short-circuits correctly below
+    // instead of double-charging.
+    const attempts: WuzzpayAttempt[] = order.wuzzpayAttempts && order.wuzzpayAttempts.length > 0
+      ? order.wuzzpayAttempts
+      : (order.wuzzpayTransactionId && order.paymentInstruction && order.paymentMethod && order.paymentMethod !== 'cash'
+          ? [{
+              productId: order.paymentMethod,
+              bankCode: order.paymentChannel,
+              transactionId: order.wuzzpayTransactionId,
+              paymentInstruction: order.paymentInstruction,
+              chargedAmount: order.wuzzpayChargedAmount ?? order.totalPrice,
+              provider: order.wuzzpayProvider,
+              lastStatus: order.wuzzpayLastStatus,
+              chargedAt: order.createdAt,
+            }]
+          : []);
+
+    // Idempotent short-circuit: re-clicking the SAME channel while its
+    // instruction is still live just returns it as-is, unchanged behavior
+    // for a repeat click/page refresh. A DIFFERENT channel is NOT blocked by
+    // this (2026-10-26) - confirmed directly against WuzzPay that charging a
+    // second product under the same partner_reference is not rejected as a
+    // duplicate (no 409), so a customer can try QRIS, then switch to VA,
+    // without losing the order.
+    const existing = attempts.find(a => a.productId === productId && (productId === 'qris' || a.bankCode === bankCode));
+    const existingExpiresAt = existing?.paymentInstruction?.expires_at;
+    if (existing && typeof existingExpiresAt === 'string' && new Date(existingExpiresAt).getTime() > Date.now()) {
+      return { kind: 'already-live' as const, attempts };
     }
-    return { kind: 'ok' as const, orderId: order.id, totalPrice: order.totalPrice, customerName: order.customerName, customerWhatsApp: order.customerWhatsApp };
+
+    return {
+      kind: 'ok' as const,
+      orderId: order.id,
+      totalPrice: order.totalPrice,
+      customerName: order.customerName,
+      customerWhatsApp: order.customerWhatsApp,
+      // Amount is locked to whatever the first channel attempted on this
+      // order requested, if any - keeps "how much this order owes"
+      // unambiguous regardless of which channel ultimately gets paid,
+      // rather than letting a second channel silently request a different
+      // amount (e.g. full price via VA, then a 50% DP via QRIS).
+      lockedAmount: attempts.length > 0 ? attempts[0].chargedAmount : undefined,
+    };
   });
 
   if (precheck.kind === 'not-found') return res.status(404).json({ error: 'Pesanan tidak ditemukan.' });
   if (precheck.kind === 'not-configured') return res.status(503).json({ error: 'Payment gateway belum dikonfigurasi.' });
   if (precheck.kind === 'not-chargeable') return res.status(400).json({ error: 'Pesanan ini sudah tidak bisa dibuatkan pembayaran baru.' });
   if (precheck.kind === 'already-live') {
-    return res.json({ paymentMethod: precheck.paymentMethod, paymentInstruction: precheck.paymentInstruction, wuzzpayChargedAmount: precheck.wuzzpayChargedAmount, wuzzpayTransactionId: precheck.wuzzpayTransactionId });
+    return res.json({ wuzzpayAttempts: precheck.attempts });
   }
 
   // Owner's Syarat & Ketentuan requires a minimum 50% DP - `amount` lets the
   // customer choose to pay a deposit instead of the full total online.
   // Omitting it defaults to full payment (every pre-existing caller keeps
   // working unchanged). The client's own picker is just UX - this is the
-  // real enforcement point, never trust the requested amount blindly. The
-  // remainder (if any) is collected in person/cash at pickup, exactly like
-  // an existing partial cash payment - see wuzzpayChargedAmount's comment in
-  // src/types.ts for why there's no "pay the rest online later" flow: WuzzPay's
-  // Idempotency-Key for /charge is fixed to order.id, so a second charge
-  // attempt against the same order is rejected as a stuck/duplicate reference.
+  // real enforcement point, never trust the requested amount blindly.
+  // Remaining balance beyond whatever was actually charged is always
+  // collected in person/cash at pickup - there's no "pay the rest online
+  // later" flow for a single channel, and a second channel attempted on the
+  // same order is locked to match the first (precheck.lockedAmount) rather
+  // than being treated as a way to pay the remainder differently.
   const minChargeAmount = Math.ceil(precheck.totalPrice * 0.5);
-  const chargeAmount = amount === undefined ? precheck.totalPrice : Number(amount);
-  if (!Number.isInteger(chargeAmount) || chargeAmount < minChargeAmount || chargeAmount > precheck.totalPrice) {
+  let chargeAmount = amount === undefined ? precheck.totalPrice : Number(amount);
+  if (precheck.lockedAmount !== undefined) {
+    chargeAmount = precheck.lockedAmount;
+  } else if (!Number.isInteger(chargeAmount) || chargeAmount < minChargeAmount || chargeAmount > precheck.totalPrice) {
     return res.status(400).json({
       error: `Jumlah pembayaran tidak valid. Minimal Rp ${minChargeAmount.toLocaleString('id-ID')} (DP 50%), maksimal Rp ${precheck.totalPrice.toLocaleString('id-ID')}.`,
     });
@@ -2074,14 +2219,16 @@ app.post('/api/orders/confirm/:token/charge', asyncHandler(async (req, res) => {
     data = await wuzzpayRequest('POST', `/charge/${productId}`, chargeBody, precheck.orderId);
   } catch (err) {
     console.error(`WuzzPay charge failed for order ${precheck.orderId}:`, err);
-    // partner_reference already used (WuzzPay's own idempotency dedup, code
-    // TRX008) - observed 2026-08-20 to mean this order's reference is
-    // permanently stuck on WuzzPay's side, not just "in flight": even
-    // switching to a different, otherwise-working bank still 409s for the
-    // same order (confirmed directly against WuzzPay, bypassing this app
-    // entirely). Retrying can never succeed here, since Idempotency-Key is
-    // deterministically order.id - only a genuinely new order gets a fresh
-    // reference, so tell the customer that plainly instead of "try again".
+    // partner_reference already used on THIS exact product/channel (WuzzPay's
+    // own idempotency dedup, code TRX008) - observed 2026-08-20 to mean that
+    // specific channel's reference is permanently stuck on WuzzPay's side,
+    // not just "in flight". Retrying the SAME channel can never succeed here,
+    // since Idempotency-Key is deterministically order.id - only a genuinely
+    // new order gets a fresh reference for that channel. Does not block
+    // trying a DIFFERENT channel on the same order though (confirmed
+    // 2026-10-26: charging two different product paths under the same
+    // partner_reference does not 409 against each other) - the client is
+    // free to pick another method after seeing this error.
     if (err instanceof WuzzpayApiError && err.status === 409) {
       return res.status(409).json({
         error: 'Pesanan ini sudah pernah gagal dibuatkan pembayaran dan tidak bisa dicoba lagi. Silakan buat pesanan baru.',
@@ -2114,23 +2261,28 @@ app.post('/api/orders/confirm/:token/charge', asyncHandler(async (req, res) => {
   // users/settings/job entries/job prices, not just orders) that measured
   // multiple seconds against production Supabase for no reason relevant here
   // (see the same fix already applied to payment-status/cash/webhook below).
+  // Appends to wuzzpayAttempts rather than overwriting the order's singular
+  // wuzzpay* fields (2026-10-26, multi-channel support) - those fields are
+  // now only ever written by applyWuzzpaySettlementStatus, once something
+  // actually settles, so a second (or third) channel attempted here doesn't
+  // clobber tracking of an earlier still-live one.
   const result = await withDbLock(async () => {
     const orders = await readOrders();
     const order = orders.find((o: Order) => o.id === precheck.orderId);
     if (!order) return null;
-    order.paymentMethod = productId;
-    order.paymentChannel = bankCode ?? undefined;
-    order.paymentInstruction = data?.data?.payment_instruction ?? undefined;
-    order.wuzzpayChargedAmount = chargeAmount;
-    order.wuzzpayProvider = data?.data?.used_provider ?? undefined;
-    order.wuzzpayTransactionId = transactionId ?? undefined;
-    await writeOrders(orders);
-    return {
-      paymentMethod: order.paymentMethod,
-      paymentInstruction: order.paymentInstruction,
-      wuzzpayChargedAmount: order.wuzzpayChargedAmount,
-      wuzzpayTransactionId: order.wuzzpayTransactionId,
+    const newAttempt: WuzzpayAttempt = {
+      productId,
+      bankCode: bankCode ?? undefined,
+      transactionId: transactionId ?? '',
+      paymentInstruction: data?.data?.payment_instruction ?? {},
+      chargedAmount: chargeAmount,
+      provider: data?.data?.used_provider ?? undefined,
+      chargedAt: new Date().toISOString(),
     };
+    order.wuzzpayAttempts = order.wuzzpayAttempts || [];
+    order.wuzzpayAttempts.push(newAttempt);
+    await writeOrders(orders);
+    return { wuzzpayAttempts: order.wuzzpayAttempts };
   });
   if (!result) return res.status(404).json({ error: 'Pesanan tidak ditemukan.' });
   console.log(`WuzzPay charge succeeded for order ${precheck.orderId}: method=${productId}, transactionId=${transactionId ?? '(none - see error above)'}, provider=${data?.data?.used_provider ?? '(unknown)'}`);
@@ -2181,42 +2333,37 @@ app.post('/api/orders/confirm/:token/cash', asyncHandler(async (req, res) => {
 // payment tab stays open.
 app.get('/api/orders/confirm/:token/payment-status', asyncHandler(async (req, res) => {
   const { token } = req.params;
-  const snapshot = await withDbLock(async () => {
-    const orders = await readOrders();
-    const order = orders.find((o: Order) => o.confirmationToken && o.confirmationToken === token);
-    return order ? { wuzzpayTransactionId: order.wuzzpayTransactionId, status: order.status, wuzzpayLastStatus: order.wuzzpayLastStatus } : null;
-  });
-  if (!snapshot) {
-    return res.status(404).json({ error: 'Pesanan tidak ditemukan.' });
-  }
+  const findByToken = (orders: Order[]) => orders.find((o: Order) => o.confirmationToken && o.confirmationToken === token);
 
-  const wuzzpayStatus = snapshot.wuzzpayTransactionId
-    ? await fetchWuzzpaySettlementStatus(snapshot.wuzzpayTransactionId, token)
-    : undefined;
+  // Checks every still-live attempt on this order (multi-channel, 2026-10-26
+  // - a customer may have tried more than one), not just a single tracked
+  // transaction id. See pollAndSettleOrderAttempts's own comment for why
+  // this has to actively check WuzzPay rather than just read a pre-set
+  // field: order.wuzzpayTransactionId now stays unset until something
+  // actually settles, so there's nothing to passively read while Pending.
+  const { notifyOrder, duplicateOrder } = await pollAndSettleOrderAttempts(findByToken, token);
 
-  const result = await withDbLock(async () => {
-    const orders = await readOrders();
-    const order = orders.find((o: Order) => o.confirmationToken && o.confirmationToken === token);
-    if (!order) return null;
-    // Narrow writeOrders, not the full writeDB (a 6-table transactional sync
-    // - not cheap, measured multiple seconds against production Supabase) -
-    // and only called at all when something actually changed, which most
-    // polls won't - "still pending" is by far the common case.
-    const { changed, justSettled } = applyWuzzpaySettlementStatus(order, wuzzpayStatus);
-    if (changed) {
-      await writeOrders(orders);
-    }
-    return { status: order.status, wuzzpayLastStatus: order.wuzzpayLastStatus, notifyOrder: justSettled ? order : null };
-  });
-  if (!result) return res.status(404).json({ error: 'Pesanan tidak ditemukan.' });
   // Fired after the lock is released, never from inside it - see
   // sendTelegramPaymentNotification's own comment on the lock-contention
   // incident this must not repeat.
-  if (result.notifyOrder) {
-    console.log(`WuzzPay payment-status poll settled order ${result.notifyOrder.id} via transaction ${result.notifyOrder.wuzzpayTransactionId}`);
-    sendTelegramPaymentNotification(result.notifyOrder).catch(err => console.error('Telegram payment notification failed:', err));
+  if (notifyOrder) {
+    console.log(`WuzzPay payment-status poll settled order ${notifyOrder.id} via transaction ${notifyOrder.wuzzpayTransactionId}`);
+    sendTelegramPaymentNotification(notifyOrder).catch(err => console.error('Telegram payment notification failed:', err));
   }
-  res.json({ status: result.status, wuzzpayLastStatus: result.wuzzpayLastStatus });
+  if (duplicateOrder) {
+    console.error(`WuzzPay payment-status poll found a DUPLICATE payment on order ${duplicateOrder.id}`);
+    sendTelegramDuplicatePaymentAlert(duplicateOrder).catch(err => console.error('Telegram duplicate-payment alert failed:', err));
+  }
+
+  // Re-read fresh for the response - narrow readOrders, not the full
+  // readDB, same reasoning as every other narrow-read route in this file.
+  const final = await withDbLock(async () => {
+    const order = findByToken(await readOrders());
+    if (!order) return null;
+    return { status: order.status, attempts: getOrderAttempts(order).map(a => ({ productId: a.productId, bankCode: a.bankCode, lastStatus: a.lastStatus })) };
+  });
+  if (!final) return res.status(404).json({ error: 'Pesanan tidak ditemukan.' });
+  res.json(final);
 }));
 
 // Verifies x-wuzzpay-signature against a raw request body. Confirmed
@@ -2266,32 +2413,25 @@ app.post('/api/webhooks/wuzzpay', asyncHandler(async (req, res) => {
     // fallback only, in case some webhook event shapes still echo it back.
     const partnerReference = req.body?.partner_reference ?? req.body?.data?.partner_reference ?? req.body?.ref_no;
     if (typeof partnerReference === 'string') {
-      // Narrow readOrders/writeOrders throughout, not the full readDB/writeDB
-      // - same reasoning as payment-status/cash/charge above.
-      const snapshot = await withDbLock(async () => {
-        const orders = await readOrders();
-        const order = orders.find((o: Order) => o.id === partnerReference);
-        return order ? { wuzzpayTransactionId: order.wuzzpayTransactionId } : null;
-      });
-      if (snapshot?.wuzzpayTransactionId) {
-        const wuzzpayStatus = await fetchWuzzpaySettlementStatus(snapshot.wuzzpayTransactionId, partnerReference);
-        const notifyOrder = await withDbLock(async () => {
-          const orders = await readOrders();
-          const order = orders.find((o: Order) => o.id === partnerReference);
-          if (!order) return null;
-          const { changed, justSettled } = applyWuzzpaySettlementStatus(order, wuzzpayStatus);
-          if (changed) {
-            await writeOrders(orders);
-          }
-          return justSettled ? order : null;
-        });
-        // Fired after the lock is released, never from inside it - see
-        // sendTelegramPaymentNotification's own comment on the lock-contention
-        // incident this must not repeat.
-        if (notifyOrder) {
-          console.log(`WuzzPay webhook settled order ${partnerReference} (ref_no) via transaction ${snapshot.wuzzpayTransactionId}`);
-          sendTelegramPaymentNotification(notifyOrder).catch(err => console.error('Telegram payment notification failed:', err));
-        }
+      // Checks every still-live attempt on the order (multi-channel,
+      // 2026-10-26), not just whichever one the webhook happens to be about -
+      // consistent with this route's existing "never trust the payload for
+      // anything except which order to look at" posture: the payload is only
+      // ever a prompt to re-check, so re-checking everything is both simpler
+      // and more thorough than trying to single out one attempt via the
+      // payload's own transaction_id field.
+      const findById = (orders: Order[]) => orders.find((o: Order) => o.id === partnerReference);
+      const { notifyOrder, duplicateOrder } = await pollAndSettleOrderAttempts(findById, partnerReference);
+      // Fired after the lock is released, never from inside it - see
+      // sendTelegramPaymentNotification's own comment on the lock-contention
+      // incident this must not repeat.
+      if (notifyOrder) {
+        console.log(`WuzzPay webhook settled order ${partnerReference} via transaction ${notifyOrder.wuzzpayTransactionId}`);
+        sendTelegramPaymentNotification(notifyOrder).catch(err => console.error('Telegram payment notification failed:', err));
+      }
+      if (duplicateOrder) {
+        console.error(`WuzzPay webhook found a DUPLICATE payment on order ${partnerReference}`);
+        sendTelegramDuplicatePaymentAlert(duplicateOrder).catch(err => console.error('Telegram duplicate-payment alert failed:', err));
       }
     }
   } catch (err) {

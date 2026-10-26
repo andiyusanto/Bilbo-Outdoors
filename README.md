@@ -417,6 +417,12 @@ CREATE TABLE IF NOT EXISTS job_entries (
 > ALTER TABLE settings ADD COLUMN IF NOT EXISTS terms_and_conditions TEXT;
 > ```
 
+> **Sudah pernah menjalankan Step A sebelum kolom `wuzzpay_attempts`/`wuzzpay_duplicate_payment` di `orders` ada?** Jalankan ini sekali di SQL Editor yang sama (aman dijalankan berulang) - keduanya nullable tanpa default, order lama tetap `NULL` selamanya, tidak ada regresi. Mendukung lebih dari satu channel pembayaran WuzzPay per pesanan (pelanggan coba QRIS, lalu pindah ke VA, tanpa kehilangan pesanannya) - `wuzzpay_attempts` (JSONB array, lihat `WuzzpayAttempt` di `src/types.ts`) menyimpan setiap channel yang pernah dicoba selama pesanan masih Pending; kolom `wuzzpay_transaction_id`/`wuzzpay_provider`/`wuzzpay_last_status`/`payment_instruction` di atas sekarang hanya diisi sekali channel yang benar-benar lunas (oleh `applyWuzzpaySettlementStatus`), bukan lagi di saat charge. `wuzzpay_duplicate_payment` (JSONB array, admin-only - **tidak** dikirim ke `PublicOrder`) diisi kalau channel LAIN juga terdeteksi lunas setelah pesanan sudah lunas lewat channel yang berbeda - WuzzPay tidak punya endpoint pembatalan transaksi, jadi ini kemungkinan nyata, bukan bug, dan perlu refund manual oleh staf (lihat notifikasi Telegram terpisah, `sendTelegramDuplicatePaymentAlert` di `server.ts`).
+> ```sql
+> ALTER TABLE orders ADD COLUMN IF NOT EXISTS wuzzpay_attempts JSONB;
+> ALTER TABLE orders ADD COLUMN IF NOT EXISTS wuzzpay_duplicate_payment JSONB;
+> ```
+
 ### Step B: Dapatkan Connection String Supabase Anda
 1. Di dashboard Supabase Anda, buka project Anda, lalu klik tombol **Connect** (di bagian atas halaman project).
 2. Di bagian **Connection String**, pilih mode **Session pooler** - **bukan** "Direct connection" dan **bukan** "Transaction pooler".

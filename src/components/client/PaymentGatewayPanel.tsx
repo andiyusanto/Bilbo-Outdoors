@@ -10,15 +10,30 @@ const POLL_INTERVAL_MS = 5000;
 
 // Distinguishes a permanently-stuck payment reference (WuzzPay code
 // REFERENCE_STUCK, see server.ts's /charge route) from an ordinary transient
-// failure, so the caller can skip the pointless auto-retry - retrying can
-// never succeed once this order's reference is stuck, since the
-// Idempotency-Key is deterministically the order id.
+// failure, so the caller can skip the pointless auto-retry - retrying the
+// SAME channel can never succeed once that channel's reference is stuck,
+// since the Idempotency-Key is deterministically the order id (scoped per
+// channel though, 2026-10-26 - a DIFFERENT channel is unaffected).
 class ChargeError extends Error {
   stuck: boolean;
   constructor(message: string, stuck: boolean) {
     super(message);
     this.stuck = stuck;
   }
+}
+
+// One channel attempted on this order - mirrors server.ts's WuzzpayAttempt
+// (src/types.ts). The client tracks every attempt made this session so
+// switching back to a previously-tried channel re-displays its existing
+// instruction instead of re-charging, and so the poll can check the status
+// of specifically whichever attempt is currently on screen.
+interface ClientWuzzpayAttempt {
+  productId: MethodTab;
+  bankCode?: string;
+  transactionId: string;
+  paymentInstruction: Record<string, any>;
+  chargedAmount: number;
+  lastStatus?: string;
 }
 
 // Copies `value` to the clipboard and briefly confirms with a checkmark -
@@ -280,16 +295,28 @@ export default function PaymentGatewayPanel({ order, token, onSettled, pendingEx
   const [payAmountInput, setPayAmountInput] = useState(String(order.totalPrice));
   const minDpAmount = Math.ceil(order.totalPrice * 0.5);
   const payAmountValue = Number(payAmountInput);
-  const isPayAmountValid = payAmountInput !== '' && Number.isInteger(payAmountValue) && payAmountValue >= minDpAmount && payAmountValue <= order.totalPrice;
   const [charging, setCharging] = useState(false);
   const [chargeError, setChargeError] = useState('');
-  const [referenceStuck, setReferenceStuck] = useState(false);
-  const [instruction, setInstruction] = useState<Record<string, any> | null>(order.paymentInstruction ?? null);
-  // What was actually charged, for the persisted/Sisa display below - starts
-  // from the order (a reload, or an "already-live" precheck reply), then
-  // updated from the /charge response itself the moment a fresh charge
-  // succeeds, since `order` (a prop) won't reflect that until a refetch.
-  const [chargedAmount, setChargedAmount] = useState<number | undefined>(order.wuzzpayChargedAmount);
+  // Every channel attempted on this order so far (2026-10-26, multi-channel
+  // support) - a customer can try QRIS, then switch to a different channel,
+  // without losing the order. Seeded from the order prop (survives a
+  // reload while Pending - see PublicOrder's comment on why this field
+  // specifically is exposed) and appended to from each /charge response.
+  const [attempts, setAttempts] = useState<ClientWuzzpayAttempt[]>(order.wuzzpayAttempts ?? []);
+  // Amount is locked to whatever the first channel on this order already
+  // requested, once there is one - the server enforces this regardless, but
+  // reading it here keeps the UI (and its validity check below) honest
+  // about it instead of still gating on the now-irrelevant free-form input.
+  const lockedAmount = attempts.length > 0 ? attempts[0].chargedAmount : undefined;
+  const isPayAmountValid = lockedAmount !== undefined || (payAmountInput !== '' && Number.isInteger(payAmountValue) && payAmountValue >= minDpAmount && payAmountValue <= order.totalPrice);
+  // Which attempt's instruction is currently on screen - undefined means
+  // "show the method picker". Index into `attempts` rather than a copy, so
+  // it always reflects that attempt's latest known lastStatus.
+  const [currentAttemptIndex, setCurrentAttemptIndex] = useState<number | undefined>(
+    attempts.length > 0 ? attempts.length - 1 : undefined
+  );
+  const instruction = currentAttemptIndex !== undefined ? attempts[currentAttemptIndex]?.paymentInstruction ?? null : null;
+  const chargedAmount = currentAttemptIndex !== undefined ? attempts[currentAttemptIndex]?.chargedAmount : undefined;
   const [expired, setExpired] = useState(false);
   const [settled, setSettled] = useState(order.status !== 'Pending');
   const [cashConfirming, setCashConfirming] = useState(false);
@@ -348,18 +375,22 @@ export default function PaymentGatewayPanel({ order, token, onSettled, pendingEx
           onSettled();
           return;
         }
-        // WuzzPay's own reported outcome for this specific attempt - distinct
-        // from the client-clock-based expiresAt check in checkExpiry() below.
-        // Without this, a definitively failed/expired payment (which can
-        // happen well before the instruction's own expires_at) left the
-        // customer staring at "Menunggu konfirmasi..." forever with no
-        // indication anything went wrong. Reuses the exact same terminal UI/
-        // recovery flow as the time-based expiry: resetting to the method
-        // picker and trying again always resolves correctly on its own (the
-        // deterministic Idempotency-Key means any new charge attempt on this
-        // order 409s into referenceStuck - see chargeRequest above), so no
-        // separate state or backend change is needed here.
-        if (data.wuzzpayLastStatus === 'failed' || data.wuzzpayLastStatus === 'expired') {
+        // WuzzPay's own reported outcome for whichever attempt is currently
+        // on screen - distinct from the client-clock-based expiresAt check
+        // in checkExpiry() below. Without this, a definitively failed/
+        // expired payment (which can happen well before the instruction's
+        // own expires_at) left the customer staring at "Menunggu
+        // konfirmasi..." forever with no indication anything went wrong.
+        // Reuses the exact same terminal UI/recovery flow as the time-based
+        // expiry: resetting to the method picker and trying a (possibly
+        // different) channel always resolves correctly on its own.
+        const current = currentAttemptIndex !== undefined ? attempts[currentAttemptIndex] : undefined;
+        const currentStatus = current
+          ? (data.attempts as { productId: string; bankCode?: string; lastStatus?: string }[] | undefined)
+              ?.find(a => a.productId === current.productId && (current.productId === 'qris' || a.bankCode === current.bankCode))
+              ?.lastStatus
+          : undefined;
+        if (currentStatus === 'failed' || currentStatus === 'expired') {
           setExpired(true);
           stopPolling();
           return;
@@ -379,7 +410,7 @@ export default function PaymentGatewayPanel({ order, token, onSettled, pendingEx
   }, [instruction, settled, token]);
 
   const chargeRequest = async () => {
-    const body: { productId: MethodTab; bankCode?: string; amount?: number } = { productId: methodTab, amount: payAmountValue };
+    const body: { productId: MethodTab; bankCode?: string; amount?: number } = { productId: methodTab, amount: lockedAmount ?? payAmountValue };
     if (methodTab === 'va') body.bankCode = selectedBank;
     if (methodTab === 'emoney') body.bankCode = selectedWallet;
     const res = await fetch(`/api/orders/confirm/${token}/charge`, {
@@ -391,21 +422,33 @@ export default function PaymentGatewayPanel({ order, token, onSettled, pendingEx
     if (!res.ok) {
       throw new ChargeError(data.error || 'Gagal membuat instruksi pembayaran.', data.code === 'REFERENCE_STUCK');
     }
-    return data;
+    return data as { wuzzpayAttempts?: ClientWuzzpayAttempt[] };
+  };
+
+  // Applies a successful /charge (or "already-live") response: stores the
+  // full attempts list and points currentAttemptIndex at whichever one
+  // matches what was just requested, so the instruction display picks it up.
+  const applyChargeResponse = (data: { wuzzpayAttempts?: ClientWuzzpayAttempt[] }, productId: MethodTab, bankCode?: string) => {
+    const list = data.wuzzpayAttempts ?? [];
+    setAttempts(list);
+    let foundIndex: number | undefined;
+    for (let i = list.length - 1; i >= 0; i--) {
+      if (list[i].productId === productId && (productId === 'qris' || list[i].bankCode === bankCode)) { foundIndex = i; break; }
+    }
+    setCurrentAttemptIndex(foundIndex);
   };
 
   const handleCharge = async () => {
     setCharging(true);
     setChargeError('');
-    setReferenceStuck(false);
     setExpired(false);
+    const bankCode = methodTab === 'va' ? selectedBank : methodTab === 'emoney' ? selectedWallet : undefined;
     try {
       const data = await chargeRequest();
-      setInstruction(data.paymentInstruction ?? null);
-      setChargedAmount(data.wuzzpayChargedAmount ?? undefined);
+      applyChargeResponse(data, methodTab, bankCode);
     } catch (firstErr: any) {
       if (firstErr instanceof ChargeError && firstErr.stuck) {
-        setReferenceStuck(true);
+        setChargeError('Metode ini sudah tidak bisa dicoba lagi untuk pesanan ini. Silakan pilih metode pembayaran lain.');
         setCharging(false);
         return;
       }
@@ -418,11 +461,10 @@ export default function PaymentGatewayPanel({ order, token, onSettled, pendingEx
       await new Promise(resolve => setTimeout(resolve, 1500));
       try {
         const data = await chargeRequest();
-        setInstruction(data.paymentInstruction ?? null);
-        setChargedAmount(data.wuzzpayChargedAmount ?? undefined);
+        applyChargeResponse(data, methodTab, bankCode);
       } catch (secondErr: any) {
         if (secondErr instanceof ChargeError && secondErr.stuck) {
-          setReferenceStuck(true);
+          setChargeError('Metode ini sudah tidak bisa dicoba lagi untuk pesanan ini. Silakan pilih metode pembayaran lain.');
         } else {
           setChargeError(secondErr.message || 'Gagal membuat instruksi pembayaran.');
         }
@@ -457,18 +499,6 @@ export default function PaymentGatewayPanel({ order, token, onSettled, pendingEx
         </div>
         <h3 className="text-xl font-display font-black text-emerald-800 uppercase tracking-tight">Pembayaran Diterima!</h3>
         <p className="text-xs font-bold text-emerald-700 uppercase">Pesanan Anda sedang kami proses. Terima kasih!</p>
-      </div>
-    );
-  }
-
-  if (referenceStuck) {
-    return (
-      <div className="bg-red-50 border-2 border-red-600 p-8 rounded-none text-center space-y-3">
-        <h3 className="text-sm font-display font-black text-red-800 uppercase tracking-tight">Pesanan Ini Tidak Bisa Dibuatkan Pembayaran Lagi</h3>
-        <p className="text-xs font-bold text-red-700 normal-case leading-relaxed">
-          Percobaan pembayaran sebelumnya untuk pesanan ini gagal secara permanen di sistem gateway kami, dan tidak
-          bisa dicoba ulang. Silakan buat pesanan baru dari katalog untuk melanjutkan.
-        </p>
       </div>
     );
   }
@@ -565,7 +595,23 @@ export default function PaymentGatewayPanel({ order, token, onSettled, pendingEx
             </p>
           )}
 
-          {methodTab !== 'cash' && (
+          {methodTab !== 'cash' && lockedAmount !== undefined && (
+            // A channel was already attempted on this order - the amount is
+            // locked to match it (server enforces this regardless), so a
+            // second channel is just an alternative way to pay the SAME
+            // amount, not a chance to change how much is being paid now.
+            <div className="bg-zinc-50 border border-zinc-200 p-3 space-y-1">
+              <p className="text-[10px] text-zinc-500 font-bold uppercase">Jumlah Yang Dibayar Sekarang</p>
+              <p className="text-sm font-black text-black">Rp {lockedAmount.toLocaleString('id-ID')}</p>
+              {lockedAmount < order.totalPrice && (
+                <p className="text-[10px] text-zinc-600 font-semibold normal-case">
+                  Sisa yang dibayar saat pengambilan barang: <strong className="text-black">Rp {(order.totalPrice - lockedAmount).toLocaleString('id-ID')}</strong>
+                </p>
+              )}
+            </div>
+          )}
+
+          {methodTab !== 'cash' && lockedAmount === undefined && (
             <div className="bg-zinc-50 border border-zinc-200 p-3 space-y-2">
               <p className="text-[10px] text-zinc-500 font-bold uppercase">Jumlah Yang Dibayar Sekarang</p>
               <div className="grid grid-cols-2 gap-2">
@@ -628,7 +674,7 @@ export default function PaymentGatewayPanel({ order, token, onSettled, pendingEx
           <p className="text-xs font-black text-red-700 uppercase">Pembayaran gagal atau instruksi sudah kedaluwarsa.</p>
           <button
             type="button"
-            onClick={() => { setInstruction(null); setExpired(false); }}
+            onClick={() => { setCurrentAttemptIndex(undefined); setExpired(false); }}
             className="py-2.5 px-6 bg-black hover:bg-brand hover:text-black text-white font-black text-xs rounded-none border-2 border-black uppercase tracking-widest cursor-pointer"
           >
             Coba Lagi
@@ -643,6 +689,13 @@ export default function PaymentGatewayPanel({ order, token, onSettled, pendingEx
               <strong className="text-black">Rp {(order.totalPrice - chargedAmount).toLocaleString('id-ID')}</strong>
             </p>
           )}
+          <button
+            type="button"
+            onClick={() => setCurrentAttemptIndex(undefined)}
+            className="w-full py-2 text-[10px] font-bold text-zinc-500 hover:text-black uppercase tracking-wide underline cursor-pointer"
+          >
+            Pilih Metode Lain
+          </button>
           <p className="text-[10px] text-zinc-500 font-bold uppercase text-center flex items-center justify-center gap-1.5">
             <Clock className="w-3.5 h-3.5" />
             Bayar sebelum {formatDateTimeLabel(onlinePaymentDeadline.toISOString())}

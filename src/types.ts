@@ -74,9 +74,34 @@ export interface Order {
   paymentChannel?: string; // bank_code (va) or wallet code (emoney), e.g. "014" or "ovo" - unused for qris
   paymentInstruction?: Record<string, unknown>; // raw payment_instruction object from POST /v1/charge (va_number/qr string/expires_at/...), stored so the confirmation page can re-render on reload without re-charging
   wuzzpayChargedAmount?: number; // the exact amount actually requested in the /v1/charge call (may be a partial DP, minimum 50% of totalPrice - see the charge route) - a dedicated field rather than parsing it back out of paymentInstruction, since WuzzPay's response shape for that isn't confirmed reliable across all three product types (qris/va/emoney). This is what applyWuzzpaySettlementStatus credits to amountPaid on settlement, not totalPrice. Safe to show the customer (it's the amount they themselves chose to pay), unlike the wuzzpay*-internal fields below.
-  wuzzpayTransactionId?: string; // WuzzPay's own transaction id - used to poll GET /v1/transactions/{id}. Admin/internal only, never sent to the public confirm/:token projection.
-  wuzzpayProvider?: string; // used_provider echoed back from /v1/charge, for admin debugging. Admin/internal only.
-  wuzzpayLastStatus?: string; // last known raw status string from WuzzPay, for admin debugging. Admin/internal only.
+  wuzzpayTransactionId?: string; // WuzzPay's own transaction id of whichever attempt actually settled this order - used to poll GET /v1/transactions/{id}. Only ever written by applyWuzzpaySettlementStatus once a settlement lands, never at charge time (see wuzzpayAttempts below for in-flight attempts). Admin/internal only, never sent to the public confirm/:token projection.
+  wuzzpayProvider?: string; // used_provider from whichever attempt settled, for admin debugging. Admin/internal only.
+  wuzzpayLastStatus?: string; // last known raw status string from WuzzPay for the settled attempt, for admin debugging. Admin/internal only.
+  // Every channel the customer has tried charging while this order was Pending
+  // (oldest first) - lets a customer try QRIS, then switch to VA, without
+  // losing the order (added 2026-10-26, see the multi-channel payment plan).
+  // Only meaningful pre-settlement: once order.status is Approved/Paid, the
+  // single wuzzpay* fields above are authoritative for "how it was actually
+  // paid," not this array. WuzzPay has no cancel/void endpoint, so an older
+  // attempt here can still technically be paid even after the order settles
+  // via a different one - see wuzzpayDuplicatePayment.
+  wuzzpayAttempts?: WuzzpayAttempt[];
+  // A DIFFERENT attempt than the one that settled the order ALSO reported
+  // settled/paid, later - a real double-payment, not a bug, since WuzzPay
+  // cannot close out the other channel's instruction early. Admin-visible
+  // flag for manual refund reconciliation; never auto-resolved by the app.
+  wuzzpayDuplicatePayment?: { transactionId: string; productId: string; detectedAt: string }[];
+}
+
+export interface WuzzpayAttempt {
+  productId: 'qris' | 'va' | 'emoney';
+  bankCode?: string; // bank_code (va) or wallet code (emoney)
+  transactionId: string; // WuzzPay's data.id - what GET /v1/transactions/{id} takes
+  paymentInstruction: Record<string, unknown>;
+  chargedAmount: number;
+  provider?: string;
+  lastStatus?: string;
+  chargedAt: string; // ISO
 }
 
 export interface StatusHistoryEntry {
@@ -105,7 +130,16 @@ export interface PenaltyEntry {
 // are internal gateway debugging fields with no customer-facing purpose - the
 // customer's own polling response is a separate, intentionally narrow object
 // (see GET /api/orders/confirm/:token/payment-status), not this projection.
-export type PublicOrder = Omit<Order, 'personalPhotoBase64' | 'personalPhotoStoragePath' | 'statusHistory' | 'penalties' | 'wuzzpayTransactionId' | 'wuzzpayLastStatus'>;
+// wuzzpayAttempts is deliberately NOT omitted - the customer-facing payment
+// panel needs it to resume showing an in-progress (not yet settled) channel
+// after a reload, now that the singular wuzzpay* fields above only get
+// written once something actually settles (2026-10-26, multi-channel
+// support). Its per-attempt transactionId has the same low sensitivity
+// already established by /charge's own response exposing it directly.
+// wuzzpayDuplicatePayment IS omitted - a possible double-payment is an
+// internal reconciliation matter for staff, not something to surface on the
+// public confirmation page.
+export type PublicOrder = Omit<Order, 'personalPhotoBase64' | 'personalPhotoStoragePath' | 'statusHistory' | 'penalties' | 'wuzzpayTransactionId' | 'wuzzpayLastStatus' | 'wuzzpayDuplicatePayment'>;
 
 // List-view projection - the orders array fetched on login/refresh never
 // needs personalPhotoBase64 (only OrderDetailPanel does, via a dedicated

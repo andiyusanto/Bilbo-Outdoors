@@ -4,7 +4,7 @@ import { Check, ChevronDown, Copy, Phone, Clock } from 'lucide-react';
 import { PublicOrder } from '../../types';
 import { parseJsonOrThrow } from '../../lib/api';
 import { formatDateTimeLabel } from '../../lib/date';
-import { BANK_OPTIONS, WALLET_OPTIONS } from '../../lib/paymentChannels';
+import { BANK_OPTIONS, WALLET_OPTIONS, VA_FEE_ESTIMATE } from '../../lib/paymentChannels';
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -179,12 +179,20 @@ function PaymentInstructionDisplay({ instruction }: { instruction: Record<string
   if (method === 'virtual_account') {
     const bank = BANK_OPTIONS.find(b => b.code === instruction.bank_code);
     const amount = Number(instruction.total_amount ?? instruction.amount);
-    // WuzzPay's charge response already includes a per-transaction admin fee
-    // (total_amount = amount + fee) - always 0 in the sandbox regardless of
-    // channel/bank, so this can't be verified against a real non-zero value
-    // yet, but shows up automatically the moment production applies real
-    // fees, with zero code change needed then.
+    // WuzzPay's charge response field, in case it's ever actually populated -
+    // confirmed 2026-10-26 (both by direct API inspection and WuzzPay's own
+    // support) that it never is: the real fee isn't computed until the
+    // customer's bank does its own inquiry call to Winpay, a step entirely
+    // outside WuzzPay's merchant-facing API. feeEstimate below (the owner's
+    // actual contract range) is what's shown instead - this stays as a
+    // defensive fallback in case that ever changes.
     const fee = Number(instruction.fee ?? 0);
+    // Owner's actual WuzzPay contract range per bank (VA_FEE_ESTIMATE,
+    // src/lib/paymentChannels.ts) - merchant-absorbed (the "charge to buyer"
+    // toggle stays off), so purely informational: never added to the amount
+    // transferred. Falls back to a generic note for banks without a known
+    // range instead of showing nothing.
+    const feeEstimate = instruction.bank_code ? VA_FEE_ESTIMATE[instruction.bank_code] : undefined;
     return (
       <div className="bg-white border-2 border-black p-6 rounded-none space-y-4 shadow-[4px_4px_0px_rgba(0,0,0,1)]">
         <h3 className="text-xs font-black uppercase text-black tracking-widest border-b-2 border-brand pb-2">TRANSFER VIRTUAL ACCOUNT</h3>
@@ -206,9 +214,17 @@ function PaymentInstructionDisplay({ instruction }: { instruction: Record<string
               <p className="text-sm font-black text-black font-mono">Rp {amount.toLocaleString('id-ID')}</p>
               <CopyButton value={String(amount)} />
             </div>
-            {fee > 0 && (
+            {fee > 0 ? (
               <p className="text-[10px] text-zinc-400 font-semibold normal-case mt-1">
                 Termasuk biaya admin: Rp {fee.toLocaleString('id-ID')}
+              </p>
+            ) : feeEstimate ? (
+              <p className="text-[10px] text-zinc-400 font-semibold normal-case mt-1">
+                Estimasi biaya admin bank: {feeEstimate} - ditanggung Bilbo Outdoors, bukan tambahan untuk Anda.
+              </p>
+            ) : (
+              <p className="text-[10px] text-zinc-400 font-semibold normal-case mt-1">
+                Kemungkinan ada biaya admin sesuai kebijakan bank, ditanggung Bilbo Outdoors.
               </p>
             )}
           </div>
@@ -242,9 +258,15 @@ function PaymentInstructionDisplay({ instruction }: { instruction: Record<string
         <p className="mt-1 text-sm font-mono text-gray-600 bg-gray-100 px-3 py-1 rounded-full font-semibold">
           Total: Rp {qrisAmount.toLocaleString('id-ID')}
         </p>
-        {qrisFee > 0 && (
+        {qrisFee > 0 ? (
           <p className="mt-1 text-[11px] text-gray-500 font-semibold">
             Termasuk biaya admin: Rp {qrisFee.toLocaleString('id-ID')}
+          </p>
+        ) : (
+          // No confirmed contract rate for QRIS yet (unlike VA_FEE_ESTIMATE),
+          // so a generic disclaimer rather than a specific number.
+          <p className="mt-1 text-[11px] text-gray-500 font-semibold">
+            Kemungkinan ada biaya admin sesuai kebijakan penyedia, ditanggung Bilbo Outdoors.
           </p>
         )}
         <div className="w-full">

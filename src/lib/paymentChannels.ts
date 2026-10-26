@@ -35,6 +35,20 @@ export const WALLET_OPTIONS = [
   { code: 'gopay', name: 'GoPay' },
 ];
 
+// Estimated admin-fee range per bank, from the owner's own WuzzPay contract
+// (2026-10-26, confirmed directly, not from the API - WuzzPay's charge
+// response never populates a real fee, see PaymentGatewayPanel's own
+// comment). A range, not an exact figure, since the owner doesn't have a
+// precise per-transaction number - shown as an estimate, not a guarantee.
+// This fee is merchant-absorbed (the "charge to buyer" toggle on WuzzPay's
+// dashboard stays off) - it never changes what the customer transfers, so
+// any UI using this is informational only, never added to a total.
+export const VA_FEE_ESTIMATE: Record<string, string> = {
+  '002': 'Rp 2.500–3.000', // BRI
+  '008': 'Rp 2.500–3.000', // Mandiri
+  '014': 'Rp 4.000–5.000', // BCA
+};
+
 export function getBankName(code: string | undefined): string | undefined {
   return BANK_OPTIONS.find(b => b.code === code)?.name;
 }

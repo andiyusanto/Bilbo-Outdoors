@@ -35,18 +35,43 @@ export const WALLET_OPTIONS = [
   { code: 'gopay', name: 'GoPay' },
 ];
 
-// Estimated admin-fee range per bank, from the owner's own WuzzPay contract
-// (2026-10-26, confirmed directly, not from the API - WuzzPay's charge
-// response never populates a real fee, see PaymentGatewayPanel's own
-// comment). A range, not an exact figure, since the owner doesn't have a
-// precise per-transaction number - shown as an estimate, not a guarantee.
-// This fee is merchant-absorbed (the "charge to buyer" toggle on WuzzPay's
-// dashboard stays off) - it never changes what the customer transfers, so
-// any UI using this is informational only, never added to a total.
-export const VA_FEE_ESTIMATE: Record<string, string> = {
-  '002': 'Rp 2.500–3.000', // BRI
-  '008': 'Rp 2.500–3.000', // Mandiri
-  '014': 'Rp 4.000–5.000', // BCA
+// Exact admin-fee rate card from WuzzPay support (2026-10-27, superseding
+// the 2026-10-26 estimate ranges - WuzzPay's own charge response never
+// populates a real fee, see PaymentGatewayPanel's own comment, so this is
+// sourced from their emailed rate card, not the API). Flat per transaction,
+// same for every bank except BCA. This fee is merchant-absorbed (the
+// "charge to buyer" toggle on WuzzPay's dashboard stays off, per the
+// owner's explicit instruction) - it never changes what the customer
+// transfers, so any UI using this is informational only, never added to a
+// total shown to the customer.
+export const VA_FEE_FLAT: Record<string, number> = {
+  '002': 3500, // BRI
+  '008': 3500, // Mandiri
+  '014': 5000, // BCA
+  '009': 3500, // BNI
+  '022': 3500, // CIMB Niaga
+  '013': 3500, // Permata
+  '451': 3500, // BSI (temporarily disabled, see BANK_OPTIONS)
+  '011': 3500, // Danamon (temporarily disabled, see BANK_OPTIONS)
+};
+
+// QRIS admin fee is tiered by amount, not flat (WuzzPay rate card,
+// 2026-10-27): Rp 500 flat for a transaction <= Rp 100.000, 0.7% of the
+// amount above that. Returns a human-readable label, not a raw number,
+// since the 0.7% tier is computed from the actual charge amount.
+export function getQrisFeeLabel(amount: number): string {
+  if (amount <= 100000) return 'Rp 500';
+  return `Rp ${Math.round(amount * 0.007).toLocaleString('id-ID')} (0,7%)`;
+}
+
+// E-wallet admin fee by provider, percentage of amount (WuzzPay rate card,
+// 2026-10-27) - channel itself is still disabled (see BANK_OPTIONS'
+// emoney-equivalent gate in PaymentGatewayPanel/server.ts), kept here for
+// when it's re-enabled.
+export const WALLET_FEE_PERCENT: Record<string, number> = {
+  ovo: 3,
+  dana: 2,
+  gopay: 4,
 };
 
 export function getBankName(code: string | undefined): string | undefined {

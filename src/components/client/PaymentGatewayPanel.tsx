@@ -4,7 +4,7 @@ import { Check, ChevronDown, Copy, Phone, Clock } from 'lucide-react';
 import { PublicOrder } from '../../types';
 import { parseJsonOrThrow } from '../../lib/api';
 import { formatDateTimeLabel } from '../../lib/date';
-import { BANK_OPTIONS, WALLET_OPTIONS, VA_FEE_ESTIMATE } from '../../lib/paymentChannels';
+import { BANK_OPTIONS, WALLET_OPTIONS, VA_FEE_FLAT, getQrisFeeLabel, WALLET_FEE_PERCENT } from '../../lib/paymentChannels';
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -142,8 +142,28 @@ const EMONEY_STEPS = [
   'Konfirmasi dengan PIN atau verifikasi sidik jari/wajah untuk menyelesaikan pembayaran.',
 ];
 
-function PaymentSteps({ method, bankCode }: { method: MethodTab; bankCode?: string }) {
-  const [open, setOpen] = useState(false);
+// Admin-fee label shown inside "Cara Bayar" - merchant-absorbed (see
+// VA_FEE_FLAT's own comment), so always framed as informational, never as
+// something added to what the customer transfers.
+function PaymentStepsFeeNote({ method, bankCode, amount }: { method: MethodTab; bankCode?: string; amount?: number }) {
+  const label = method === 'va' && bankCode ? (VA_FEE_FLAT[bankCode] !== undefined ? `Rp ${VA_FEE_FLAT[bankCode].toLocaleString('id-ID')}` : undefined)
+    : method === 'qris' && amount !== undefined ? getQrisFeeLabel(amount)
+    : method === 'emoney' && bankCode ? (WALLET_FEE_PERCENT[bankCode] !== undefined ? `${WALLET_FEE_PERCENT[bankCode]}%` : undefined)
+    : undefined;
+  return (
+    <p className="text-[11px] text-zinc-600 font-semibold normal-case leading-relaxed mt-2">
+      {label
+        ? `Biaya admin: ${label} - ditanggung Bilbo Outdoors, bukan tambahan untuk Anda.`
+        : 'Kemungkinan ada biaya admin sesuai kebijakan bank/penyedia, ditanggung Bilbo Outdoors.'}
+    </p>
+  );
+}
+
+// Defaults open (2026-10-27) - the admin-fee note and payment steps should
+// be visible immediately, not hidden behind a click, now that there's
+// fee information customers may want to see right away.
+function PaymentSteps({ method, bankCode, amount }: { method: MethodTab; bankCode?: string; amount?: number }) {
+  const [open, setOpen] = useState(true);
   const steps = method === 'qris' ? QRIS_STEPS
     : method === 'emoney' ? EMONEY_STEPS
     : (bankCode && VA_STEPS_BY_BANK[bankCode]) || VA_STEPS_GENERIC;
@@ -158,11 +178,14 @@ function PaymentSteps({ method, bankCode }: { method: MethodTab; bankCode?: stri
         <ChevronDown className={`w-3.5 h-3.5 stroke-[2.5] transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <ol className="mt-2.5 space-y-2 list-decimal list-inside">
-          {steps.map((step, i) => (
-            <li key={i} className="text-[11px] text-zinc-600 font-semibold normal-case leading-relaxed">{step}</li>
-          ))}
-        </ol>
+        <>
+          <ol className="mt-2.5 space-y-2 list-decimal list-inside">
+            {steps.map((step, i) => (
+              <li key={i} className="text-[11px] text-zinc-600 font-semibold normal-case leading-relaxed">{step}</li>
+            ))}
+          </ol>
+          <PaymentStepsFeeNote method={method} bankCode={bankCode} amount={amount} />
+        </>
       )}
     </div>
   );
@@ -179,20 +202,6 @@ function PaymentInstructionDisplay({ instruction }: { instruction: Record<string
   if (method === 'virtual_account') {
     const bank = BANK_OPTIONS.find(b => b.code === instruction.bank_code);
     const amount = Number(instruction.total_amount ?? instruction.amount);
-    // WuzzPay's charge response field, in case it's ever actually populated -
-    // confirmed 2026-10-26 (both by direct API inspection and WuzzPay's own
-    // support) that it never is: the real fee isn't computed until the
-    // customer's bank does its own inquiry call to Winpay, a step entirely
-    // outside WuzzPay's merchant-facing API. feeEstimate below (the owner's
-    // actual contract range) is what's shown instead - this stays as a
-    // defensive fallback in case that ever changes.
-    const fee = Number(instruction.fee ?? 0);
-    // Owner's actual WuzzPay contract range per bank (VA_FEE_ESTIMATE,
-    // src/lib/paymentChannels.ts) - merchant-absorbed (the "charge to buyer"
-    // toggle stays off), so purely informational: never added to the amount
-    // transferred. Falls back to a generic note for banks without a known
-    // range instead of showing nothing.
-    const feeEstimate = instruction.bank_code ? VA_FEE_ESTIMATE[instruction.bank_code] : undefined;
     return (
       <div className="bg-white border-2 border-black p-6 rounded-none space-y-4 shadow-[4px_4px_0px_rgba(0,0,0,1)]">
         <h3 className="text-xs font-black uppercase text-black tracking-widest border-b-2 border-brand pb-2">TRANSFER VIRTUAL ACCOUNT</h3>
@@ -214,22 +223,9 @@ function PaymentInstructionDisplay({ instruction }: { instruction: Record<string
               <p className="text-sm font-black text-black font-mono">Rp {amount.toLocaleString('id-ID')}</p>
               <CopyButton value={String(amount)} />
             </div>
-            {fee > 0 ? (
-              <p className="text-[10px] text-zinc-400 font-semibold normal-case mt-1">
-                Termasuk biaya admin: Rp {fee.toLocaleString('id-ID')}
-              </p>
-            ) : feeEstimate ? (
-              <p className="text-[10px] text-zinc-400 font-semibold normal-case mt-1">
-                Estimasi biaya admin bank: {feeEstimate} - ditanggung Bilbo Outdoors, bukan tambahan untuk Anda.
-              </p>
-            ) : (
-              <p className="text-[10px] text-zinc-400 font-semibold normal-case mt-1">
-                Kemungkinan ada biaya admin sesuai kebijakan bank, ditanggung Bilbo Outdoors.
-              </p>
-            )}
           </div>
         </div>
-        <PaymentSteps method="va" bankCode={instruction.bank_code} />
+        <PaymentSteps method="va" bankCode={instruction.bank_code} amount={amount} />
       </div>
     );
   }
@@ -238,7 +234,6 @@ function PaymentInstructionDisplay({ instruction }: { instruction: Record<string
     const qrValue = instruction.qr_string ?? instruction.qris_string ?? instruction.qr_content;
     const qrImageUrl = instruction.qr_image_url ?? instruction.qr_url;
     const qrisAmount = Number(instruction.total_amount ?? instruction.amount);
-    const qrisFee = Number(instruction.fee ?? 0);
     return (
       <div className="flex flex-col items-center bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
         <div className="w-full flex justify-between items-center border-b border-gray-100 pb-3 mb-4">
@@ -258,19 +253,8 @@ function PaymentInstructionDisplay({ instruction }: { instruction: Record<string
         <p className="mt-1 text-sm font-mono text-gray-600 bg-gray-100 px-3 py-1 rounded-full font-semibold">
           Total: Rp {qrisAmount.toLocaleString('id-ID')}
         </p>
-        {qrisFee > 0 ? (
-          <p className="mt-1 text-[11px] text-gray-500 font-semibold">
-            Termasuk biaya admin: Rp {qrisFee.toLocaleString('id-ID')}
-          </p>
-        ) : (
-          // No confirmed contract rate for QRIS yet (unlike VA_FEE_ESTIMATE),
-          // so a generic disclaimer rather than a specific number.
-          <p className="mt-1 text-[11px] text-gray-500 font-semibold">
-            Kemungkinan ada biaya admin sesuai kebijakan penyedia, ditanggung Bilbo Outdoors.
-          </p>
-        )}
         <div className="w-full">
-          <PaymentSteps method="qris" />
+          <PaymentSteps method="qris" amount={qrisAmount} />
         </div>
       </div>
     );
@@ -302,7 +286,7 @@ function PaymentInstructionDisplay({ instruction }: { instruction: Record<string
           ))}
         </div>
       )}
-      <PaymentSteps method="emoney" />
+      <PaymentSteps method="emoney" bankCode={typeof instruction.wallet === 'string' ? instruction.wallet : undefined} />
     </div>
   );
 }

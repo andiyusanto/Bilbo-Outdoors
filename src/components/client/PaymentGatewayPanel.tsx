@@ -142,9 +142,11 @@ const EMONEY_STEPS = [
   'Konfirmasi dengan PIN atau verifikasi sidik jari/wajah untuk menyelesaikan pembayaran.',
 ];
 
-// Admin-fee label shown inside "Cara Bayar" - merchant-absorbed (see
-// VA_FEE_FLAT's own comment), so always framed as informational, never as
-// something added to what the customer transfers.
+// Admin-fee label shown inside "Cara Bayar" - borne by the customer doing
+// the transfer, NOT absorbed by Bilbo Outdoors (corrected 2026-10-27; the
+// amount shown under "Jumlah Transfer"/"Total" is still unchanged though -
+// this fee is applied by the bank/provider at their own end, outside
+// anything we charge or control, see VA_FEE_FLAT's own comment).
 function PaymentStepsFeeNote({ method, bankCode, amount }: { method: MethodTab; bankCode?: string; amount?: number }) {
   const label = method === 'va' && bankCode ? (VA_FEE_FLAT[bankCode] !== undefined ? `Rp ${VA_FEE_FLAT[bankCode].toLocaleString('id-ID')}` : undefined)
     : method === 'qris' && amount !== undefined ? getQrisFeeLabel(amount)
@@ -153,8 +155,8 @@ function PaymentStepsFeeNote({ method, bankCode, amount }: { method: MethodTab; 
   return (
     <p className="text-[11px] text-zinc-600 font-semibold normal-case leading-relaxed mt-2">
       {label
-        ? `Biaya admin: ${label} - ditanggung Bilbo Outdoors, bukan tambahan untuk Anda.`
-        : 'Kemungkinan ada biaya admin sesuai kebijakan bank/penyedia, ditanggung Bilbo Outdoors.'}
+        ? `Biaya admin: ${label} - ditanggung oleh Anda (pihak yang melakukan transfer), bukan oleh Bilbo Outdoors.`
+        : 'Kemungkinan ada biaya admin sesuai kebijakan bank/penyedia, ditanggung oleh Anda sebagai pihak yang melakukan transfer.'}
     </p>
   );
 }

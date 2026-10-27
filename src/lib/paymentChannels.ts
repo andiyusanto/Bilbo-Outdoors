@@ -39,11 +39,12 @@ export const WALLET_OPTIONS = [
 // the 2026-10-26 estimate ranges - WuzzPay's own charge response never
 // populates a real fee, see PaymentGatewayPanel's own comment, so this is
 // sourced from their emailed rate card, not the API). Flat per transaction,
-// same for every bank except BCA. This fee is merchant-absorbed (the
-// "charge to buyer" toggle on WuzzPay's dashboard stays off, per the
-// owner's explicit instruction) - it never changes what the customer
-// transfers, so any UI using this is informational only, never added to a
-// total shown to the customer.
+// same for every bank except BCA. Borne by the customer doing the transfer
+// (corrected 2026-10-27), applied by the bank/provider at their own end -
+// NOT something Bilbo Outdoors charges or controls, so the "Jumlah
+// Transfer"/"Total" amount shown in our own UI stays unchanged regardless;
+// this is purely informational so the customer isn't surprised by their
+// bank showing a slightly different total at inquiry time.
 export const VA_FEE_FLAT: Record<string, number> = {
   '002': 3500, // BRI
   '008': 3500, // Mandiri

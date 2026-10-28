@@ -11,7 +11,7 @@ import { defaultProducts } from './db/defaultProducts';
 import { defaultSettings } from './db/defaultSettings';
 import { defaultUsers } from './db/defaultUsers';
 import { defaultJobPriceList } from './db/defaultJobPriceList';
-import { initPostgresPool, seedPostgresIfEmpty, readDBPostgres, writeDBPostgres, findUserByUsernamePostgres, findUserBySessionTokenPostgres, findUserByIdPostgres, updateUserAuthFieldsPostgres, readProductsPostgres, readOrdersPostgres, readOrderByIdPostgres, readOrderByTokenPostgres, readSettingsPostgres, readUsersPostgres, readJobPriceListPostgres, readJobEntriesPostgres, writeOrdersPostgres, readOrderPhotoPostgres, updateOrderPersonalPhotoPostgres } from './db/postgres';
+import { initPostgresPool, seedPostgresIfEmpty, readDBPostgres, writeDBPostgres, findUserByUsernamePostgres, findUserBySessionTokenPostgres, findUserByIdPostgres, updateUserAuthFieldsPostgres, readProductsPostgres, readOrdersPostgres, readOrderByIdPostgres, readOrderByTokenPostgres, readOrdersOverlappingPostgres, readSettingsPostgres, readUsersPostgres, readJobPriceListPostgres, readJobEntriesPostgres, writeOrdersPostgres, readOrderPhotoPostgres, updateOrderPersonalPhotoPostgres } from './db/postgres';
 import { calculateRentalCost, calculateLegacyRentalCost, getAmountPaid, getRemainingBalance, getPenaltyTotal } from './src/pricing';
 import { hashPassword, verifyPassword, generateSessionToken } from './src/auth';
 import { formatDateLabel, getTodayDateString } from './src/lib/date';
@@ -575,6 +575,14 @@ let readOrders: () => Promise<Order[]>;
 // path prunes any order id not present in what it's given.
 let readOrderById: (id: string) => Promise<Order | null>;
 let readOrderByToken: (token: string) => Promise<Order | null>;
+// Narrower still than readOrders() in a different direction - orders that
+// could plausibly block stock in a date range, not one specific order
+// (2026-10-28). See readOrdersOverlappingPostgres's own comment in
+// db/postgres.ts for the full safe-superset design. JSON-file mode has no
+// egress cost to narrow against, so it just returns everything via
+// readOrders() - calculateAllocatedStock's own exact per-item logic
+// re-filters regardless of what it's handed, so this is correct either way.
+let readOrdersOverlapping: (startDateStr: string, endDateStr: string, maxReadinessDays: number, excludeOrderId?: string) => Promise<Order[]>;
 let readJobPriceList: () => Promise<JobPriceListItem[]>;
 let readJobEntries: () => Promise<JobEntry[]>;
 let readSettings: () => Promise<StoreSettings>;
@@ -639,6 +647,7 @@ async function initDatabase(): Promise<void> {
     readOrders = readOrdersPostgres;
     readOrderById = readOrderByIdPostgres;
     readOrderByToken = readOrderByTokenPostgres;
+    readOrdersOverlapping = readOrdersOverlappingPostgres;
     readJobPriceList = readJobPriceListPostgres;
     readJobEntries = readJobEntriesPostgres;
     readSettings = readSettingsPostgres;
@@ -712,6 +721,7 @@ async function initDatabase(): Promise<void> {
     // modes expose the same narrow-lookup API for pollAndSettleOrderAttempts.
     readOrderById = async (id: string) => (await readDB()).orders.find((o: Order) => o.id === id) ?? null;
     readOrderByToken = async (token: string) => (await readDB()).orders.find((o: Order) => o.confirmationToken === token) ?? null;
+    readOrdersOverlapping = async () => (await readDB()).orders;
     readJobPriceList = async () => (await readDB()).jobPriceList;
     readJobEntries = async () => (await readDB()).jobEntries;
     readSettings = async () => (await readDB()).settings;
@@ -1322,45 +1332,49 @@ app.post('/api/check-availability', asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'Missing start date or end date.' });
   }
 
-  await withDbLock(async () => {
-    // Narrow readers, not the full readDB - this route never touches
-    // users/jobPriceList/jobEntries, only writes orders (the occasional
-    // expiry flip), and it's hit constantly while a customer browses/adjusts
-    // their cart, so the full 6-table sync a readDB()/writeDB() round trip
-    // pulls in Postgres mode was pure waste on the app's hottest read path.
-    const [orders, products, settings] = await Promise.all([readOrders(), readProducts(), readSettings()]);
-    if (expireStaleOrders(orders, settings.pendingExpiryHours)) {
-      await writeOrders(orders);
-    }
-    const allocatedMap = calculateAllocatedStock(orders, products, startDate, endDate, excludeOrderId);
+  // Pure read-only now (2026-10-28) - no longer runs expireStaleOrders/
+  // writeOrders itself (and so no withDbLock either, consistent with every
+  // other lock-free read-only route in this file). This is the app's
+  // hottest route (every catalog visitor, every date-range change), and a
+  // full readOrders() here pulled the store's ENTIRE order history on every
+  // call - see readOrdersOverlappingPostgres's own comment in
+  // db/postgres.ts for the narrow, safe-superset replacement. Stale-order
+  // sweeping still happens via every other route that already does it (GET
+  // /api/orders, GET /api/orders/confirm/:token, POST /api/orders, PUT
+  // .../edit) - at worst, availability here reflects a snapshot up to one of
+  // those requests behind, which can only make stock look unavailable a
+  // little longer than strictly necessary, never double-book.
+  const products = await readProducts();
+  const maxReadinessDays = products.reduce((max, p) => Math.max(max, Math.ceil((p.readinessHours || 0) / 24)), 0);
+  const orders = await readOrdersOverlapping(startDate, endDate, maxReadinessDays, excludeOrderId);
+  const allocatedMap = calculateAllocatedStock(orders, products, startDate, endDate, excludeOrderId);
 
-    const availabilityDetails = products.map((prod: Product) => {
-      const allocated = allocatedMap[prod.id] || 0;
-      const remaining = Math.max(0, prod.stock - allocated);
+  const availabilityDetails = products.map((prod: Product) => {
+    const allocated = allocatedMap[prod.id] || 0;
+    const remaining = Math.max(0, prod.stock - allocated);
 
-      // If the request checked a specific quantity
-      const requestedItem = items?.find((it: any) => it.productId === prod.id);
-      const requestedQty = requestedItem ? Number(requestedItem.quantity) : 0;
-      const isAvailable = remaining >= requestedQty;
+    // If the request checked a specific quantity
+    const requestedItem = items?.find((it: any) => it.productId === prod.id);
+    const requestedQty = requestedItem ? Number(requestedItem.quantity) : 0;
+    const isAvailable = remaining >= requestedQty;
 
-      return {
-        productId: prod.id,
-        name: prod.name,
-        category: prod.category,
-        totalStock: prod.stock,
-        allocated,
-        remaining,
-        requestedQty,
-        isAvailable
-      };
-    });
+    return {
+      productId: prod.id,
+      name: prod.name,
+      category: prod.category,
+      totalStock: prod.stock,
+      allocated,
+      remaining,
+      requestedQty,
+      isAvailable
+    };
+  });
 
-    const overallAvailable = availabilityDetails.every((item: any) => item.requestedQty === 0 || item.isAvailable);
+  const overallAvailable = availabilityDetails.every((item: any) => item.requestedQty === 0 || item.isAvailable);
 
-    res.json({
-      available: overallAvailable,
-      details: availabilityDetails
-    });
+  res.json({
+    available: overallAvailable,
+    details: availabilityDetails
   });
 }));
 

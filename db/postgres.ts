@@ -400,6 +400,91 @@ export async function readOrderByTokenPostgres(token: string): Promise<Order | n
   return rowToOrder(row, itemsRes.rows.map(rowToOrderItem));
 }
 
+// Narrow, READ-ONLY fetch of orders that could plausibly block stock during
+// a given date range - added 2026-10-28 for POST /api/check-availability
+// (server.ts), the highest-call-volume route in the app (hit by every
+// catalog visitor on every date-range change). A full readOrdersPostgres()
+// there pulled the store's ENTIRE order history on every single call.
+//
+// This is a SAFE SUPERSET, not an exact replica of calculateAllocatedStock's
+// real per-item overlap logic (server.ts) - that function anchors its
+// blocking window differently per status: `returnedAt` for completed
+// orders, unbounded-future for 'Item Picked Up', and startDate/endDate +/-
+// per-product readinessDays for everything else (see its own comments,
+// including a documented history of readiness-day bugs). Replicating that
+// exact logic in SQL would risk a NEW correctness bug (wrongly EXCLUDING an
+// order that should still block stock) for the sake of a performance fix -
+// not an acceptable trade. Instead, this mirrors the same three branches
+// but generously: `maxReadinessDays` (computed by the caller from ALL
+// products, not just the ones being checked) buffers every comparison, plus
+// one extra day specifically to absorb calculateAllocatedStock's own
+// jakartaDateString() UTC+7 conversion (server.ts) without needing to
+// replicate timezone math here - the Jakarta calendar date is always either
+// equal to or exactly one day ahead of the raw UTC date, so widening by one
+// day keeps a plain UTC-string comparison provably safe. This can only ever
+// pull IN a few extra, ultimately-irrelevant orders (harmless -
+// calculateAllocatedStock's own exact per-item logic still runs unchanged
+// against whatever this returns and filters them out same as before), never
+// wrongly exclude one.
+//
+// Column types confirmed directly against the live schema (2026-10-28, via
+// information_schema.columns) before writing this: start_date/end_date are
+// native `date` (safe for direct comparison against a 'YYYY-MM-DD' string -
+// no casting/timezone ambiguity for an in-Postgres WHERE-clause comparison,
+// as opposed to values coming back out into JS, which is where this
+// project's documented DATE/timezone quirk actually lives, see
+// initPostgresPool's own comment). returned_at is `character varying`,
+// confirmed written as `new Date().toISOString()` (server.ts) - filtered via
+// LEFT(returned_at, 10), a plain string slice of its UTC date prefix, no
+// cast at all, so its actual column type is irrelevant here.
+//
+// Does NOT run expireStaleOrders/writeOrders - check-availability stopped
+// doing that sweep itself (2026-10-28); still-stale orders are swept
+// elsewhere (GET /api/orders, GET /api/orders/confirm/:token, POST
+// /api/orders, PUT .../edit all still do it) - at worst, availability here
+// is computed against a snapshot up to one of those requests behind, which
+// can only make stock look unavailable a little longer than strictly
+// necessary, never double-book - the same fail-safe direction
+// calculateAllocatedStock's own 'Item Picked Up' branch already chooses.
+export async function readOrdersOverlappingPostgres(startDateStr: string, endDateStr: string, maxReadinessDays: number, excludeOrderId?: string): Promise<Order[]> {
+  const toDateStr = (d: Date) => d.toISOString().split('T')[0];
+  const bufferDays = maxReadinessDays + 1; // +1: jakartaDateString() UTC+7 slack, see comment above
+  const bufferedStart = toDateStr(new Date(new Date(startDateStr).getTime() - bufferDays * 86400000));
+  const bufferedEnd = toDateStr(new Date(new Date(endDateStr).getTime() + bufferDays * 86400000));
+
+  const params: any[] = [bufferedStart, bufferedEnd];
+  let excludeClause = '';
+  if (excludeOrderId) {
+    params.push(excludeOrderId);
+    excludeClause = `AND id <> $${params.length}`;
+  }
+
+  const ordersRes = await pool.query(
+    `SELECT ${ORDER_COLUMNS_NO_PHOTO} FROM orders
+     WHERE status <> 'Expired'
+       ${excludeClause}
+       AND (
+         (status = 'Item Returned/Completed' AND returned_at IS NOT NULL
+           AND LEFT(returned_at, 10) BETWEEN $1 AND $2)
+         OR (status = 'Item Picked Up' AND start_date <= $2::date)
+         OR (status NOT IN ('Item Returned/Completed', 'Item Picked Up')
+           AND start_date <= $2::date AND end_date >= $1::date)
+       )
+     ORDER BY created_at DESC`,
+    params
+  );
+  if (ordersRes.rows.length === 0) return [];
+  const orderIds = ordersRes.rows.map((r) => r.id);
+  const itemsRes = await pool.query('SELECT * FROM order_items WHERE order_id = ANY($1::varchar[])', [orderIds]);
+  const itemsByOrderId = new Map<string, OrderItem[]>();
+  for (const itemRow of itemsRes.rows) {
+    const list = itemsByOrderId.get(itemRow.order_id) || [];
+    list.push(rowToOrderItem(itemRow));
+    itemsByOrderId.set(itemRow.order_id, list);
+  }
+  return ordersRes.rows.map((row) => rowToOrder(row, itemsByOrderId.get(row.id) || []));
+}
+
 // Narrow fetch for the one place that needs the real photo (GET
 // /api/orders/:id, per readOrdersPostgres's own comment) - a targeted
 // single-row SELECT, not a burden on the frequently-called full orders read.

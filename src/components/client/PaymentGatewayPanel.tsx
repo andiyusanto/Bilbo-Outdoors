@@ -708,8 +708,32 @@ export default function PaymentGatewayPanel({ order, token, onSettled, pendingEx
             // locked to match it (server enforces this regardless), so a
             // second channel is just an alternative way to pay the SAME
             // amount, not a chance to change how much is being paid now.
-            <div className="bg-zinc-50 border border-zinc-200 p-3 space-y-1">
+            // Still shows both buttons (disabled) rather than collapsing to
+            // plain text, so switching channels doesn't make the screen look
+            // bare - whichever one matches the locked amount stays visually
+            // active (2026-10-28, owner-requested).
+            <div className="bg-zinc-50 border border-zinc-200 p-3 space-y-2">
               <p className="text-[10px] text-zinc-500 font-bold uppercase">Jumlah Yang Dibayar Sekarang</p>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  disabled
+                  className={`py-2 text-[10px] font-black uppercase tracking-wide border-2 border-black rounded-none cursor-not-allowed ${
+                    lockedAmount === order.totalPrice ? 'bg-black text-brand' : 'bg-white text-zinc-400'
+                  }`}
+                >
+                  Bayar Penuh
+                </button>
+                <button
+                  type="button"
+                  disabled
+                  className={`py-2 text-[10px] font-black uppercase tracking-wide border-2 border-black rounded-none cursor-not-allowed ${
+                    lockedAmount < order.totalPrice ? 'bg-black text-brand' : 'bg-white text-zinc-400'
+                  }`}
+                >
+                  Bayar DP Min. 50%
+                </button>
+              </div>
               <p className="text-sm font-black text-black">Rp {lockedAmount.toLocaleString('id-ID')}</p>
               {lockedAmount < order.totalPrice && (
                 <p className="text-[10px] text-zinc-600 font-semibold normal-case">

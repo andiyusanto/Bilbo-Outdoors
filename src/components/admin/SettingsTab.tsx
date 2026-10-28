@@ -3,6 +3,7 @@ import { Clock, Save, Megaphone, ScrollText, Wallet } from 'lucide-react';
 import { StoreSettings, WeeklyHours } from '../../types';
 import { useSettingsActions } from '../../hooks/useSettingsActions';
 import { BANK_OPTIONS } from '../../lib/paymentChannels';
+import { BANK_LOGOS } from '../../lib/bankLogos';
 
 interface SettingsTabProps {
   settings: StoreSettings;
@@ -285,7 +286,8 @@ export default function SettingsTab({ settings, settingsActions }: SettingsTabPr
                   }))}
                   className="w-4 h-4 accent-black cursor-pointer"
                 />
-                {b.name}
+                <img src={BANK_LOGOS[b.code]} alt="" className="h-4 w-auto shrink-0" />
+                <span className="truncate">{b.name}</span>
               </label>
             ))}
           </div>

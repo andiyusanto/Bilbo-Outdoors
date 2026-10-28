@@ -181,6 +181,13 @@ CREATE TABLE IF NOT EXISTS order_items (
 -- whole table on every write.
 CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id);
 
+-- confirmation_token is looked up on every single payment-status poll (every
+-- 5s per customer confirmation page with a live unsettled payment - see
+-- readOrderByTokenPostgres in db/postgres.ts, added 2026-10-28), so without
+-- this index that's a sequential scan over the whole orders table on every
+-- poll.
+CREATE INDEX IF NOT EXISTS idx_orders_confirmation_token ON orders(confirmation_token);
+
 -- 4. Membuat Tabel Settings (Toleransi Keterlambatan + Jam Operasional Toko) - baris tunggal (id selalu 1)
 CREATE TABLE IF NOT EXISTS settings (
   id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
@@ -411,6 +418,11 @@ CREATE TABLE IF NOT EXISTS job_entries (
 > **Sudah pernah menjalankan Step A sebelum index `idx_order_items_order_id` ada?** Jalankan ini sekali di SQL Editor yang sama (aman dijalankan berulang, tidak mengubah data apa pun). `order_items.order_id` di-query lewat `WHERE`/`DELETE` di setiap penulisan order (lihat `writeOrdersPostgres` di `db/postgres.ts`), tapi Postgres tidak otomatis membuat index untuk kolom foreign key (hanya sisi yang direferensikan, `orders.id`, yang otomatis ter-index) - tanpa index ini, setiap penulisan order melakukan sequential scan ke seluruh tabel `order_items`.
 > ```sql
 > CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id);
+> ```
+
+> **Sudah pernah menjalankan Step A sebelum index `idx_orders_confirmation_token` ada?** Jalankan ini sekali di SQL Editor yang sama (aman dijalankan berulang, tidak mengubah data apa pun). `orders.confirmation_token` di-query lewat `WHERE` setiap 5 detik oleh poll status pembayaran publik (`GET /api/orders/confirm/:token/payment-status`, selama instruksi pembayaran masih berlaku) - lihat `readOrderByTokenPostgres` di `db/postgres.ts` (2026-10-28, menggantikan full-table read yang sebelumnya jadi penyebab lonjakan egress Supabase). Tanpa index ini, setiap poll melakukan sequential scan ke seluruh tabel `orders`.
+> ```sql
+> CREATE INDEX IF NOT EXISTS idx_orders_confirmation_token ON orders(confirmation_token);
 > ```
 
 > **Sudah pernah menjalankan Step A sebelum kolom `terms_and_conditions` di `settings` ada?** Jalankan ini sekali di SQL Editor yang sama (aman dijalankan berulang) - nullable tanpa default; kode aplikasi (`rowToSettings` di `db/postgres.ts`) otomatis memakai teks default bawaan (`db/defaultSettings.ts`) selama kolom masih `NULL`. Menyimpan teks bebas Syarat & Ketentuan yang ditampilkan lewat popup di halaman checkout publik (wajib dicentang sebelum pelanggan bisa kirim pemesanan) - diatur dari menu "Pengaturan".

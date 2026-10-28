@@ -11,7 +11,7 @@ import { defaultProducts } from './db/defaultProducts';
 import { defaultSettings } from './db/defaultSettings';
 import { defaultUsers } from './db/defaultUsers';
 import { defaultJobPriceList } from './db/defaultJobPriceList';
-import { initPostgresPool, seedPostgresIfEmpty, readDBPostgres, writeDBPostgres, findUserByUsernamePostgres, findUserBySessionTokenPostgres, findUserByIdPostgres, updateUserAuthFieldsPostgres, readProductsPostgres, readOrdersPostgres, readSettingsPostgres, readUsersPostgres, readJobPriceListPostgres, readJobEntriesPostgres, writeOrdersPostgres, readOrderPhotoPostgres, updateOrderPersonalPhotoPostgres } from './db/postgres';
+import { initPostgresPool, seedPostgresIfEmpty, readDBPostgres, writeDBPostgres, findUserByUsernamePostgres, findUserBySessionTokenPostgres, findUserByIdPostgres, updateUserAuthFieldsPostgres, readProductsPostgres, readOrdersPostgres, readOrderByIdPostgres, readOrderByTokenPostgres, readSettingsPostgres, readUsersPostgres, readJobPriceListPostgres, readJobEntriesPostgres, writeOrdersPostgres, readOrderPhotoPostgres, updateOrderPersonalPhotoPostgres } from './db/postgres';
 import { calculateRentalCost, calculateLegacyRentalCost, getAmountPaid, getRemainingBalance, getPenaltyTotal } from './src/pricing';
 import { hashPassword, verifyPassword, generateSessionToken } from './src/auth';
 import { formatDateLabel, getTodayDateString } from './src/lib/date';
@@ -447,20 +447,23 @@ function applyWuzzpaySettlementStatus(order: Order, attempt: WuzzpayAttempt, sta
 // along the way (point 3 of the multi-channel plan) is still surfaced to
 // the caller, not swallowed, since that needs its own alert regardless of
 // whether this particular call also found a fresh settlement.
-async function pollAndSettleOrderAttempts(findOrder: (orders: Order[]) => Order | undefined, contextLabel: string): Promise<{ notifyOrder: Order | null; duplicateOrder: Order | null }> {
-  const snapshot = await withDbLock(async () => {
-    const orders = await readOrders();
-    const order = findOrder(orders);
-    if (!order) return null;
-    return { status: order.status, attempts: getOrderAttempts(order) };
-  });
-  if (!snapshot) return { notifyOrder: null, duplicateOrder: null };
-  if (snapshot.status !== 'Pending' && snapshot.status !== 'Expired') return { notifyOrder: null, duplicateOrder: null };
+async function pollAndSettleOrderAttempts(lookupOrder: () => Promise<Order | null>, findOrder: (orders: Order[]) => Order | undefined, contextLabel: string): Promise<{ notifyOrder: Order | null; duplicateOrder: Order | null }> {
+  // Narrow, lock-free read just to decide whether there's anything worth
+  // checking - this runs on EVERY call, i.e. every 5s per live order
+  // confirmation page, so unlike the write path below it must not pull the
+  // whole orders table (2026-10-28 - see readOrderByIdPostgres's own comment
+  // in db/postgres.ts for why this used to be a real Supabase egress
+  // problem). No withDbLock needed for a plain read, same as every other
+  // read-only route in this file (e.g. GET /api/orders/confirm/:token) - the
+  // lock only protects write-after-read races, not reads on their own.
+  const snapshotOrder = await lookupOrder();
+  if (!snapshotOrder) return { notifyOrder: null, duplicateOrder: null };
+  if (snapshotOrder.status !== 'Pending' && snapshotOrder.status !== 'Expired') return { notifyOrder: null, duplicateOrder: null };
 
   let notifyOrder: Order | null = null;
   let duplicateOrder: Order | null = null;
   const now = Date.now();
-  for (const attempt of snapshot.attempts) {
+  for (const attempt of getOrderAttempts(snapshotOrder)) {
     if (!attempt.transactionId) continue;
     const expiresAt = (attempt.paymentInstruction as any)?.expires_at;
     if (typeof expiresAt === 'string' && new Date(expiresAt).getTime() < now) continue; // don't bother checking a dead instruction
@@ -562,6 +565,16 @@ let updateUserAuthFields: (userId: string, fields: { sessionToken: string | null
 // that concurrency against the connection pool's limit).
 let readProducts: () => Promise<Product[]>;
 let readOrders: () => Promise<Order[]>;
+// Narrower still than readOrders() - one order, by id or by confirmationToken
+// (2026-10-28). Added specifically for pollAndSettleOrderAttempts's hot path
+// (every 5s per live order confirmation page) after a full readOrders() call
+// there turned out to be the dominant cause of a real Supabase egress spike -
+// see readOrderByIdPostgres/readOrderByTokenPostgres's own comment in
+// db/postgres.ts. NEVER pass the result of these into writeOrders() - that
+// still requires the FULL array from readOrders(), since the Postgres write
+// path prunes any order id not present in what it's given.
+let readOrderById: (id: string) => Promise<Order | null>;
+let readOrderByToken: (token: string) => Promise<Order | null>;
 let readJobPriceList: () => Promise<JobPriceListItem[]>;
 let readJobEntries: () => Promise<JobEntry[]>;
 let readSettings: () => Promise<StoreSettings>;
@@ -624,6 +637,8 @@ async function initDatabase(): Promise<void> {
     updateUserAuthFields = updateUserAuthFieldsPostgres;
     readProducts = readProductsPostgres;
     readOrders = readOrdersPostgres;
+    readOrderById = readOrderByIdPostgres;
+    readOrderByToken = readOrderByTokenPostgres;
     readJobPriceList = readJobPriceListPostgres;
     readJobEntries = readJobEntriesPostgres;
     readSettings = readSettingsPostgres;
@@ -689,6 +704,11 @@ async function initDatabase(): Promise<void> {
     };
     readProducts = async () => (await readDB()).products;
     readOrders = async () => (await readDB()).orders;
+    // JSON mode has no egress cost to narrow against - these just filter the
+    // same in-memory array readOrders() already returns, kept only so both
+    // modes expose the same narrow-lookup API for pollAndSettleOrderAttempts.
+    readOrderById = async (id: string) => (await readDB()).orders.find((o: Order) => o.id === id) ?? null;
+    readOrderByToken = async (token: string) => (await readDB()).orders.find((o: Order) => o.confirmationToken === token) ?? null;
     readJobPriceList = async () => (await readDB()).jobPriceList;
     readJobEntries = async () => (await readDB()).jobEntries;
     readSettings = async () => (await readDB()).settings;
@@ -1736,7 +1756,7 @@ app.post('/api/orders/:id/verify-payment', authenticateUser, asyncHandler(async 
 
   // Checks every still-live attempt (multi-channel, 2026-10-26), not just a
   // single tracked transaction id - see pollAndSettleOrderAttempts.
-  const { notifyOrder, duplicateOrder } = await pollAndSettleOrderAttempts(findById, id);
+  const { notifyOrder, duplicateOrder } = await pollAndSettleOrderAttempts(() => readOrderById(id), findById, id);
   if (notifyOrder) {
     console.log(`WuzzPay manual verification settled order ${notifyOrder.id} via transaction ${notifyOrder.wuzzpayTransactionId}`);
     sendTelegramPaymentNotification(notifyOrder).catch(err => console.error('Telegram payment notification failed:', err));
@@ -2389,7 +2409,7 @@ app.get('/api/orders/confirm/:token/payment-status', asyncHandler(async (req, re
   // this has to actively check WuzzPay rather than just read a pre-set
   // field: order.wuzzpayTransactionId now stays unset until something
   // actually settles, so there's nothing to passively read while Pending.
-  const { notifyOrder, duplicateOrder } = await pollAndSettleOrderAttempts(findByToken, token);
+  const { notifyOrder, duplicateOrder } = await pollAndSettleOrderAttempts(() => readOrderByToken(token), findByToken, token);
 
   // Fired after the lock is released, never from inside it - see
   // sendTelegramPaymentNotification's own comment on the lock-contention
@@ -2403,15 +2423,13 @@ app.get('/api/orders/confirm/:token/payment-status', asyncHandler(async (req, re
     sendTelegramDuplicatePaymentAlert(duplicateOrder).catch(err => console.error('Telegram duplicate-payment alert failed:', err));
   }
 
-  // Re-read fresh for the response - narrow readOrders, not the full
-  // readDB, same reasoning as every other narrow-read route in this file.
-  const final = await withDbLock(async () => {
-    const order = findByToken(await readOrders());
-    if (!order) return null;
-    return { status: order.status, attempts: getOrderAttempts(order).map(a => ({ productId: a.productId, bankCode: a.bankCode, lastStatus: a.lastStatus })) };
-  });
-  if (!final) return res.status(404).json({ error: 'Pesanan tidak ditemukan.' });
-  res.json(final);
+  // Re-read fresh for the response - narrow single-order read (2026-10-28),
+  // not a full readOrders() table pull - this whole route runs every 5s per
+  // live order confirmation page, see pollAndSettleOrderAttempts's own
+  // comment for why that matters here specifically.
+  const finalOrder = await readOrderByToken(token);
+  if (!finalOrder) return res.status(404).json({ error: 'Pesanan tidak ditemukan.' });
+  res.json({ status: finalOrder.status, attempts: getOrderAttempts(finalOrder).map(a => ({ productId: a.productId, bankCode: a.bankCode, lastStatus: a.lastStatus })) });
 }));
 
 // Verifies x-wuzzpay-signature against a raw request body. Confirmed
@@ -2476,7 +2494,7 @@ app.post('/api/webhooks/wuzzpay', asyncHandler(async (req, res) => {
       // and more thorough than trying to single out one attempt via the
       // payload's own transaction_id field.
       const findById = (orders: Order[]) => orders.find((o: Order) => o.id === orderId);
-      const { notifyOrder, duplicateOrder } = await pollAndSettleOrderAttempts(findById, orderId);
+      const { notifyOrder, duplicateOrder } = await pollAndSettleOrderAttempts(() => readOrderById(orderId), findById, orderId);
       // Fired after the lock is released, never from inside it - see
       // sendTelegramPaymentNotification's own comment on the lock-contention
       // incident this must not repeat.

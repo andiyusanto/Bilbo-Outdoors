@@ -360,6 +360,42 @@ export async function readOrdersPostgres(): Promise<Order[]> {
   return ordersRes.rows.map((row) => rowToOrder(row, itemsByOrderId.get(row.id) || []));
 }
 
+// Narrow, READ-ONLY single-order fetches (by id / by confirmationToken) -
+// added 2026-10-28 after a full readOrdersPostgres() (both tables, every
+// order) turned out to be the dominant cause of a real Supabase egress
+// spike: the public payment-status poll (GET
+// /api/orders/confirm/:token/payment-status) runs every 5s for as long as
+// a customer's confirmation page has a live, unsettled payment instruction
+// open, and was calling full readOrders() on every single poll just to
+// check one order's status - cost scaled with the whole store's order
+// history, not with "1 order". These two ONLY replace that specific
+// read-the-current-status step; they must NEVER be used as the array
+// handed to writeOrders()/writeOrdersPostgres() - that function prunes any
+// order id NOT present in what it's given (see writeOrdersWithClient's own
+// comment), so a write still always needs the full array from
+// readOrders(). pollAndSettleOrderAttempts (server.ts) keeps using full
+// readOrders()+writeOrders() for its actual write path (settlement
+// detected) - that's rare per poll, so its cost is comparatively nothing;
+// only the "check the status, nothing changed" fast path - the one hit on
+// literally every poll - was narrowed here.
+export async function readOrderByIdPostgres(id: string): Promise<Order | null> {
+  const [orderRes, itemsRes] = await Promise.all([
+    pool.query(`SELECT ${ORDER_COLUMNS_NO_PHOTO} FROM orders WHERE id = $1`, [id]),
+    pool.query('SELECT * FROM order_items WHERE order_id = $1', [id]),
+  ]);
+  const row = orderRes.rows[0];
+  if (!row) return null;
+  return rowToOrder(row, itemsRes.rows.map(rowToOrderItem));
+}
+
+export async function readOrderByTokenPostgres(token: string): Promise<Order | null> {
+  const orderRes = await pool.query(`SELECT ${ORDER_COLUMNS_NO_PHOTO} FROM orders WHERE confirmation_token = $1`, [token]);
+  const row = orderRes.rows[0];
+  if (!row) return null;
+  const itemsRes = await pool.query('SELECT * FROM order_items WHERE order_id = $1', [row.id]);
+  return rowToOrder(row, itemsRes.rows.map(rowToOrderItem));
+}
+
 // Narrow fetch for the one place that needs the real photo (GET
 // /api/orders/:id, per readOrdersPostgres's own comment) - a targeted
 // single-row SELECT, not a burden on the frequently-called full orders read.

@@ -236,9 +236,40 @@ export default function SettingsTab({ settings, settingsActions }: SettingsTabPr
         </div>
 
         <div className={formState.paymentChannels.va ? '' : 'opacity-40 pointer-events-none'}>
-          <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-wider pt-2 border-t border-zinc-200 mb-2">
-            Bank VA Aktif
-          </label>
+          <div className="flex items-center justify-between pt-2 border-t border-zinc-200 mb-2">
+            <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-wider">
+              Bank VA Aktif
+            </label>
+            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider">
+              <button
+                type="button"
+                onClick={() => setFormState(prev => ({
+                  ...prev,
+                  paymentChannels: {
+                    ...prev.paymentChannels,
+                    vaBanks: Object.fromEntries(BANK_OPTIONS.map((b) => [b.code, true])),
+                  },
+                }))}
+                className="text-black underline underline-offset-2 hover:text-brand cursor-pointer"
+              >
+                Pilih Semua
+              </button>
+              <span className="text-zinc-300">|</span>
+              <button
+                type="button"
+                onClick={() => setFormState(prev => ({
+                  ...prev,
+                  paymentChannels: {
+                    ...prev.paymentChannels,
+                    vaBanks: Object.fromEntries(BANK_OPTIONS.map((b) => [b.code, false])),
+                  },
+                }))}
+                className="text-black underline underline-offset-2 hover:text-brand cursor-pointer"
+              >
+                Hapus Semua
+              </button>
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-2">
             {BANK_OPTIONS.map((b) => (
               <label key={b.code} className="flex items-center gap-2 text-[11px] font-bold text-black normal-case cursor-pointer">

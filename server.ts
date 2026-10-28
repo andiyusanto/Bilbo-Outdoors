@@ -645,6 +645,8 @@ async function initDatabase(): Promise<void> {
         if (!parsed.settings.runningText) parsed.settings.runningText = defaultSettings.runningText;
         if (!parsed.settings.pendingExpiryHours) parsed.settings.pendingExpiryHours = defaultSettings.pendingExpiryHours;
         if (!parsed.settings.termsAndConditions) parsed.settings.termsAndConditions = defaultSettings.termsAndConditions;
+        if (!parsed.settings.paymentChannels) parsed.settings.paymentChannels = defaultSettings.paymentChannels;
+        else parsed.settings.paymentChannels.vaBanks = { ...defaultSettings.paymentChannels.vaBanks, ...parsed.settings.paymentChannels.vaBanks };
         if (!parsed.users) parsed.users = defaultUsers;
         if (!parsed.jobPriceList) parsed.jobPriceList = defaultJobPriceList;
         if (!parsed.jobEntries) parsed.jobEntries = [];
@@ -2054,7 +2056,7 @@ app.get('/api/payment-config', asyncHandler(async (req, res) => {
   // WuzzPay payment_instruction defers this, see expireStaleOrders) is
   // automatically expired.
   const settings = await readSettings();
-  res.json({ enabled: Boolean(WUZZPAY_API_KEY && WUZZPAY_MERCHANT_ID), pendingExpiryHours: settings.pendingExpiryHours });
+  res.json({ enabled: Boolean(WUZZPAY_API_KEY && WUZZPAY_MERCHANT_ID), pendingExpiryHours: settings.pendingExpiryHours, channels: settings.paymentChannels });
 }));
 
 // Public, scoped by the same unguessable confirmationToken as GET
@@ -2070,14 +2072,14 @@ app.post('/api/orders/confirm/:token/charge', asyncHandler(async (req, res) => {
   if (productId !== 'qris' && productId !== 'va' && productId !== 'emoney') {
     return res.status(400).json({ error: 'Metode pembayaran tidak valid.' });
   }
-  // E-wallet (emoney) disabled (2026-10-26) - confirmed with WuzzPay that this
-  // product isn't provisioned/enabled on our merchant account yet (matches
-  // what was already seen in practice: both dana and ovo test charges failed
-  // provider-side). Blocked here rather than just hidden client-side, so no
-  // stray request reaches WuzzPay for a channel they've confirmed isn't live -
-  // re-enable by removing this block once WuzzPay confirms it's active.
-  if (productId === 'emoney') {
-    return res.status(503).json({ error: 'Pembayaran E-Wallet belum tersedia. Silakan gunakan QRIS atau Transfer Bank.' });
+  // Channel on/off is now admin-editable (Pengaturan > Metode Pembayaran,
+  // StoreSettings.paymentChannels - 2026-10-28), replacing what used to be a
+  // standalone hardcoded emoney block here. Checked server-side regardless of
+  // what the client's picker shows, same reasoning as before: no stray
+  // request should reach WuzzPay for a channel the owner has turned off.
+  const settingsForCharge = await readSettings();
+  if (!settingsForCharge.paymentChannels[productId as 'qris' | 'va' | 'emoney']) {
+    return res.status(503).json({ error: 'Metode pembayaran ini sedang tidak tersedia.' });
   }
   // bankCode selects the sub-channel for va (bank) / emoney (wallet) - validated
   // against the same known-code lists the client's picker offers, so no
@@ -2097,14 +2099,13 @@ app.post('/api/orders/confirm/:token/charge', asyncHandler(async (req, res) => {
   if (productId === 'emoney' && !VALID_WALLET_CODES.includes(bankCode)) {
     return res.status(400).json({ error: 'Kode e-wallet tidak valid.' });
   }
-  // BSI and Danamon temporarily disabled (2026-10-26) - BSI hit a live
-  // Cloudflare 502 from WuzzPay's own production origin on a real charge
-  // attempt; Danamon disabled alongside it as a precaution until both are
-  // re-verified. Blocked here, not just hidden in the client's bank picker
-  // (BANK_OPTIONS' `disabled` flag, src/lib/paymentChannels.ts), so a stray
-  // request can't reach WuzzPay for a bank we've flagged as currently
-  // unreliable - remove this check once both are confirmed working again.
-  if (productId === 'va' && (bankCode === '451' || bankCode === '011')) {
+  // Per-bank on/off is also admin-editable now (same settings.paymentChannels
+  // as above, .vaBanks[code] - 2026-10-28), replacing what used to be a
+  // hardcoded BSI/Danamon block here (originally added after a live
+  // Cloudflare 502 from WuzzPay's production origin on BSI). Checked here
+  // regardless of the client's bank picker (which greys out the same banks
+  // via the same settings, src/lib/paymentChannels.ts/PaymentGatewayPanel.tsx).
+  if (productId === 'va' && settingsForCharge.paymentChannels.vaBanks[bankCode] === false) {
     return res.status(503).json({ error: 'Bank ini sedang tidak tersedia sementara. Silakan pilih bank lain.' });
   }
 
@@ -2536,9 +2537,9 @@ app.get('/api/settings', authenticateUser, requireOwner, asyncHandler(async (req
 
 app.put('/api/settings', authenticateUser, requireOwner, asyncHandler(async (req, res) => {
   await withDbLock(async () => {
-    const { lateToleranceHours, pendingExpiryHours, operatingHours, footer, runningText, termsAndConditions } = req.body;
+    const { lateToleranceHours, pendingExpiryHours, operatingHours, footer, runningText, termsAndConditions, paymentChannels } = req.body;
     const db = await readDB();
-    db.settings = { lateToleranceHours, pendingExpiryHours, operatingHours, footer, runningText, termsAndConditions };
+    db.settings = { lateToleranceHours, pendingExpiryHours, operatingHours, footer, runningText, termsAndConditions, paymentChannels };
     await writeDB(db);
     res.json(db.settings);
   });

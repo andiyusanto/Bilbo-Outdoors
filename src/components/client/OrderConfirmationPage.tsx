@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Check, AlertTriangle, Phone } from 'lucide-react';
-import { PublicOrder } from '../../types';
+import { PublicOrder, PaymentChannelSettings } from '../../types';
 import { parseJsonOrThrow } from '../../lib/api';
 import { formatDateLabel } from '../../lib/date';
 import { getBankName, getWalletName } from '../../lib/paymentChannels';
@@ -36,6 +36,10 @@ export default function OrderConfirmationPage() {
   const [order, setOrder] = useState<PublicOrder | null>(null);
   const [paymentGatewayEnabled, setPaymentGatewayEnabled] = useState(false);
   const [pendingExpiryHours, setPendingExpiryHours] = useState(2);
+  // Admin-editable per-channel/per-bank on-off (Pengaturan > Metode
+  // Pembayaran) - undefined while /api/payment-config hasn't resolved yet;
+  // PaymentGatewayPanel treats that as "not yet known, don't grey out".
+  const [paymentChannels, setPaymentChannels] = useState<PaymentChannelSettings | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const { withLoading } = useLoading();
@@ -69,6 +73,9 @@ export default function OrderConfirmationPage() {
         setPaymentGatewayEnabled(Boolean(configData.enabled));
         if (typeof configData.pendingExpiryHours === 'number') {
           setPendingExpiryHours(configData.pendingExpiryHours);
+        }
+        if (configData.channels) {
+          setPaymentChannels(configData.channels);
         }
       } catch (err: any) {
         setError(err.message || 'Pesanan tidak ditemukan.');
@@ -265,7 +272,7 @@ export default function OrderConfirmationPage() {
           </div>
         </div>
 
-        <PaymentGatewayPanel order={order} token={token!} onSettled={refetchOrder} pendingExpiryHours={pendingExpiryHours} />
+        <PaymentGatewayPanel order={order} token={token!} onSettled={refetchOrder} pendingExpiryHours={pendingExpiryHours} paymentChannels={paymentChannels} />
 
         <button
           onClick={() => navigate('/')}

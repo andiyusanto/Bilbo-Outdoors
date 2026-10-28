@@ -12,12 +12,12 @@
 // (014 = BCA) succeeded. Their docs are internally inconsistent on this
 // parameter; these are the values that actually work.
 // Order matches the owner's preferred display sequence (2026-10-26), not
-// alphabetical or code order. BSI and Danamon are flagged `disabled: true`
-// (temporary, 2026-10-26) rather than removed - still visible in the picker
-// so customers know they're coming, matching the same "visible but
-// disabled" pattern used for the emoney channel. Remove the `disabled` flag
-// once they're confirmed working again; `/charge` also hard-rejects these
-// two bank codes server-side regardless (see server.ts).
+// alphabetical or code order. Per-bank enable/disable (e.g. BSI/Danamon
+// having been temporarily off) is no longer a static flag here - it's
+// admin-editable via Pengaturan > Metode Pembayaran (StoreSettings.
+// paymentChannels.vaBanks) and enforced server-side in /charge; see
+// PaymentGatewayPanel.tsx for how the client reads that settings state to
+// grey out a bank in the picker.
 export const BANK_OPTIONS = [
   { code: '002', name: 'Bank Rakyat Indonesia (BRI)' },
   { code: '008', name: 'Bank Mandiri' },
@@ -25,8 +25,8 @@ export const BANK_OPTIONS = [
   { code: '009', name: 'Bank Negara Indonesia (BNI)' },
   { code: '022', name: 'Bank CIMB Niaga' },
   { code: '013', name: 'Bank Permata' },
-  { code: '451', name: 'Bank Syariah Indonesia (BSI)', disabled: true },
-  { code: '011', name: 'Bank Danamon', disabled: true },
+  { code: '451', name: 'Bank Syariah Indonesia (BSI)' },
+  { code: '011', name: 'Bank Danamon' },
 ];
 
 export const WALLET_OPTIONS = [

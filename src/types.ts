@@ -180,6 +180,14 @@ export interface FooterSettings {
   copyrightText: string; // full bottom line
 }
 
+export interface PaymentChannelSettings {
+  cash: boolean;
+  qris: boolean;
+  va: boolean;
+  emoney: boolean;
+  vaBanks: Record<string, boolean>; // bank code -> enabled, keyed the same as BANK_OPTIONS codes (src/lib/paymentChannels.ts)
+}
+
 export interface StoreSettings {
   lateToleranceHours: number; // grace period past closing time before a late fee starts
   pendingExpiryHours: number; // an unpaid Pending order auto-flips to Expired after this many hours (see expireStaleOrders, server.ts)
@@ -187,6 +195,7 @@ export interface StoreSettings {
   footer: FooterSettings;
   runningText: string[]; // marquee phrases, in order - free text, not limited to category names (can hold promo/discount announcements etc.)
   termsAndConditions: string; // free text shown in the checkout page's Syarat & Ketentuan popup - plain text, line breaks preserved, no structured fields
+  paymentChannels: PaymentChannelSettings; // admin-editable on/off per WuzzPay channel and VA bank, enforced server-side in /charge - see server.ts
 }
 
 export type UserRole = 'owner' | 'karyawan';

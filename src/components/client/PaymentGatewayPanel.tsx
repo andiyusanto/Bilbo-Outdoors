@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Check, ChevronDown, Copy, Phone, Clock } from 'lucide-react';
-import { PublicOrder } from '../../types';
+import { PublicOrder, PaymentChannelSettings } from '../../types';
 import { parseJsonOrThrow } from '../../lib/api';
 import { formatDateTimeLabel } from '../../lib/date';
 import { BANK_OPTIONS, WALLET_OPTIONS, VA_FEE_FLAT, getQrisFeeLabel, WALLET_FEE_PERCENT } from '../../lib/paymentChannels';
@@ -78,6 +78,7 @@ interface PaymentGatewayPanelProps {
   token: string;
   onSettled: () => void; // called once the poll confirms Approved/Paid, so the parent can refresh the full order
   pendingExpiryHours: number; // from GET /api/payment-config - how long an unpaid order (cash included) is held before auto-expiry, see expireStaleOrders in server.ts
+  paymentChannels?: PaymentChannelSettings; // from GET /api/payment-config's `channels` field - admin on/off per channel and VA bank (Pengaturan > Metode Pembayaran); undefined while still loading, treated as "not yet known" (nothing greyed out) rather than "all disabled". /charge enforces this server-side regardless.
 }
 
 type MethodTab = 'qris' | 'va' | 'emoney' | 'cash';
@@ -293,7 +294,7 @@ function PaymentInstructionDisplay({ instruction }: { instruction: Record<string
   );
 }
 
-export default function PaymentGatewayPanel({ order, token, onSettled, pendingExpiryHours }: PaymentGatewayPanelProps) {
+export default function PaymentGatewayPanel({ order, token, onSettled, pendingExpiryHours, paymentChannels }: PaymentGatewayPanelProps) {
   // TEMPORARY internal testing gate (owner-requested, mirrors
   // PAYMENT_GATEWAY_TEST_TRIGGER_NAME server-side in server.ts's /charge
   // route): most WuzzPay channels are still broken/unprovisioned, so the
@@ -561,21 +562,22 @@ export default function PaymentGatewayPanel({ order, token, onSettled, pendingEx
           </div>
           <div className="grid grid-cols-2 gap-2">
             {(['qris', 'va', 'emoney', 'cash'] as MethodTab[]).map((m) => {
-              // emoney (E-Wallet) stays visible but permanently disabled
-              // (2026-10-26) - WuzzPay confirmed this product isn't
-              // provisioned/enabled on our merchant account yet (matches
-              // dana/ovo test charges both failing provider-side), but it's
-              // expected to go live soon, so the tab stays as a preview
-              // rather than disappearing. /charge also hard-rejects it
-              // server-side regardless - remove this `m === 'emoney' ||`
-              // once WuzzPay confirms it's active.
-              const isDisabled = m === 'emoney' || (m !== 'cash' && !isTestOrder);
+              // Channel on/off is admin-editable (Pengaturan > Metode
+              // Pembayaran, 2026-10-28) - stays visible-but-disabled rather
+              // than disappearing when off, same "coming soon" treatment as
+              // before. `paymentChannels` is undefined until the config
+              // fetch resolves, which is treated as "not yet known" (not
+              // disabled) to avoid a flash of every tab greyed out.
+              // /charge hard-rejects a disabled channel server-side
+              // regardless of this UI state.
+              const channelOff = paymentChannels ? paymentChannels[m] === false : false;
+              const isDisabled = channelOff || (m !== 'cash' && !isTestOrder);
               return (
                 <button
                   key={m}
                   type="button"
                   disabled={isDisabled}
-                  title={isDisabled ? (m === 'emoney' ? 'E-Wallet akan segera tersedia' : 'Metode ini akan segera tersedia') : undefined}
+                  title={isDisabled ? (channelOff ? 'Metode ini sedang tidak tersedia' : 'Metode ini akan segera tersedia') : undefined}
                   onClick={() => { setMethodTab(m); setChargeError(''); setCashError(''); }}
                   className={`py-2.5 text-[11px] font-black uppercase tracking-wider border-2 border-black rounded-none ${
                     isDisabled
@@ -600,11 +602,14 @@ export default function PaymentGatewayPanel({ order, token, onSettled, pendingEx
               onChange={(e) => setSelectedBank(e.target.value)}
               className="w-full bg-white border-2 border-black px-3 py-2.5 text-xs font-black uppercase rounded-none focus:outline-none cursor-pointer"
             >
-              {BANK_OPTIONS.map((b) => (
-                <option key={b.code} value={b.code} disabled={b.disabled}>
-                  {b.name}{b.disabled ? ' (Segera Tersedia)' : ''}
-                </option>
-              ))}
+              {BANK_OPTIONS.map((b) => {
+                const bankOff = paymentChannels ? paymentChannels.vaBanks[b.code] === false : false;
+                return (
+                  <option key={b.code} value={b.code} disabled={bankOff}>
+                    {b.name}{bankOff ? ' (Segera Tersedia)' : ''}
+                  </option>
+                );
+              })}
             </select>
           )}
 

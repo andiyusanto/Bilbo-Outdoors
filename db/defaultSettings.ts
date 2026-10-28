@@ -1,4 +1,5 @@
 import { StoreSettings } from '../src/types';
+import { BANK_OPTIONS } from '../src/lib/paymentChannels';
 
 // Shared default store settings, seeded on first run in both JSON-file mode and
 // Postgres mode - matches the owner's real weekly schedule (Sun/Mon open at noon,
@@ -81,4 +82,19 @@ Kerusakan Berat: dikenakan biaya penggantian sebagian atau penuh sesuai harga ba
 Kehilangan Barang: penyewa wajib mengganti sesuai harga pasar barang yang hilang.
 
 Dengan melakukan pembayaran dan mengambil barang sewaan, penyewa dianggap telah membaca, memahami, dan menyetujui seluruh syarat dan ketentuan yang berlaku di Bilbo Outdoors.`,
+  // Matches today's hardcoded /charge behavior exactly (2026-10-28), so
+  // seeding this changes nothing until the owner edits it via Pengaturan >
+  // Metode Pembayaran: emoney off (not provisioned by WuzzPay yet), BSI/
+  // Danamon off (temporary, see paymentChannels.ts history), everything
+  // else on.
+  paymentChannels: {
+    cash: true,
+    qris: true,
+    va: true,
+    emoney: false,
+    vaBanks: BANK_OPTIONS.reduce((acc, b) => {
+      acc[b.code] = b.code !== '451' && b.code !== '011';
+      return acc;
+    }, {} as Record<string, boolean>),
+  },
 };

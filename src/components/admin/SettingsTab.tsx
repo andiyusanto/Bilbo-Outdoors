@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { Clock, Save, Megaphone, ScrollText } from 'lucide-react';
+import { Clock, Save, Megaphone, ScrollText, Wallet } from 'lucide-react';
 import { StoreSettings, WeeklyHours } from '../../types';
 import { useSettingsActions } from '../../hooks/useSettingsActions';
+import { BANK_OPTIONS } from '../../lib/paymentChannels';
 
 interface SettingsTabProps {
   settings: StoreSettings;
@@ -203,6 +204,60 @@ export default function SettingsTab({ settings, settingsActions }: SettingsTabPr
           <p className="text-[10px] text-zinc-500 font-semibold normal-case leading-relaxed mt-1">
             Satu baris = satu teks yang tampil bergantian di bar bawah. Bisa untuk nama kategori, info diskon, atau pengumuman lain - bebas.
           </p>
+        </div>
+      </div>
+
+      <div className="bg-white border-2 border-black rounded-none shadow-[4px_4px_0px_rgba(0,0,0,1)] p-5 space-y-4 max-w-xl">
+        <h3 className="text-xs font-black text-black uppercase tracking-wider flex items-center">
+          <Wallet className="w-4 h-4 mr-2 text-black stroke-[2.5]" />
+          Metode Pembayaran
+        </h3>
+        <p className="text-[10px] text-zinc-500 font-semibold normal-case leading-relaxed -mt-2">
+          Nyalakan/matikan channel pembayaran yang bisa dipilih pelanggan di halaman konfirmasi pesanan. Perubahan juga ditegakkan di server, bukan cuma disembunyikan di tampilan.
+        </p>
+
+        <div className="grid grid-cols-2 gap-2">
+          {([
+            { key: 'cash', label: 'Tunai' },
+            { key: 'qris', label: 'QRIS' },
+            { key: 'va', label: 'Transfer Bank (VA)' },
+            { key: 'emoney', label: 'E-Wallet' },
+          ] as const).map(({ key, label }) => (
+            <label key={key} className="flex items-center gap-2 text-xs font-bold text-black uppercase cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formState.paymentChannels[key]}
+                onChange={(e) => setFormState(prev => ({ ...prev, paymentChannels: { ...prev.paymentChannels, [key]: e.target.checked } }))}
+                className="w-4 h-4 accent-black cursor-pointer"
+              />
+              {label}
+            </label>
+          ))}
+        </div>
+
+        <div className={formState.paymentChannels.va ? '' : 'opacity-40 pointer-events-none'}>
+          <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-wider pt-2 border-t border-zinc-200 mb-2">
+            Bank VA Aktif
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            {BANK_OPTIONS.map((b) => (
+              <label key={b.code} className="flex items-center gap-2 text-[11px] font-bold text-black normal-case cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formState.paymentChannels.vaBanks[b.code] ?? true}
+                  onChange={(e) => setFormState(prev => ({
+                    ...prev,
+                    paymentChannels: {
+                      ...prev.paymentChannels,
+                      vaBanks: { ...prev.paymentChannels.vaBanks, [b.code]: e.target.checked },
+                    },
+                  }))}
+                  className="w-4 h-4 accent-black cursor-pointer"
+                />
+                {b.name}
+              </label>
+            ))}
+          </div>
         </div>
       </div>
 

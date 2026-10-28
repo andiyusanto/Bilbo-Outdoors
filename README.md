@@ -189,7 +189,8 @@ CREATE TABLE IF NOT EXISTS settings (
   operating_hours JSONB NOT NULL,
   footer JSONB,
   running_text VARCHAR(255)[],
-  terms_and_conditions TEXT
+  terms_and_conditions TEXT,
+  payment_channels JSONB
 );
 
 -- 5. Membuat Tabel Users (akun staff - owner/master & karyawan)
@@ -421,6 +422,11 @@ CREATE TABLE IF NOT EXISTS job_entries (
 > ```sql
 > ALTER TABLE orders ADD COLUMN IF NOT EXISTS wuzzpay_attempts JSONB;
 > ALTER TABLE orders ADD COLUMN IF NOT EXISTS wuzzpay_duplicate_payment JSONB;
+> ```
+
+> **Sudah pernah menjalankan Step A sebelum kolom `payment_channels` di `settings` ada?** Jalankan ini sekali di SQL Editor yang sama (aman dijalankan berulang) - nullable tanpa default; kode aplikasi (`rowToSettings` di `db/postgres.ts`) otomatis memakai nilai default bawaan (`db/defaultSettings.ts`, digabung per-field/per-bank) selama kolom masih `NULL` atau belum punya suatu field/bank tertentu. Menyimpan status aktif/nonaktif tiap channel pembayaran WuzzPay (Tunai/QRIS/VA/E-Wallet) dan tiap bank VA secara individual (JSONB, lihat `PaymentChannelSettings` di `src/types.ts`) - diatur dari menu "Pengaturan" -> Metode Pembayaran, ditegakkan di sisi server pada `/api/orders/confirm/:token/charge`.
+> ```sql
+> ALTER TABLE settings ADD COLUMN IF NOT EXISTS payment_channels JSONB;
 > ```
 
 ### Step B: Dapatkan Connection String Supabase Anda

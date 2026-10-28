@@ -107,10 +107,10 @@ export async function seedPostgresIfEmpty(): Promise<void> {
   const settingsCountRes = await pool.query('SELECT COUNT(*)::int AS count FROM settings');
   if (settingsCountRes.rows[0].count === 0) {
     await pool.query(
-      `INSERT INTO settings (id, late_tolerance_hours, pending_expiry_hours, operating_hours, footer, running_text, terms_and_conditions)
-       VALUES (1, $1, $2, $3::jsonb, $4::jsonb, $5, $6)
+      `INSERT INTO settings (id, late_tolerance_hours, pending_expiry_hours, operating_hours, footer, running_text, terms_and_conditions, payment_channels)
+       VALUES (1, $1, $2, $3::jsonb, $4::jsonb, $5, $6, $7::jsonb)
        ON CONFLICT (id) DO NOTHING`,
-      [defaultSettings.lateToleranceHours, defaultSettings.pendingExpiryHours, JSON.stringify(defaultSettings.operatingHours), JSON.stringify(defaultSettings.footer), defaultSettings.runningText, defaultSettings.termsAndConditions]
+      [defaultSettings.lateToleranceHours, defaultSettings.pendingExpiryHours, JSON.stringify(defaultSettings.operatingHours), JSON.stringify(defaultSettings.footer), defaultSettings.runningText, defaultSettings.termsAndConditions, JSON.stringify(defaultSettings.paymentChannels)]
     );
     console.log('Postgres seeded successfully with default store settings.');
   }
@@ -237,6 +237,20 @@ function rowToOrder(row: any, items: OrderItem[]): Order {
 }
 
 function rowToSettings(row: any): StoreSettings {
+  // paymentChannels merges over defaultSettings rather than trusting the
+  // stored object alone, both for a pre-migration row (column null) and for
+  // a bank added to BANK_OPTIONS after this row was last saved - either way
+  // it should default to the documented default, not silently vanish/be
+  // treated as disabled.
+  const storedPaymentChannels = row.payment_channels ?? {};
+  const paymentChannels = {
+    ...defaultSettings.paymentChannels,
+    ...storedPaymentChannels,
+    vaBanks: {
+      ...defaultSettings.paymentChannels.vaBanks,
+      ...(storedPaymentChannels.vaBanks ?? {}),
+    },
+  };
   return {
     lateToleranceHours: Number(row.late_tolerance_hours),
     pendingExpiryHours: row.pending_expiry_hours !== null && row.pending_expiry_hours !== undefined ? Number(row.pending_expiry_hours) : defaultSettings.pendingExpiryHours,
@@ -244,6 +258,7 @@ function rowToSettings(row: any): StoreSettings {
     footer: row.footer ?? defaultSettings.footer,
     runningText: row.running_text ?? defaultSettings.runningText,
     termsAndConditions: row.terms_and_conditions ?? defaultSettings.termsAndConditions,
+    paymentChannels,
   };
 }
 
@@ -634,16 +649,17 @@ export async function writeDBPostgres(data: { products: Product[]; orders: Order
 
     // Settings: single-row upsert, no batching helper needed.
     await client.query(
-      `INSERT INTO settings (id, late_tolerance_hours, pending_expiry_hours, operating_hours, footer, running_text, terms_and_conditions)
-       VALUES (1, $1, $2, $3::jsonb, $4::jsonb, $5, $6)
+      `INSERT INTO settings (id, late_tolerance_hours, pending_expiry_hours, operating_hours, footer, running_text, terms_and_conditions, payment_channels)
+       VALUES (1, $1, $2, $3::jsonb, $4::jsonb, $5, $6, $7::jsonb)
        ON CONFLICT (id) DO UPDATE SET
          late_tolerance_hours = EXCLUDED.late_tolerance_hours,
          pending_expiry_hours = EXCLUDED.pending_expiry_hours,
          operating_hours = EXCLUDED.operating_hours,
          footer = EXCLUDED.footer,
          running_text = EXCLUDED.running_text,
-         terms_and_conditions = EXCLUDED.terms_and_conditions`,
-      [Number(data.settings.lateToleranceHours), Number(data.settings.pendingExpiryHours), JSON.stringify(data.settings.operatingHours), JSON.stringify(data.settings.footer), data.settings.runningText, data.settings.termsAndConditions]
+         terms_and_conditions = EXCLUDED.terms_and_conditions,
+         payment_channels = EXCLUDED.payment_channels`,
+      [Number(data.settings.lateToleranceHours), Number(data.settings.pendingExpiryHours), JSON.stringify(data.settings.operatingHours), JSON.stringify(data.settings.footer), data.settings.runningText, data.settings.termsAndConditions, JSON.stringify(data.settings.paymentChannels)]
     );
 
     // Users: batched upsert of everything present, then prune anything removed -

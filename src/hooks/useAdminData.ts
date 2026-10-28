@@ -32,6 +32,13 @@ const DEFAULT_SETTINGS: StoreSettings = {
   },
   runningText: [],
   termsAndConditions: '',
+  paymentChannels: {
+    cash: true,
+    qris: true,
+    va: true,
+    emoney: false,
+    vaBanks: {},
+  },
 };
 
 export function useAdminData({ isLoggedIn, token, role, onUnauthorized }: UseAdminDataParams) {

@@ -158,9 +158,13 @@ function PaymentStepsFeeNote({ method, bankCode, amount }: { method: MethodTab; 
     : undefined;
   return (
     <p className="text-[11px] text-zinc-600 font-semibold normal-case leading-relaxed mt-2">
-      {label
-        ? `Biaya admin: ${label} - ditanggung oleh Anda (pihak yang melakukan transfer), bukan oleh Bilbo Outdoors.`
-        : 'Kemungkinan ada biaya admin sesuai kebijakan bank/penyedia, ditanggung oleh Anda sebagai pihak yang melakukan transfer.'}
+      {label ? (
+        <>
+          Biaya admin: <span className="font-black text-black">{label}</span> - ditanggung oleh Anda (pihak yang melakukan transfer), bukan oleh Bilbo Outdoors.
+        </>
+      ) : (
+        'Kemungkinan ada biaya admin sesuai kebijakan bank/penyedia, ditanggung oleh Anda sebagai pihak yang melakukan transfer.'
+      )}
     </p>
   );
 }

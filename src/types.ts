@@ -186,6 +186,7 @@ export interface PaymentChannelSettings {
   va: boolean;
   emoney: boolean;
   vaBanks: Record<string, boolean>; // bank code -> enabled, keyed the same as BANK_OPTIONS codes (src/lib/paymentChannels.ts)
+  wallets: Record<string, boolean>; // wallet code -> enabled, keyed the same as WALLET_OPTIONS codes (src/lib/paymentChannels.ts)
 }
 
 export interface StoreSettings {

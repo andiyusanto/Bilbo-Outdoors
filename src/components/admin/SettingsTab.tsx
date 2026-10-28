@@ -232,13 +232,6 @@ export default function SettingsTab({ settings, settingsActions }: SettingsTabPr
                 className="w-4 h-4 accent-black cursor-pointer"
               />
               {label}
-              {key === 'emoney' && (
-                <span className="flex items-center gap-1">
-                  {WALLET_OPTIONS.map((w) => (
-                    <img key={w.code} src={WALLET_LOGOS[w.code]} alt="" className="h-3.5 w-auto" />
-                  ))}
-                </span>
-              )}
             </label>
           ))}
         </div>
@@ -295,6 +288,63 @@ export default function SettingsTab({ settings, settingsActions }: SettingsTabPr
                 />
                 <img src={BANK_LOGOS[b.code]} alt="" className="h-4 w-auto shrink-0" />
                 <span className="truncate">{b.name}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className={formState.paymentChannels.emoney ? '' : 'opacity-40 pointer-events-none'}>
+          <div className="flex items-center justify-between pt-2 border-t border-zinc-200 mb-2">
+            <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-wider">
+              E-Wallet Aktif
+            </label>
+            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider">
+              <button
+                type="button"
+                onClick={() => setFormState(prev => ({
+                  ...prev,
+                  paymentChannels: {
+                    ...prev.paymentChannels,
+                    wallets: Object.fromEntries(WALLET_OPTIONS.map((w) => [w.code, true])),
+                  },
+                }))}
+                className="text-black underline underline-offset-2 hover:text-brand cursor-pointer"
+              >
+                Pilih Semua
+              </button>
+              <span className="text-zinc-300">|</span>
+              <button
+                type="button"
+                onClick={() => setFormState(prev => ({
+                  ...prev,
+                  paymentChannels: {
+                    ...prev.paymentChannels,
+                    wallets: Object.fromEntries(WALLET_OPTIONS.map((w) => [w.code, false])),
+                  },
+                }))}
+                className="text-black underline underline-offset-2 hover:text-brand cursor-pointer"
+              >
+                Hapus Semua
+              </button>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {WALLET_OPTIONS.map((w) => (
+              <label key={w.code} className="flex items-center gap-2 text-[11px] font-bold text-black normal-case cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formState.paymentChannels.wallets[w.code] ?? true}
+                  onChange={(e) => setFormState(prev => ({
+                    ...prev,
+                    paymentChannels: {
+                      ...prev.paymentChannels,
+                      wallets: { ...prev.paymentChannels.wallets, [w.code]: e.target.checked },
+                    },
+                  }))}
+                  className="w-4 h-4 accent-black cursor-pointer"
+                />
+                <img src={WALLET_LOGOS[w.code]} alt="" className="h-4 w-auto shrink-0" />
+                <span className="truncate">{w.name}</span>
               </label>
             ))}
           </div>

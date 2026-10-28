@@ -38,6 +38,7 @@ const DEFAULT_SETTINGS: StoreSettings = {
     va: true,
     emoney: false,
     vaBanks: {},
+    wallets: {},
   },
 };
 

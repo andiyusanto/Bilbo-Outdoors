@@ -250,6 +250,10 @@ function rowToSettings(row: any): StoreSettings {
       ...defaultSettings.paymentChannels.vaBanks,
       ...(storedPaymentChannels.vaBanks ?? {}),
     },
+    wallets: {
+      ...defaultSettings.paymentChannels.wallets,
+      ...(storedPaymentChannels.wallets ?? {}),
+    },
   };
   return {
     lateToleranceHours: Number(row.late_tolerance_hours),

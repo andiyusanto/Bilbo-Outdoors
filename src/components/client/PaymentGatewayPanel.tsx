@@ -687,7 +687,7 @@ export default function PaymentGatewayPanel({ order, token, onSettled, pendingEx
               logos={WALLET_LOGOS}
               value={selectedWallet}
               onChange={setSelectedWallet}
-              disabledCodes={new Set()}
+              disabledCodes={new Set(paymentChannels ? WALLET_OPTIONS.filter((w) => paymentChannels.wallets[w.code] === false).map((w) => w.code) : [])}
               placeholder="Pilih E-Wallet"
             />
           )}

@@ -661,7 +661,10 @@ async function initDatabase(): Promise<void> {
         if (!parsed.settings.pendingExpiryHours) parsed.settings.pendingExpiryHours = defaultSettings.pendingExpiryHours;
         if (!parsed.settings.termsAndConditions) parsed.settings.termsAndConditions = defaultSettings.termsAndConditions;
         if (!parsed.settings.paymentChannels) parsed.settings.paymentChannels = defaultSettings.paymentChannels;
-        else parsed.settings.paymentChannels.vaBanks = { ...defaultSettings.paymentChannels.vaBanks, ...parsed.settings.paymentChannels.vaBanks };
+        else {
+          parsed.settings.paymentChannels.vaBanks = { ...defaultSettings.paymentChannels.vaBanks, ...parsed.settings.paymentChannels.vaBanks };
+          parsed.settings.paymentChannels.wallets = { ...defaultSettings.paymentChannels.wallets, ...parsed.settings.paymentChannels.wallets };
+        }
         if (!parsed.users) parsed.users = defaultUsers;
         if (!parsed.jobPriceList) parsed.jobPriceList = defaultJobPriceList;
         if (!parsed.jobEntries) parsed.jobEntries = [];
@@ -2127,6 +2130,12 @@ app.post('/api/orders/confirm/:token/charge', asyncHandler(async (req, res) => {
   // via the same settings, src/lib/paymentChannels.ts/PaymentGatewayPanel.tsx).
   if (productId === 'va' && settingsForCharge.paymentChannels.vaBanks[bankCode] === false) {
     return res.status(503).json({ error: 'Bank ini sedang tidak tersedia sementara. Silakan pilih bank lain.' });
+  }
+  // Per-wallet on/off, same settings-driven pattern as vaBanks above
+  // (2026-10-28) - lets a specific wallet be toggled off individually once
+  // emoney itself is live, without a code deploy.
+  if (productId === 'emoney' && settingsForCharge.paymentChannels.wallets[bankCode] === false) {
+    return res.status(503).json({ error: 'E-Wallet ini sedang tidak tersedia. Silakan pilih e-wallet lain.' });
   }
 
   const { token } = req.params;

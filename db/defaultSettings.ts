@@ -1,5 +1,5 @@
 import { StoreSettings } from '../src/types';
-import { BANK_OPTIONS } from '../src/lib/paymentChannels';
+import { BANK_OPTIONS, WALLET_OPTIONS } from '../src/lib/paymentChannels';
 
 // Shared default store settings, seeded on first run in both JSON-file mode and
 // Postgres mode - matches the owner's real weekly schedule (Sun/Mon open at noon,
@@ -94,6 +94,13 @@ Dengan melakukan pembayaran dan mengambil barang sewaan, penyewa dianggap telah 
     emoney: false,
     vaBanks: BANK_OPTIONS.reduce((acc, b) => {
       acc[b.code] = b.code !== '451' && b.code !== '011';
+      return acc;
+    }, {} as Record<string, boolean>),
+    // All wallet providers default on - the parent `emoney` toggle above is
+    // what's actually keeping the channel off (WuzzPay hasn't provisioned
+    // it yet), so there's no reason to pre-disable any specific wallet.
+    wallets: WALLET_OPTIONS.reduce((acc, w) => {
+      acc[w.code] = true;
       return acc;
     }, {} as Record<string, boolean>),
   },

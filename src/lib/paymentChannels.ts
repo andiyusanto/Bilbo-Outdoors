@@ -35,26 +35,34 @@ export const WALLET_OPTIONS = [
   { code: 'gopay', name: 'GoPay' },
 ];
 
-// Exact admin-fee rate card from WuzzPay support (2026-10-27, superseding
-// the 2026-10-26 estimate ranges - WuzzPay's own charge response never
-// populates a real fee, see PaymentGatewayPanel's own comment, so this is
-// sourced from their emailed rate card, not the API). Flat per transaction,
-// same for every bank except BCA. Borne by the customer doing the transfer
-// (corrected 2026-10-27), applied by the bank/provider at their own end -
-// NOT something Bilbo Outdoors charges or controls, so the "Jumlah
-// Transfer"/"Total" amount shown in our own UI stays unchanged regardless;
-// this is purely informational so the customer isn't surprised by their
-// bank showing a slightly different total at inquiry time.
-export const VA_FEE_FLAT: Record<string, number> = {
-  '002': 3500, // BRI
-  '008': 3500, // Mandiri
-  '014': 5000, // BCA
-  '009': 3500, // BNI
-  '022': 3500, // CIMB Niaga
-  '013': 3500, // Permata
-  '451': 3500, // BSI (temporarily disabled, see BANK_OPTIONS)
-  '011': 3500, // Danamon (temporarily disabled, see BANK_OPTIONS)
+// VA admin-fee ranges (owner-specified, 2026-10-29, reverting the brief
+// 2026-10-27 switch to WuzzPay's exact flat rate card - the real per-
+// transaction fee still isn't returned by WuzzPay's charge API, see
+// PaymentGatewayPanel's own comment, and a range is what the owner wants
+// shown again). BCA is pricier than every other bank, same split as
+// before. Borne by the customer doing the transfer, applied by the bank/
+// provider at their own end - NOT something Bilbo Outdoors charges or
+// controls, so the "Jumlah Transfer"/"Total" amount shown in our own UI
+// stays unchanged regardless; this is purely informational so the
+// customer isn't surprised by their bank showing a slightly different
+// total at inquiry time.
+const VA_FEE_RANGE: Record<string, [number, number]> = {
+  '002': [2500, 3500], // BRI
+  '008': [2500, 3500], // Mandiri
+  '014': [4000, 5000], // BCA
+  '009': [2500, 3500], // BNI
+  '022': [2500, 3500], // CIMB Niaga
+  '013': [2500, 3500], // Permata
+  '451': [2500, 3500], // BSI (temporarily disabled, see BANK_OPTIONS)
+  '011': [2500, 3500], // Danamon (temporarily disabled, see BANK_OPTIONS)
 };
+
+export function getVaFeeLabel(bankCode: string | undefined): string | undefined {
+  const range = bankCode ? VA_FEE_RANGE[bankCode] : undefined;
+  if (!range) return undefined;
+  const [min, max] = range;
+  return `Rp ${min.toLocaleString('id-ID')} - Rp ${max.toLocaleString('id-ID')}`;
+}
 
 // QRIS admin fee is tiered by amount, not flat (WuzzPay rate card,
 // 2026-10-27): Rp 500 flat for a transaction <= Rp 100.000, 0.7% of the

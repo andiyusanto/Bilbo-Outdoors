@@ -4,7 +4,7 @@ import { Check, ChevronDown, Copy, Phone, Clock } from 'lucide-react';
 import { PublicOrder, PaymentChannelSettings } from '../../types';
 import { parseJsonOrThrow } from '../../lib/api';
 import { formatDateTimeLabel } from '../../lib/date';
-import { BANK_OPTIONS, WALLET_OPTIONS, VA_FEE_FLAT, getQrisFeeLabel, WALLET_FEE_PERCENT } from '../../lib/paymentChannels';
+import { BANK_OPTIONS, WALLET_OPTIONS, getVaFeeLabel, getQrisFeeLabel, WALLET_FEE_PERCENT } from '../../lib/paymentChannels';
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -147,9 +147,11 @@ const EMONEY_STEPS = [
 // the transfer, NOT absorbed by Bilbo Outdoors (corrected 2026-10-27; the
 // amount shown under "Jumlah Transfer"/"Total" is still unchanged though -
 // this fee is applied by the bank/provider at their own end, outside
-// anything we charge or control, see VA_FEE_FLAT's own comment).
+// anything we charge or control, see getVaFeeLabel's own comment). VA shows
+// a range again, not WuzzPay's exact flat rate (owner-requested revert,
+// 2026-10-29).
 function PaymentStepsFeeNote({ method, bankCode, amount }: { method: MethodTab; bankCode?: string; amount?: number }) {
-  const label = method === 'va' && bankCode ? (VA_FEE_FLAT[bankCode] !== undefined ? `Rp ${VA_FEE_FLAT[bankCode].toLocaleString('id-ID')}` : undefined)
+  const label = method === 'va' ? getVaFeeLabel(bankCode)
     : method === 'qris' && amount !== undefined ? getQrisFeeLabel(amount)
     : method === 'emoney' && bankCode ? (WALLET_FEE_PERCENT[bankCode] !== undefined ? `${WALLET_FEE_PERCENT[bankCode]}%` : undefined)
     : undefined;

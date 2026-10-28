@@ -15,6 +15,9 @@ import cimb from '../assets/banks/022.png';
 import permata from '../assets/banks/013.png';
 import bsi from '../assets/banks/451.png';
 import danamon from '../assets/banks/011.png';
+import ovo from '../assets/wallets/ovo.png';
+import dana from '../assets/wallets/dana.png';
+import gopay from '../assets/wallets/gopay.png';
 
 export const BANK_LOGOS: Record<string, string> = {
   '002': bri,
@@ -25,4 +28,13 @@ export const BANK_LOGOS: Record<string, string> = {
   '013': permata,
   '451': bsi,
   '011': danamon,
+};
+
+// Same sourcing/licensing rationale as BANK_LOGOS above (official current
+// marks from each provider's own Wikipedia infobox), kept here too since
+// emoney isn't live yet - see WALLET_FEE_PERCENT in paymentChannels.ts.
+export const WALLET_LOGOS: Record<string, string> = {
+  ovo,
+  dana,
+  gopay,
 };

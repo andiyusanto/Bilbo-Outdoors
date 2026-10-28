@@ -5,7 +5,7 @@ import { PublicOrder, PaymentChannelSettings } from '../../types';
 import { parseJsonOrThrow } from '../../lib/api';
 import { formatDateTimeLabel } from '../../lib/date';
 import { BANK_OPTIONS, WALLET_OPTIONS, getVaFeeLabel, getQrisFeeLabel, WALLET_FEE_PERCENT } from '../../lib/paymentChannels';
-import { BANK_LOGOS } from '../../lib/bankLogos';
+import { BANK_LOGOS, WALLET_LOGOS } from '../../lib/bankLogos';
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -298,13 +298,21 @@ function PaymentInstructionDisplay({ instruction }: { instruction: Record<string
 }
 
 // Custom dropdown, not a native <select> - a plain <option> can't render an
-// image in any browser, and showing each bank's logo next to its name was
-// an explicit ask (2026-10-28). Closes on outside click/blur like a native
-// select would.
-function BankSelect({ value, onChange, disabledBanks }: { value: string; onChange: (code: string) => void; disabledBanks: Set<string> }) {
+// image in any browser, and showing each bank/wallet's logo next to its
+// name was an explicit ask (2026-10-28, extended to the wallet picker the
+// same day). Closes on outside click/blur like a native select would.
+// Generic over bank and wallet options so both reuse one implementation.
+function LogoSelect({ options, logos, value, onChange, disabledCodes, placeholder }: {
+  options: { code: string; name: string }[];
+  logos: Record<string, string>;
+  value: string;
+  onChange: (code: string) => void;
+  disabledCodes: Set<string>;
+  placeholder: string;
+}) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
-  const selected = BANK_OPTIONS.find((b) => b.code === value);
+  const selected = options.find((o) => o.code === value);
 
   useEffect(() => {
     if (!open) return;
@@ -323,27 +331,27 @@ function BankSelect({ value, onChange, disabledBanks }: { value: string; onChang
         className="w-full flex items-center justify-between gap-2 bg-white border-2 border-black px-3 py-2.5 text-xs font-black uppercase rounded-none focus:outline-none cursor-pointer"
       >
         <span className="flex items-center gap-2 min-w-0">
-          {selected && <img src={BANK_LOGOS[selected.code]} alt="" className="h-4 w-auto shrink-0" />}
-          <span className="truncate">{selected?.name ?? 'Pilih Bank'}</span>
+          {selected && <img src={logos[selected.code]} alt="" className="h-4 w-auto shrink-0" />}
+          <span className="truncate">{selected?.name ?? placeholder}</span>
         </span>
         <ChevronDown className={`w-3.5 h-3.5 stroke-[2.5] shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
         <div className="absolute z-10 mt-1 w-full bg-white border-2 border-black rounded-none shadow-[4px_4px_0px_rgba(0,0,0,1)] max-h-64 overflow-y-auto">
-          {BANK_OPTIONS.map((b) => {
-            const bankOff = disabledBanks.has(b.code);
+          {options.map((o) => {
+            const isOff = disabledCodes.has(o.code);
             return (
               <button
-                key={b.code}
+                key={o.code}
                 type="button"
-                disabled={bankOff}
-                onClick={() => { onChange(b.code); setOpen(false); }}
+                disabled={isOff}
+                onClick={() => { onChange(o.code); setOpen(false); }}
                 className={`w-full flex items-center gap-2 px-3 py-2 text-xs font-black uppercase text-left ${
-                  bankOff ? 'text-zinc-400 cursor-not-allowed bg-zinc-50' : 'text-black hover:bg-zinc-100 cursor-pointer'
+                  isOff ? 'text-zinc-400 cursor-not-allowed bg-zinc-50' : 'text-black hover:bg-zinc-100 cursor-pointer'
                 }`}
               >
-                <img src={BANK_LOGOS[b.code]} alt="" className={`h-4 w-auto shrink-0 ${bankOff ? 'opacity-40 grayscale' : ''}`} />
-                <span className="truncate">{b.name}{bankOff ? ' (Segera Tersedia)' : ''}</span>
+                <img src={logos[o.code]} alt="" className={`h-4 w-auto shrink-0 ${isOff ? 'opacity-40 grayscale' : ''}`} />
+                <span className="truncate">{o.name}{isOff ? ' (Segera Tersedia)' : ''}</span>
               </button>
             );
           })}
@@ -656,10 +664,13 @@ export default function PaymentGatewayPanel({ order, token, onSettled, pendingEx
           )}
 
           {methodTab === 'va' && (
-            <BankSelect
+            <LogoSelect
+              options={BANK_OPTIONS}
+              logos={BANK_LOGOS}
               value={selectedBank}
               onChange={setSelectedBank}
-              disabledBanks={new Set(paymentChannels ? BANK_OPTIONS.filter((b) => paymentChannels.vaBanks[b.code] === false).map((b) => b.code) : [])}
+              disabledCodes={new Set(paymentChannels ? BANK_OPTIONS.filter((b) => paymentChannels.vaBanks[b.code] === false).map((b) => b.code) : [])}
+              placeholder="Pilih Bank"
             />
           )}
 
@@ -671,15 +682,14 @@ export default function PaymentGatewayPanel({ order, token, onSettled, pendingEx
           )}
 
           {methodTab === 'emoney' && (
-            <select
+            <LogoSelect
+              options={WALLET_OPTIONS}
+              logos={WALLET_LOGOS}
               value={selectedWallet}
-              onChange={(e) => setSelectedWallet(e.target.value)}
-              className="w-full bg-white border-2 border-black px-3 py-2.5 text-xs font-black uppercase rounded-none focus:outline-none cursor-pointer"
-            >
-              {WALLET_OPTIONS.map((w) => (
-                <option key={w.code} value={w.code}>{w.name}</option>
-              ))}
-            </select>
+              onChange={setSelectedWallet}
+              disabledCodes={new Set()}
+              placeholder="Pilih E-Wallet"
+            />
           )}
 
           {methodTab === 'cash' && (

@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { Clock, Save, Megaphone, ScrollText, Wallet } from 'lucide-react';
 import { StoreSettings, WeeklyHours } from '../../types';
 import { useSettingsActions } from '../../hooks/useSettingsActions';
-import { BANK_OPTIONS } from '../../lib/paymentChannels';
-import { BANK_LOGOS } from '../../lib/bankLogos';
+import { BANK_OPTIONS, WALLET_OPTIONS } from '../../lib/paymentChannels';
+import { BANK_LOGOS, WALLET_LOGOS } from '../../lib/bankLogos';
 
 interface SettingsTabProps {
   settings: StoreSettings;
@@ -232,6 +232,13 @@ export default function SettingsTab({ settings, settingsActions }: SettingsTabPr
                 className="w-4 h-4 accent-black cursor-pointer"
               />
               {label}
+              {key === 'emoney' && (
+                <span className="flex items-center gap-1">
+                  {WALLET_OPTIONS.map((w) => (
+                    <img key={w.code} src={WALLET_LOGOS[w.code]} alt="" className="h-3.5 w-auto" />
+                  ))}
+                </span>
+              )}
             </label>
           ))}
         </div>
